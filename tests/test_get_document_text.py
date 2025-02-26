@@ -26,12 +26,12 @@ def main():
 
     # Define document data
     doc_data = {
-        "file_path": "documents/original/2025/02/20/040zqi8wj2-2f563cb2-6727-46c4-8e67-8b8fcb48a280-7142.docx",
+        "file_path": "documents/original/2025/02/01/iiakfmyied-756df65b-2b69-46e2-8916-ce8d394829de-8087.odt",
         # "bucket": "docsity-data"  # Optional if already set in TextLoader initialization
     }
 
     # Optional: specify page range (start_page, end_page) - pages are 1-indexed
-    page_range = (11, 12)  # Extract text from pages 1 to 10
+    page_range = (61, 62)  # Extract text from pages 1 to 10
 
     try:
         # Call get_document_text method
