@@ -12,10 +12,51 @@ import fitz  # PyMuPDF
 from botocore.exceptions import ClientError
 
 # Local imports
-from .converter import DocumentConverter
-from .exceptions import EmptyDocument, ExceededMaxPages
+from ..converter.pdf import convert_to_pdf
+from ..exceptions.base import EmptyDocument, ExceededMaxPages
 
 logger = logging.getLogger(__name__)
+
+
+# Standalone functions that wrap TextLoader methods
+def get_document_text(doc_data, page_range=None):
+    """
+    Convenience function to extract text from a document using PyMuPDF.
+
+    Args:
+        doc_data (dict): Dictionary containing 'file_path' and optional 'bucket'
+        page_range (tuple, optional): Tuple of (start_page, end_page) for partial extraction
+
+    Returns:
+        str: Extracted text from the document
+
+    Raises:
+        EmptyDocument: If extracted text is empty or fails quality checks
+        ExceededMaxPages: If requested page range is invalid
+    """
+    loader = TextLoader()
+    return loader.get_document_text(doc_data, page_range)
+
+
+def extract_text_from_file(file_path, page_range=None, backend='auto'):
+    """
+    Convenience function to extract text from a local file.
+
+    Args:
+        file_path (str): Path to the local file
+        page_range (tuple, optional): Tuple of (start_page, end_page), 1-indexed
+        backend (str, optional): Text extraction backend ('auto', 'pymupdf', or 'pypdf')
+
+    Returns:
+        str: Extracted text from the document
+
+    Raises:
+        FileNotFoundError: If input file doesn't exist
+        ValueError: If invalid backend is specified
+        EmptyDocument: If no text could be extracted
+    """
+    loader = TextLoader()
+    return loader.extract_text_from_file(file_path, page_range, backend)
 
 
 class TextLoader:
@@ -40,7 +81,6 @@ class TextLoader:
             s3_client: Boto3 S3 client instance for AWS operations (optional)
             document_aws_bucket (str): Default S3 bucket name for document storage (optional)
         """
-        self.converter = DocumentConverter()
         self.s3_client = s3_client
         self.document_aws_bucket = document_aws_bucket
 
@@ -122,7 +162,7 @@ class TextLoader:
             Filename=input_file
         )
         logger.info("Using LibreOffice")
-        self.converter.convert_to_pdf(input_file=input_file, output_file=output_file, original_file=file_prefix)
+        convert_to_pdf(input_file=input_file, output_file=output_file, original_file=file_prefix)
         logger.info("Document converted to pdf")
         os.remove(input_file)
         return output_file
@@ -374,7 +414,7 @@ class TextLoader:
                 os.close(fd)  # Close the file descriptor
 
                 # Convert to PDF using the converter
-                pdf_path = self.converter.convert_to_pdf(input_file=file_path, original_file=file_path, output_file=temp_pdf_path)
+                pdf_path = convert_to_pdf(input_file=file_path, original_file=file_path, output_file=temp_pdf_path)
             else:
                 pdf_path = file_path
 
@@ -562,3 +602,5 @@ class TextLoader:
 
         # Consider the text low quality if 30% or fewer characters are valid
         return valid_percentage <= 0.3
+
+

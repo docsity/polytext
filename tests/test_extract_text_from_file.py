@@ -7,7 +7,7 @@ sys.path.append('/Users/marcodelgiudice/Projects/polytext')
 from dotenv import load_dotenv
 load_dotenv(".env")
 
-from polytext.text_loader import TextLoader
+from polytext.loader import TextLoader
 
 # Set up logging
 logging.basicConfig(level=logging.INFO,

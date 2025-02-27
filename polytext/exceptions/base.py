@@ -1,3 +1,4 @@
+# exceptions/base.py
 class ConversionError(Exception):
     """
     Exception raised when document conversion to PDF fails.

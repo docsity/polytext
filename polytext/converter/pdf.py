@@ -1,10 +1,30 @@
-# converter.py
+# converter/pdf.py
 import os
 import subprocess
 import logging
-from .exceptions import ConversionError
+from ..exceptions.base import ConversionError
 
 logger = logging.getLogger(__name__)
+
+
+def convert_to_pdf(input_file, original_file, output_file=None):
+    """
+    Convenience function to convert a document to PDF format using LibreOffice.
+
+    Args:
+        input_file (str): Path to the input document file to be converted
+        original_file (str): Path to the original file for extension checking
+        output_file (str, optional): Path where the output PDF should be saved
+
+    Returns:
+        str: Path to the generated PDF file
+
+    Raises:
+        FileNotFoundError: If the input file doesn't exist
+        ConversionError: If the conversion process fails
+    """
+    converter = DocumentConverter()
+    return converter.convert_to_pdf(input_file, original_file, output_file)
 
 
 class DocumentConverter:
