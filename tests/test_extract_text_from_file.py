@@ -29,7 +29,7 @@ def main():
     try:
         # Call get_document_text method
         document_text = text_loader.extract_text_from_file(
-            file_path="test_load.pdf",
+            file_path="test_load.odt",
             page_range=page_range  # Optional
         )
 

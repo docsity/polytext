@@ -19,15 +19,26 @@ logger = logging.getLogger(__name__)
 
 
 class TextLoader:
-    """Loads and extracts text from documents, with optional S3 support."""
+    """
+    Loads and extracts text from documents with support for S3 storage.
+
+    This class handles document downloading from S3, conversion to PDF, and text extraction
+    using different backends (PyMuPDF and PyPDF). It supports various document formats
+    through conversion to PDF using LibreOffice.
+
+    Attributes:
+        converter (DocumentConverter): Instance for converting documents to PDF
+        s3_client: Boto3 S3 client for AWS operations
+        document_aws_bucket (str): Default S3 bucket name for document storage
+    """
 
     def __init__(self, s3_client=None, document_aws_bucket=None):
         """
-        Initialize TextLoader.
+        Initialize TextLoader with optional S3 configuration.
 
         Args:
-            s3_client: S3 client for downloading files (optional)
-            document_aws_bucket: Default S3 bucket name (optional)
+            s3_client: Boto3 S3 client instance for AWS operations (optional)
+            document_aws_bucket (str): Default S3 bucket name for document storage (optional)
         """
         self.converter = DocumentConverter()
         self.s3_client = s3_client
@@ -39,13 +50,19 @@ class TextLoader:
         """
         Download a file from S3 to a local temporary path.
 
+        Attempts to download the file with both lowercase and uppercase extensions.
+        Falls back to document conversion if direct download fails.
+
         Args:
             bucket (str): S3 bucket name
-            file_path (str): Path to file in S3
-            temp_file_path (str): Local path to save the file
+            file_path (str): Path to file in S3 bucket
+            temp_file_path (str): Local path to save the downloaded file
 
         Returns:
             str: Path to the downloaded file (may be converted to PDF)
+
+        Raises:
+            ClientError: If S3 download operation fails
         """
         try:
             self.s3_client.download_file(Bucket=bucket, Key=file_path, Filename=temp_file_path)
@@ -65,7 +82,9 @@ class TextLoader:
 
     def convert_doc_to_pdf(self, bucket, file_prefix, input_file):
         """
-        Convert a document from S3 to PDF.
+        Convert a document from S3 to PDF format.
+
+        Downloads the document from S3 and converts it to PDF using LibreOffice.
 
         Args:
             bucket (str): S3 bucket name
@@ -74,6 +93,10 @@ class TextLoader:
 
         Returns:
             str: Path to the converted PDF file
+
+        Raises:
+            FileNotFoundError: If no matching file is found in S3
+            ConversionError: If PDF conversion fails
         """
         logger.info(f"bucket: {bucket}")
         logger.info(f"file_prefix: {file_prefix}")
@@ -99,7 +122,7 @@ class TextLoader:
             Filename=input_file
         )
         logger.info("Using LibreOffice")
-        self.converter.convert_to_pdf(input_file=input_file, output_file=output_file)
+        self.converter.convert_to_pdf(input_file=input_file, output_file=output_file, original_file=file_prefix)
         logger.info("Document converted to pdf")
         os.remove(input_file)
         return output_file
@@ -108,14 +131,21 @@ class TextLoader:
 
     def get_document_text(self, doc_data, page_range=None):
         """
-        Extract text from a document in S3 using PyMuPDF.
+        Extract text from a document using PyMuPDF as primary backend.
+
+        Downloads the document from S3 if needed, converts to PDF if necessary,
+        and extracts text with quality checks and early termination conditions.
 
         Args:
-            doc_data (dict): Dictionary containing file_path and optional bucket
-            page_range (tuple, optional): Tuple of (start_page, end_page)
+            doc_data (dict): Dictionary containing 'file_path' and optional 'bucket'
+            page_range (tuple, optional): Tuple of (start_page, end_page) for partial extraction
 
         Returns:
             str: Extracted text from the document
+
+        Raises:
+            EmptyDocument: If extracted text is empty or fails quality checks
+            ExceededMaxPages: If requested page range is invalid
         """
         logger.debug("Using PyMuPDF")
         file_path = doc_data["file_path"]
@@ -202,15 +232,22 @@ class TextLoader:
 
     def get_document_text_pypdf(self, bucket, file_path, page_range=None):
         """
-        Extract text from a document in S3 using PyPDF.
+        Extract text from a document using PyPDF as fallback backend.
+
+        Similar to get_document_text but uses PyPDF for extraction. Useful when
+        PyMuPDF fails to extract text properly.
 
         Args:
             bucket (str): S3 bucket name
             file_path (str): Path to file in S3
-            page_range (tuple, optional): Tuple of (start_page, end_page)
+            page_range (tuple, optional): Tuple of (start_page, end_page) for partial extraction
 
         Returns:
             str: Extracted text from the document
+
+        Raises:
+            EmptyDocument: If extracted text is empty or fails quality checks
+            ExceededMaxPages: If requested page range is invalid
         """
         logger.info("Using PyPDF")
 
@@ -296,16 +333,23 @@ class TextLoader:
 
     def extract_text_from_file(self, file_path, page_range=None, backend='auto'):
         """
-        Extract text from a local file.
+        Extract text from a local file using specified backend.
+
+        Supports multiple text extraction backends and handles document conversion
+        if needed. Implements fallback mechanism if primary backend fails.
 
         Args:
             file_path (str): Path to the local file
-            page_range (tuple, optional): Optional tuple of (start_page, end_page).
-                                         Pages are 1-indexed (first page is 1).
-            backend (str, optional): Text extraction backend: 'auto', 'pymupdf', or 'pypdf'
+            page_range (tuple, optional): Tuple of (start_page, end_page), 1-indexed
+            backend (str, optional): Text extraction backend ('auto', 'pymupdf', or 'pypdf')
 
         Returns:
             str: Extracted text from the document
+
+        Raises:
+            FileNotFoundError: If input file doesn't exist
+            ValueError: If invalid backend is specified
+            EmptyDocument: If no text could be extracted
         """
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"File '{file_path}' does not exist.")
@@ -330,7 +374,7 @@ class TextLoader:
                 os.close(fd)  # Close the file descriptor
 
                 # Convert to PDF using the converter
-                pdf_path = self.converter.convert_to_pdf(file_path, temp_pdf_path)
+                pdf_path = self.converter.convert_to_pdf(input_file=file_path, original_file=file_path, output_file=temp_pdf_path)
             else:
                 pdf_path = file_path
 
@@ -410,14 +454,20 @@ class TextLoader:
     @staticmethod
     def validate_page_range(page_range, total_pages):
         """
-        Validate and normalize the page range.
+        Validate and normalize the page range for text extraction.
+
+        Converts 1-indexed page numbers to 0-indexed and ensures range is within
+        document bounds.
 
         Args:
-            page_range: Tuple of (start_page, end_page) or None (1-indexed)
-            total_pages: Total number of pages in the document
+            page_range (tuple): Tuple of (start_page, end_page) in 1-indexed format
+            total_pages (int): Total number of pages in the document
 
         Returns:
-            tuple: (start_page, end_page) normalized to 0-indexed
+            tuple: Normalized (start_page, end_page) in 0-indexed format
+
+        Raises:
+            ExceededMaxPages: If page range exceeds document length
         """
         if page_range:
             logger.info(f"Using page range: {page_range[0]} - {page_range[1]}")
@@ -439,11 +489,16 @@ class TextLoader:
         """
         Clean and normalize extracted text.
 
+        Performs standard text cleaning operations:
+        - Replaces double quotes with single quotes
+        - Removes excessive newlines
+        - Removes special tokens
+
         Args:
-            text: The raw text to clean
+            text (str): Raw text to clean
 
         Returns:
-            str: The cleaned text
+            str: Cleaned and normalized text
         """
         if text:
             text = text.replace('"', "'")
@@ -454,14 +509,16 @@ class TextLoader:
     @staticmethod
     def has_repeated_rows(text, threshold=100):
         """
-        Check if text contains repeated lines above a certain threshold.
+        Check if text contains rows repeated above threshold.
+
+        Used to detect potential extraction issues or repetitive content.
 
         Args:
-            text (str): The text to analyze
+            text (str): Text to analyze
             threshold (int): Minimum number of repetitions to trigger detection
 
         Returns:
-            bool: True if repeated lines are detected
+            bool: True if repeated lines exceed threshold
         """
         # Split the text block into rows/lines
         rows = text.split("\n")
@@ -479,14 +536,17 @@ class TextLoader:
     @staticmethod
     def has_low_text_quality(text, chars_threshold=2000):
         """
-        Check if the text has low quality (potential OCR issues).
+        Check if extracted text has low quality.
+
+        Analyzes a sample of text to determine if it might have OCR or
+        extraction issues based on the ratio of valid characters.
 
         Args:
-            text (str): The text to analyze
+            text (str): Text to analyze
             chars_threshold (int): Number of characters to sample
 
         Returns:
-            bool: True if the text quality is low
+            bool: True if text quality is below acceptable threshold
         """
         # Extract a sample of the text
         sample_text = text[:chars_threshold]

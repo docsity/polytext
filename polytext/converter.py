@@ -8,7 +8,15 @@ logger = logging.getLogger(__name__)
 
 
 class DocumentConverter:
-    """Converts various document formats to PDF using LibreOffice."""
+    """
+    A class for converting various document formats to PDF using LibreOffice.
+
+    The converter supports common document formats like TXT, DOC(X), ODT, PPT(X),
+    and XLS(X). It requires LibreOffice to be installed on the system.
+
+    Attributes:
+        supported_extensions (list): List of supported file extensions
+    """
 
     def __init__(self):
         """Initialize the DocumentConverter."""
@@ -19,7 +27,12 @@ class DocumentConverter:
 
     @staticmethod
     def check_libreoffice_installed():
-        """Check if LibreOffice is installed and available."""
+        """
+        Check if LibreOffice is installed and accessible in the system PATH.
+
+        Returns:
+            bool: True if LibreOffice is installed and available, False otherwise.
+        """
         try:
             subprocess.run(
                 ['libreoffice', '--version'],
@@ -31,29 +44,34 @@ class DocumentConverter:
         except (subprocess.SubprocessError, FileNotFoundError):
             return False
 
-    def convert_to_pdf(self, input_file, output_file=None):
+    def convert_to_pdf(self, input_file, original_file, output_file=None):
         """
-        Converts a document to PDF format using LibreOffice.
+        Convert a document to PDF format using LibreOffice.
+
+        This method uses LibreOffice in headless mode to convert documents. If the input
+        file is already a PDF, it will be copied to the output location.
 
         Args:
-            input_file: Path to the input document file
-            output_file: Path to the output PDF file (optional) If not provided, the output file will have the same name as the input file with a .pdf extension.
+            input_file (str): Path to the input document file to be converted
+            original_file (str): Path to the original file for extension checking
+            output_file (str, optional): Path where the output PDF should be saved.
+                If not provided, will use input_file name with .pdf extension
 
         Returns:
-            Path to the output PDF file
+            str: Path to the generated PDF file
 
         Raises:
-            FileNotFoundError: If input file doesn't exist
-            ConversionError: If conversion fails
+            FileNotFoundError: If the input file doesn't exist
+            ConversionError: If the conversion process fails or LibreOffice is not installed
         """
         if not os.path.exists(input_file):
             raise FileNotFoundError(f"Input file '{input_file}' does not exist.")
 
         # Check file extension
-        _, ext = os.path.splitext(input_file)
-        logger.info(os.path.splitext(input_file))
-        # if ext.lower() not in self.supported_extensions and ext.lower() != '.pdf':
-        #     logger.warning(f"File extension '{ext}' may not be supported.")
+        _, ext = os.path.splitext(original_file)
+        logger.info(os.path.splitext(original_file))
+        if ext.lower() not in self.supported_extensions and ext.lower() != '.pdf':
+            logger.warning(f"File extension '{ext}' may not be supported.")
 
         # Set default output file name if not provided
         if output_file is None:
