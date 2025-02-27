@@ -15,50 +15,39 @@ A Python package for document conversion and text extraction.
 
 ```bash
 # Basic installation
-pip install doc_utils
+pip install plytext
+```
 
-# Full installation with all dependencies
-pip install doc_utils[full]
+## Requirements
 
-# S3 support only
-pip install doc_utils[s3]
+- Python 3.6 or higher
+- LibreOffice (for PDF conversion)
 
-Requirements
+## Usage
 
-Python 3.6+
-LibreOffice (for document conversion)
+Converting Documents to PDF
 
-Usage Examples
-Convert a document to PDF
-pythonCopyfrom doc_utils import DocumentConverter
+```python
+from polytext import convert_to_pdf, ConversionError
 
-converter = DocumentConverter()
-pdf_path = converter.convert_to_pdf("document.docx")
-Extract text from a PDF
-pythonCopyfrom doc_utils import TextLoader
+try:
+    # Convert a document to PDF
+    pdf_path = convert_to_pdf('input.docx', 'output.pdf')
+    print(f"PDF saved to: {pdf_path}")
+except ConversionError as e:
+    print(f"Conversion failed: {e}")
+```
 
-loader = TextLoader()
-text = loader.extract_text_from_file("document.pdf")
-Work with S3 documents
-pythonCopyimport boto3
-from doc_utils import TextLoader
+Text Extraction
 
-s3_client = boto3.client('s3')
-loader = TextLoader(s3_client=s3_client, document_aws_bucket="my-bucket")
+```python
+from polytext import extract_text_from_file
 
-text = loader.get_document_text({
-    "file_path": "path/to/document.pdf",
-    "bucket": "my-bucket"
-})
+# Extract text from any supported file
+text = extract_text_from_file('document.docx')
+print(f"Extracted text: {text}")
+```
 
+## License
 
-
-# Basic usage - extract text from a local PDF
-loader = TextLoader()
-text = loader.extract_text_from_file("document.pdf")
-
-# Extract specific page range
-text = loader.extract_text_from_file("document.pdf", page_range=(1, 5))
-
-# Specify extraction backend
-text = loader.extract_text_from_file("document.docx", backend='pypdf')
+MIT Licence
