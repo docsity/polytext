@@ -25,7 +25,7 @@ def get_document_text(doc_data, page_range=None):
 
     Args:
         doc_data (dict): Dictionary containing 'file_path' and optional 'bucket'
-        page_range (tuple, optional): Tuple of (start_page, end_page) for partial extraction
+        page_range (tuple, optional): Tuple of (start_page, end_page), 1-indexed. Note: When converting from .odt or .rtf files, the page range selection might not exactly match the original document's page numbers due to formatting differences during PDF conversion and variations in how LibreOffice renders these formats.
 
     Returns:
         str: Extracted text from the document
@@ -44,7 +44,7 @@ def extract_text_from_file(file_path, page_range=None, backend='auto'):
 
     Args:
         file_path (str): Path to the local file
-        page_range (tuple, optional): Tuple of (start_page, end_page), 1-indexed
+        page_range (tuple, optional): Tuple of (start_page, end_page), 1-indexed. Note: When converting from .odt or .rtf files, the page range selection might not exactly match the original document's page numbers due to formatting differences during PDF conversion and variations in how LibreOffice renders these formats.
         backend (str, optional): Text extraction backend ('auto', 'pymupdf', or 'pypdf')
 
     Returns:
@@ -178,7 +178,7 @@ class TextLoader:
 
         Args:
             doc_data (dict): Dictionary containing 'file_path' and optional 'bucket'
-            page_range (tuple, optional): Tuple of (start_page, end_page) for partial extraction
+            page_range (tuple, optional): Tuple of (start_page, end_page), 1-indexed. Note: When converting from .odt or .rtf files, the page range selection might not exactly match the original document's page numbers due to formatting differences during PDF conversion and variations in how LibreOffice renders these formats.
 
         Returns:
             str: Extracted text from the document
@@ -280,7 +280,7 @@ class TextLoader:
         Args:
             bucket (str): S3 bucket name
             file_path (str): Path to file in S3
-            page_range (tuple, optional): Tuple of (start_page, end_page) for partial extraction
+            page_range (tuple, optional): Tuple of (start_page, end_page), 1-indexed. Note: When converting from .odt or .rtf files, the page range selection might not exactly match the original document's page numbers due to formatting differences during PDF conversion and variations in how LibreOffice renders these formats.
 
         Returns:
             str: Extracted text from the document
@@ -380,7 +380,7 @@ class TextLoader:
 
         Args:
             file_path (str): Path to the local file
-            page_range (tuple, optional): Tuple of (start_page, end_page), 1-indexed
+            page_range (tuple, optional): Tuple of (start_page, end_page), 1-indexed. Note: When converting from .odt or .rtf files, the page range selection might not exactly match the original document's page numbers due to formatting differences during PDF conversion and variations in how LibreOffice renders these formats.
             backend (str, optional): Text extraction backend ('auto', 'pymupdf', or 'pypdf')
 
         Returns:
