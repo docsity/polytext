@@ -184,26 +184,36 @@ class PDFGenerator:
         """
         return css_template
 
-    def get_customized_pdf_from_markdown(self, input_markdown):
+    def get_customized_pdf_from_markdown(self, input_markdown, output_file=None):
         """
         Convert Markdown content to a PDF with custom styling.
 
         Args:
             input_markdown: The Markdown content to convert.
+            output_file: Optional; if provided, the PDF will be saved to this file.
         Returns:
             A byte string containing the generated PDF.
         """
-        html_content = markdown.markdown(input_markdown)
+        try:
+            html_content = markdown.markdown(input_markdown, extensions=['extra', 'codehilite', 'toc'])
 
-        # Generate PDF from HTML with Custom Styles
-        pdf_buffer = BytesIO()
+            # Generate PDF from HTML with Custom Styles
+            pdf_buffer = BytesIO()
 
-        custom_css = self.generate_custom_css()
-        font_config = FontConfiguration()
-        html = HTML(string=html_content)
-        css = CSS(string=custom_css, font_config=font_config)
-        html.write_pdf(pdf_buffer, stylesheets=[css], font_config=font_config)
+            custom_css = self.generate_custom_css()
+            font_config = FontConfiguration()
+            html = HTML(string=html_content)
+            css = CSS(string=custom_css, font_config=font_config)
+            html.write_pdf(pdf_buffer, stylesheets=[css], font_config=font_config)
 
-        pdf_value = pdf_buffer.getvalue()
+            pdf_value = pdf_buffer.getvalue()
 
-        return pdf_value
+            if output_file:
+                with open(output_file, 'wb') as f:
+                    f.write(pdf_value)
+                logger.info(f"PDF saved to {output_file}")
+
+            return pdf_value
+        except Exception as e:
+            logger.error(f"Error generating PDF: {e}")
+            raise
