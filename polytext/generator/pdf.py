@@ -9,17 +9,20 @@ from weasyprint.text.fonts import FontConfiguration
 logger = logging.getLogger(__name__)
 
 
-def get_customized_pdf_from_markdown(input_markdown):
+def get_customized_pdf_from_markdown(input_markdown, output_file=None, use_custom_css=True):
     """
     Convenience function to convert Markdown content to a PDF with custom styling.
 
     Args:
         input_markdown: The Markdown content to convert.
+        output_file: Optional; if provided, the PDF will be saved to this file.
+        use_custom_css (bool, optional): Whether to use custom CSS for styling. Defaults to True.
+
     Returns:
         A byte string containing the generated PDF.
     """
     generator = PDFGenerator()
-    return generator.get_customized_pdf_from_markdown(input_markdown)
+    return generator.get_customized_pdf_from_markdown(input_markdown, output_file, use_custom_css)
 
 
 class PDFGenerator:
@@ -184,15 +187,20 @@ class PDFGenerator:
         """
         return css_template
 
-    def get_customized_pdf_from_markdown(self, input_markdown, output_file=None):
+    def get_customized_pdf_from_markdown(self, input_markdown, output_file=None, use_custom_css=True):
         """
         Convert Markdown content to a PDF with custom styling.
 
         Args:
             input_markdown: The Markdown content to convert.
             output_file: Optional; if provided, the PDF will be saved to this file.
+            use_custom_css (bool, optional): Whether to use custom CSS for styling. Defaults to True.
+
         Returns:
             A byte string containing the generated PDF.
+
+        Raises:
+            Exception: If an error occurs during PDF generation.
         """
         try:
             html_content = markdown.markdown(input_markdown, extensions=['extra', 'codehilite', 'toc'])
@@ -200,11 +208,15 @@ class PDFGenerator:
             # Generate PDF from HTML with Custom Styles
             pdf_buffer = BytesIO()
 
-            custom_css = self.generate_custom_css()
-            font_config = FontConfiguration()
-            html = HTML(string=html_content)
-            css = CSS(string=custom_css, font_config=font_config)
-            html.write_pdf(pdf_buffer, stylesheets=[css], font_config=font_config)
+            if use_custom_css:
+                custom_css = self.generate_custom_css()
+                font_config = FontConfiguration()
+                html = HTML(string=html_content)
+                css = CSS(string=custom_css, font_config=font_config)
+                html.write_pdf(pdf_buffer, stylesheets=[css], font_config=font_config)
+            else:
+                html = HTML(string=html_content)
+                html.write_pdf(pdf_buffer)
 
             pdf_value = pdf_buffer.getvalue()
 
