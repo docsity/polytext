@@ -30,9 +30,10 @@ class PDFGenerator:
     A class to generate PDFs from Markdown content with custom CSS styling.
     """
 
-    def __init__(self, font_family="Georgia, serif", title_color="#1a5276", body_color="white", text_color="#333",
-                 h2_color="#d35400", h3_color="#2e86c1", blockquote_border="#3498db", table_header_bg="#2e86c1",
-                 page_margin="0.8in", image_max_width="80%", add_page_numbers=True, font_path=None):
+    def __init__(self, font_family="Georgia, serif", title_color="#1a5276", title_text_align="center",
+                 body_color="white", text_color="#333", h2_color="#d35400", h3_color="#2e86c1",
+                 blockquote_border="#3498db", table_header_bg="#2e86c1", page_margin="0.8in", image_max_width="80%",
+                 add_page_numbers=True, font_path=None):
         """
         Initialize the PDFGenerator with custom styling options.
 
@@ -52,6 +53,7 @@ class PDFGenerator:
         """
         self.font_family = font_family
         self.title_color = title_color
+        self.title_text_align = title_text_align
         self.body_color = body_color
         self.text_color = text_color
         self.h2_color = h2_color
@@ -90,11 +92,14 @@ class PDFGenerator:
         @page {{
             size: A4;
             margin: {self.page_margin};
+            margin-top: 50px;
+            margin-bottom: 40px;
 
             @bottom-center {{
-                content: counter(page) "/" counter(pages);
-                font-size: 12px;
-                color: #555;
+                content: counter(page);
+                font-size: 16px;
+                color: #000;
+                margin-bottom: 30px;
             }}
         }}
         """ if self.add_page_numbers else ""
@@ -113,42 +118,68 @@ class PDFGenerator:
             color: {self.text_color};
             background-color: {self.body_color};
             text-align: justify;
-            line-height: 1.6;
+            line-height: 1.5;
         }}
 
         h1 {{
             color: {self.title_color};
             font-size: 28px;
-            text-align: center;
-            text-transform: uppercase;
-            margin-bottom: 20px;
+            text-align: {self.title_text_align};
+            margin-bottom: 45px;
+            line-height: 1.4;
         }}
 
         h2 {{
             color: {self.h2_color};
-            font-size: 22px;
-            text-transform: uppercase;
-            margin-top: 30px;
-            border-bottom: 2px solid {self.h2_color};
-            padding-bottom: 5px;
+            font-size: 25px;
+            margin-top: 10px;
+            margin-bottom: 20px;
         }}
 
         h3 {{
             color: {self.h3_color};
-            font-size: 18px;
-            margin-top: 20px;
+            font-size: 21px;
+            margin-top: 25px;
+            line-height: 1.2;
+            text-align: left
         }}
 
         p {{
-            font-size: 14px;
-            margin: 10px 0;
+            font-size: 16px;
+            margin: 20px 0;
+        }}
+        
+        /* Bullet Lists */
+        ul {{
+            margin-top: 30px; /* Space before the paragraph */
+            margin-bottom: 25px;
+            padding-left: 1em;
+        }}
+        
+        ul li::marker {{
+            font-size: 1.5em; /* Increase bullet size */
+            color: #000; /* Ensuring high contrast */
+        }}
+        
+        ul li {{
+            list-style-type: disc; /* Standard bullet point */
+            margin-left: 1em;
+            line-height: 0.2;
+        }}
+        
+        a {{
+            color: #0066cc;
+            text-decoration: underline;
+        }}
+        a:hover {{
+            text-decoration: underline;
         }}
 
         blockquote {{
             border-left: 4px solid {self.blockquote_border};
             padding-left: 10px;
             font-style: italic;
-            color: #555;
+            color: #000;
             margin: 15px 0;
         }}
 
@@ -159,7 +190,7 @@ class PDFGenerator:
         }}
 
         th, td {{
-            border: 1px solid #ddd;
+            border: 1px solid #000;
             padding: 8px;
             text-align: left;
         }}
@@ -203,7 +234,7 @@ class PDFGenerator:
             Exception: If an error occurs during PDF generation.
         """
         try:
-            html_content = markdown.markdown(input_markdown, extensions=['extra', 'codehilite', 'toc'])
+            html_content = markdown.markdown(input_markdown, extensions=['extra', 'codehilite', 'toc', 'sane_lists'])
 
             # Generate PDF from HTML with Custom Styles
             pdf_buffer = BytesIO()
