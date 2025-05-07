@@ -1,4 +1,4 @@
-# text_loader.py
+# text.py
 # Standard library imports
 import os
 import re
@@ -14,6 +14,7 @@ from botocore.exceptions import ClientError
 # Local imports
 from ..converter.pdf import convert_to_pdf
 from ..exceptions.base import EmptyDocument, ExceededMaxPages
+from ..loader.downloader.downloader import Downloader
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +62,7 @@ def extract_text_from_file(file_path, page_range=None, backend='auto'):
 
 class TextLoader:
     """
-    Loads and extracts text from documents with support for S3 storage.
+    Loads and extracts text from documents with support for S3 or GCS storage.
 
     This class handles document downloading from S3, conversion to PDF, and text extraction
     using different backends (PyMuPDF and PyPDF). It supports various document formats
@@ -73,9 +74,9 @@ class TextLoader:
         document_aws_bucket (str): Default S3 bucket name for document storage
     """
 
-    def __init__(self, s3_client=None, document_aws_bucket=None):
+    def __init__(self, s3_client=None, document_aws_bucket=None, gcs_client=None, document_gcs_bucket=None):
         """
-        Initialize TextLoader with optional S3 configuration.
+        Initialize TextLoader with optional S3 or GCS configuration.
 
         Args:
             s3_client: Boto3 S3 client instance for AWS operations (optional)
@@ -83,42 +84,55 @@ class TextLoader:
         """
         self.s3_client = s3_client
         self.document_aws_bucket = document_aws_bucket
+        self.gcs_client = gcs_client
+        self.document_gcs_bucket = document_gcs_bucket
 
-    # S3-related methods
-
-    def download_file_from_s3(self, bucket, file_path, temp_file_path):
+    def download_document(self, file_path, temp_file_path):
         """
-        Download a file from S3 to a local temporary path.
+        Download a document file from S3 or GCS to a local temporary path.
 
         Attempts to download the file with both lowercase and uppercase extensions.
         Falls back to document conversion if direct download fails.
 
         Args:
-            bucket (str): S3 bucket name
-            file_path (str): Path to file in S3 bucket
+            file_path (str): Path to file in S3 or GCS bucket
             temp_file_path (str): Local path to save the downloaded file
 
         Returns:
             str: Path to the downloaded file (may be converted to PDF)
 
         Raises:
-            ClientError: If S3 download operation fails
+            ClientError: If download operation fails
         """
-        try:
-            self.s3_client.download_file(Bucket=bucket, Key=file_path, Filename=temp_file_path)
-            logger.info(f'Downloaded {file_path} to {temp_file_path}')
-        except ClientError as e:
-            logger.info(e)
+        if self.s3_client is not None:
             try:
-                self.s3_client.download_file(Bucket=bucket,
-                                             Key=file_path.replace(".pdf", ".PDF"),
-                                             Filename=temp_file_path)
-            except Exception as e:
-                file_prefix = file_path
-                temp_file_path = self.convert_doc_to_pdf(bucket=bucket,
-                                                         file_prefix=file_prefix,
-                                                         input_file=temp_file_path)
-        return temp_file_path
+                downloader = Downloader(s3_client=self.s3_client, document_aws_bucket=self.document_aws_bucket)
+                downloader.download_file_from_s3(file_path, temp_file_path)
+                logger.info(f'Downloaded {file_path} to {temp_file_path}')
+            except ClientError as e:
+                logger.info(e)
+                try:
+                    self.s3_client.download_file(Bucket=self.document_aws_bucket,
+                                                 Key=file_path.replace(".pdf", ".PDF"),
+                                                 Filename=temp_file_path)
+                except Exception as e:
+                    file_prefix = file_path
+                    temp_file_path = self.convert_doc_to_pdf(bucket=self.document_aws_bucket,
+                                                             file_prefix=file_prefix,
+                                                             input_file=temp_file_path)
+            return temp_file_path
+        elif self.gcs_client is not None:
+            try:
+                downloader = Downloader(gcs_client=self.gcs_client, document_gcs_bucket=self.document_gcs_bucket)
+                downloader.download_file_from_gcs(file_path, temp_file_path)
+                logger.info(f'Downloaded {file_path} to {temp_file_path}')
+            except ClientError as e:
+                logger.info(e)
+                bucket = self.gcs_client.bucket(self.document_gcs_bucket)
+                blob = bucket.blob(file_path.replace(".pdf", ".PDF"))
+                # Download file
+                blob.download_to_filename(temp_file_path)
+            return temp_file_path
 
     def convert_doc_to_pdf(self, bucket, file_prefix, input_file):
         """
@@ -202,7 +216,7 @@ class TextLoader:
             temp_file_path = self.convert_doc_to_pdf(bucket=bucket, file_prefix=file_prefix, input_file=temp_file_path)
             pdf_document = fitz.open(temp_file_path)
         else:
-            temp_file_path = self.download_file_from_s3(bucket, file_path, temp_file_path)
+            temp_file_path = self.download_document(file_path, temp_file_path)
             try:
                 pdf_document = fitz.open(temp_file_path)
                 logger.info(f"Successfully opened file with temp_file_path: {temp_file_path}")
@@ -301,7 +315,7 @@ class TextLoader:
             file = open(temp_file_path, "rb")
             pdf_reader = PdfReader(file)
         else:
-            temp_file_path = self.download_file_from_s3(bucket, file_path, temp_file_path)
+            temp_file_path = self.download_document(file_path, temp_file_path)
             logger.debug(f"temp_file_path: {temp_file_path}")
             try:
                 file = open(temp_file_path, "rb")
