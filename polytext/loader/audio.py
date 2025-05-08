@@ -1,6 +1,7 @@
 # audio.py
 import google.generativeai as genai
 import logging
+import mimetypes
 
 logger = logging.getLogger(__name__)
 
@@ -26,17 +27,19 @@ class AudioLoader:
             with open(audio_file, "rb") as f:
                 audio_data = f.read()
 
+            # Determine mimetype
+            mime_type, _ = mimetypes.guess_type(audio_file)
+            if mime_type is None:
+                raise ValueError("Audio format not recognized")
+
             content = []
             if prompt_template:
                 content.append(prompt_template)
-            content.append({"mime_type": "audio/mpeg", "data": audio_data})
+            content.append({"mime_type": mime_type, "data": audio_data})
 
             model = genai.GenerativeModel(self.model)
 
-            response = model.generate_content(
-                content=content,
-                generation_config={"temperature": 0.2}
-            )
+            response = model.generate_content(content=content)
 
             return response.text
 
