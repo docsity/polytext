@@ -28,13 +28,16 @@ def main():
     # Define document data
     file_path = "learning_resources/course_id=406/module_id=2658/id=31427/8434.mp4"
 
+    local_file_path = "/Users/marcodelgiudice/Projects/polytext/tmpzcsjjw0g_video.mp4"
+
     # Optional: specify page range (start_page, end_page) - pages are 1-indexed
     page_range = (1, 1)  # Extract text from pages 1 to 10
 
     try:
         # Call get_document_text method
-        document_text = video_loader.convert_video_to_audio(
-            file_path=file_path
+        document_text = video_loader.get_text_from_video(
+            file_path=file_path,
+            video_source="cloud",
         )
 
         # print(f"Successfully extracted text ({len(document_text)} characters)")
