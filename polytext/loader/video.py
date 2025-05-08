@@ -1,22 +1,11 @@
 # video.py
 # Standard library imports
 import os
-import re
 import tempfile
-import ffmpeg
 import logging
-from collections import Counter
-
-# Third-party imports
-from pypdf import PdfReader
-import fitz  # PyMuPDF
-from botocore.exceptions import ClientError
 
 # Local imports
-from ..converter.pdf import convert_to_pdf
-from ..exceptions.base import EmptyDocument, ExceededMaxPages
 from ..loader.downloader.downloader import Downloader
-from ..loader.audio import AudioLoader
 from ..converter.video_to_audio import convert_video_to_audio
 from ..converter.audio_to_text import transcribe_audio
 
@@ -24,18 +13,23 @@ logger = logging.getLogger(__name__)
 
 class VideoLoader:
 
-    def __init__(self, s3_client=None, document_aws_bucket=None, gcs_client=None, document_gcs_bucket=None):
+    def __init__(self, s3_client=None, document_aws_bucket=None, gcs_client=None, document_gcs_bucket=None,
+                 llm_api_key=None):
         """
-        Initialize VideoLoader with optional S3 or GCS configuration.
+        Initialize VideoLoader class with optional configurations for S3, GCS, and LLM API.
 
         Args:
-            s3_client: Boto3 S3 client instance for AWS operations (optional)
-            document_aws_bucket (str): Default S3 bucket name for document storage (optional)
+            s3_client (boto3.client, optional): Boto3 S3 client instance for AWS operations. Defaults to None.
+            document_aws_bucket (str, optional): Name of the S3 bucket for document storage. Defaults to None.
+            gcs_client (google.cloud.storage.Client, optional): GCS client instance for Google Cloud operations. Defaults to None.
+            document_gcs_bucket (str, optional): Name of the GCS bucket for document storage. Defaults to None.
+            llm_api_key (str, optional): API key for the LLM service. Defaults to None.
         """
         self.s3_client = s3_client
         self.document_aws_bucket = document_aws_bucket
         self.gcs_client = gcs_client
         self.document_gcs_bucket = document_gcs_bucket
+        self.llm_api_key = llm_api_key
 
     def download_video(self, file_path, temp_file_path):
         """
@@ -138,40 +132,41 @@ class VideoLoader:
         # Get text from audio
         return transcribe_audio(audio_file=audio_path,
                                 markdown_output=markdown_output,
+                                llm_api_key=self.llm_api_key
                                 )
 
-    # @staticmethod
-    # def save_file_locally(source_path, destination_dir, file_type):
-    #     """
-    #     Save a file to a local directory with proper naming.
-    #
-    #     Args:
-    #         source_path (str): Path to the source file
-    #         destination_dir (str): Directory to save the file
-    #         file_type (str): Type of file ('video' or 'audio')
-    #
-    #     Returns:
-    #         str: Path to the saved file
-    #     """
-    #     from pathlib import Path
-    #     # Create directory if it doesn't exist
-    #     os.makedirs(destination_dir, exist_ok=True)
-    #
-    #     # Extract original filename from path
-    #     original_filename = Path(source_path).name
-    #     base_name = os.path.splitext(original_filename)[0]
-    #
-    #     # Create new filename
-    #     extension = '.mp4' if file_type == 'video' else '.mp3'
-    #     new_filename = f"{base_name}_{file_type}{extension}"
-    #
-    #     # Create full destination path
-    #     destination_path = os.path.join(destination_dir, new_filename)
-    #
-    #     # Copy the file
-    #     with open(source_path, 'rb') as src, open(destination_path, 'wb') as dst:
-    #         dst.write(src.read())
-    #
-    #     logger.info(f"Saved {file_type} file to: {destination_path}")
-    #     return destination_path
+    @staticmethod
+    def save_file_locally(source_path, destination_dir, file_type):
+        """
+        Save a file to a local directory with proper naming.
+
+        Args:
+            source_path (str): Path to the source file
+            destination_dir (str): Directory to save the file
+            file_type (str): Type of file ('video' or 'audio')
+
+        Returns:
+            str: Path to the saved file
+        """
+        from pathlib import Path
+        # Create directory if it doesn't exist
+        os.makedirs(destination_dir, exist_ok=True)
+
+        # Extract original filename from path
+        original_filename = Path(source_path).name
+        base_name = os.path.splitext(original_filename)[0]
+
+        # Create new filename
+        extension = '.mp4' if file_type == 'video' else '.mp3'
+        new_filename = f"{base_name}_{file_type}{extension}"
+
+        # Create full destination path
+        destination_path = os.path.join(destination_dir, new_filename)
+
+        # Copy the file
+        with open(source_path, 'rb') as src, open(destination_path, 'wb') as dst:
+            dst.write(src.read())
+
+        logger.info(f"Saved {file_type} file to: {destination_path}")
+        return destination_path
 

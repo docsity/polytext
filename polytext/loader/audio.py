@@ -1,33 +1,34 @@
 # video.py
 # Standard library imports
 import os
-import re
 import tempfile
-import ffmpeg
 import logging
-from collections import Counter
 
 # Local imports
 from ..converter.audio_to_text import transcribe_audio
 from ..loader.downloader.downloader import Downloader
-from ..prompts.transcription import AUDIO_TO_MARKDOWN_PROMPT, AUDIO_TO_PLAIN_TEXT_PROMPT
 
 logger = logging.getLogger(__name__)
 
 class AudioLoader:
 
-    def __init__(self, s3_client=None, document_aws_bucket=None, gcs_client=None, document_gcs_bucket=None):
+    def __init__(self, s3_client=None, document_aws_bucket=None, gcs_client=None, document_gcs_bucket=None,
+                 llm_api_key=None):
         """
-        Initialize AudioLoader with optional S3 or GCS configuration.
+        Initialize the AudioLoader class with optional configurations for S3, GCS, and LLM API.
 
         Args:
-            s3_client: Boto3 S3 client instance for AWS operations (optional)
-            document_aws_bucket (str): Default S3 bucket name for document storage (optional)
+            s3_client (boto3.client, optional): Boto3 S3 client instance for AWS operations. Defaults to None.
+            document_aws_bucket (str, optional): Name of the S3 bucket for document storage. Defaults to None.
+            gcs_client (google.cloud.storage.Client, optional): GCS client instance for Google Cloud operations. Defaults to None.
+            document_gcs_bucket (str, optional): Name of the GCS bucket for document storage. Defaults to None.
+            llm_api_key (str, optional): API key for the LLM service. Defaults to None.
         """
         self.s3_client = s3_client
         self.document_aws_bucket = document_aws_bucket
         self.gcs_client = gcs_client
         self.document_gcs_bucket = document_gcs_bucket
+        self.llm_api_key = llm_api_key
 
     def download_audio(self, file_path, temp_file_path):
         """
@@ -55,7 +56,24 @@ class AudioLoader:
             return temp_file_path
 
     def get_text_from_audio(self, file_path, audio_source, markdown_output=True):
+        """
+        Extract text from an audio file by transcribing it.
 
+        This method handles loading the audio file from either a cloud storage
+        service (S3 or GCS) or a local path, and then transcribes the audio
+        content into text using the `transcribe_audio` function.
+
+        Args:
+            file_path (str): Path to the audio file. This can be a cloud storage path or a local file path.
+            audio_source (str): Source of the audio file. Must be either "cloud" or "local".
+            markdown_output (bool, optional): If True, the transcription will be formatted as Markdown. Defaults to True.
+
+        Returns:
+            str: The transcribed text from the audio file.
+
+        Raises:
+            ValueError: If the `audio_source` is not "cloud" or "local".
+        """
         # Load or download the video file
         if audio_source == "cloud":
             fd, temp_file_path = tempfile.mkstemp()
@@ -72,5 +90,6 @@ class AudioLoader:
             raise ValueError("Invalid audio source. Choose 'cloud', or 'local'.")
 
         return transcribe_audio(audio_file=temp_file_path,
-                                markdown_output=markdown_output
+                                markdown_output=markdown_output,
+                                llm_api_key=self.llm_api_key
                                 )

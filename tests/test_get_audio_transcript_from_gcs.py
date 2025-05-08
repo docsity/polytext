@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from dotenv import load_dotenv
 load_dotenv(".env")
 
-from polytext.loader import VideoLoader
+from polytext.loader import AudioLoader
 
 # Set up logging
 logging.basicConfig(level=logging.INFO,
@@ -22,23 +22,22 @@ def main():
     markdown_output = True
 
     # Initialize VideoLoader with GCS client and bucket
-    video_loader = VideoLoader(
+    audio_loader = AudioLoader(
         gcs_client=gcs_client,
         document_gcs_bucket='opit-da-test-ml-ai-store-bucket',
         # llm_api_key=os.getenv("GOOGLE_API_KEY"),
     )
 
     # Define document data
-    # file_path = "learning_resources/course_id=406/module_id=2658/id=31427/8434.mp4"
-    file_path = "learning_resources/course_id=132/module_id=312/id=4020/2333.mp4"
+    file_path = "learning_resources/course_id=406/module_id=2658/id=31427/8434.mp4"
 
-    local_file_path = "/Users/marcodelgiudice/Projects/polytext/tmp1mq7s7nt_video.mp4"
+    local_file_path = "/Users/marcodelgiudice/Projects/polytext/tmp46evneuz_audio.mp3"
 
     try:
         # Call get_document_text method
-        document_text = video_loader.get_text_from_video(
-            file_path=file_path,
-            video_source="cloud",
+        document_text = audio_loader.get_text_from_audio(
+            file_path=local_file_path,
+            audio_source="local",
             markdown_output=markdown_output
         )
 
