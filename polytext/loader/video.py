@@ -16,6 +16,9 @@ from botocore.exceptions import ClientError
 from ..converter.pdf import convert_to_pdf
 from ..exceptions.base import EmptyDocument, ExceededMaxPages
 from ..loader.downloader.downloader import Downloader
+from ..loader.audio import AudioLoader
+from ..converter.video_to_audio import convert_video_to_audio
+from ..converter.audio_to_text import transcribe_audio
 
 logger = logging.getLogger(__name__)
 
@@ -33,9 +36,6 @@ class VideoLoader:
         self.document_aws_bucket = document_aws_bucket
         self.gcs_client = gcs_client
         self.document_gcs_bucket = document_gcs_bucket
-
-    def load_video_from_local_file(self):
-        pass
 
     def download_video(self, file_path, temp_file_path):
         """
@@ -103,50 +103,6 @@ class VideoLoader:
     #         logger.info(f"Successfully converted video to audio: {temp_audio_path}")
     #         return temp_audio_path
 
-    @staticmethod
-    def convert_video_to_audio(video_file):
-        """
-        Convert a video file to audio format using ffmpeg-python.
-
-        Args:
-            video_file (str): Path to the video file.
-
-        Returns:
-            str: Path to the converted audio file.
-
-        Raises:
-            ffmpeg.Error: If FFmpeg conversion fails
-            Exception: If any other error occurs during conversion
-        """
-        temp_audio_path = None
-        try:
-            # Create temporary file for audio output
-            fd, temp_audio_path = tempfile.mkstemp(suffix='.mp3')
-            os.close(fd)
-
-            # Simple efficient pipeline
-            (
-                ffmpeg
-                .input(video_file)
-                .output(temp_audio_path, acodec='libmp3lame', ab='192k', vn=None)
-                .overwrite_output()
-                .run(capture_stdout=True, capture_stderr=True)
-            )
-
-            logger.info(f"Successfully converted video to audio: {temp_audio_path}")
-            return temp_audio_path
-
-        except ffmpeg.Error as e:
-            logger.error(f"FFmpeg conversion failed: {e.stderr.decode()}")
-            if os.path.exists(temp_audio_path):
-                os.unlink(temp_audio_path)
-            raise
-        except Exception as e:
-            logger.error(f"Failed to convert video to audio: {str(e)}")
-            if os.path.exists(temp_audio_path):
-                os.unlink(temp_audio_path)
-            raise
-
     def get_text_from_video(self, file_path, video_source, markdown_output=True):
         """
         Extract text from a video file.
@@ -176,29 +132,13 @@ class VideoLoader:
             raise ValueError("Invalid video source. Choose 'cloud', or 'local'.")
 
         # Convert the video to audio
-        audio_path = self.convert_video_to_audio(temp_file_path)
+        audio_path = convert_video_to_audio(temp_file_path)
         # saved_audio_path = self.save_file_locally(audio_path, os.getcwd(), 'audio')
 
         # Get text from audio
-        return "ok" # self.get_text_from_audio(audio_path)
-
-    def get_text_from_audio(self, audio_path, markdown_output=True):
-
-        if markdown_output:
-            # Convert the text to markdown format
-            prompt_template = audio_to_markdown_prompt
-        else:
-            # Convert the text to plain text format
-            prompt_template = audio_to_plain_text_prompt
-
-        audio_loader = AudioLoader()
-
-        audio_loader.transcribe_audio(
-            audio_file=audio_file,
-            prompt_template=prompt_template,
-            language=self.language,
-            model=self.model
-        )
+        return transcribe_audio(audio_file=audio_path,
+                                markdown_output=markdown_output,
+                                )
 
     # @staticmethod
     # def save_file_locally(source_path, destination_dir, file_type):
