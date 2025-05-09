@@ -3,6 +3,7 @@ import os
 import logging
 import time
 import mimetypes
+import ffmpeg
 import google.generativeai as generativeai
 from google import genai
 from google.genai import types
@@ -11,6 +12,21 @@ from google.generativeai.types import HarmCategory, HarmBlockThreshold
 from ..prompts.transcription import AUDIO_TO_MARKDOWN_PROMPT, AUDIO_TO_PLAIN_TEXT_PROMPT
 
 logger = logging.getLogger(__name__)
+
+def compress_audio(input_path: str, output_path: str, target_bitrate="64k"):
+    """
+    Compresses an audio file using ffmpeg to reduce its size.
+
+    Args:
+        input_path (str): Original audio file path.
+        output_path (str): Path to save the compressed audio file.
+        target_bitrate (str): Desired audio bitrate, e.g., "64k", "96k", etc.
+    """
+    try:
+        ffmpeg.input(input_path).output(output_path, audio_bitrate=target_bitrate).run(quiet=True, overwrite_output=True)
+    except ffmpeg.Error as e:
+        raise RuntimeError(f"FFmpeg error during audio compression: {e.stderr.decode()}") from e
+
 
 def transcribe_audio(audio_file, markdown_output=True, llm_api_key=None):
     """
@@ -31,6 +47,7 @@ def transcribe_audio(audio_file, markdown_output=True, llm_api_key=None):
     """
     converter = AudioToTextConverter()
     return converter.transcribe_audio(audio_file, markdown_output, llm_api_key)
+
 
 class AudioToTextConverter:
     def __init__(self, transcription_model="gemini-2.0-flash", transcription_model_provider="google"):
@@ -137,12 +154,24 @@ class AudioToTextConverter:
                 ]
             )
 
-            file_size = os.path.getsize(audio_file)
-            logger.info(f"Audio file size: {file_size / (1024 * 1024):.2f} MB")
-            if file_size > 20 * 1024 * 1024:
+            original_size = os.path.getsize(audio_file)
+            logger.info(f"Original audio size: {original_size / (1024 * 1024):.2f} MB")
+
+            compressed_audio_path = audio_file.replace(".", "_compressed.")
+            used_file = audio_file
+
+            if original_size > 20 * 1024 * 1024:
+                logger.info("Compressing audio to reduce size...")
+                compress_audio(audio_file, compressed_audio_path, target_bitrate="64k")
+                used_file = compressed_audio_path
+
+            final_size = os.path.getsize(used_file)
+            logger.info(f"Audio to use: {used_file} ({final_size / (1024 * 1024):.2f} MB)")
+
+            if final_size > 20 * 1024 * 1024:
                 logger.info("Audio file size exceeds 20MB, uploading file before transcription")
 
-                myfile = client.files.upload(file=audio_file)
+                myfile = client.files.upload(file=used_file)
 
                 response = client.models.count_tokens(
                     model='gemini-2.0-flash',
@@ -161,11 +190,11 @@ class AudioToTextConverter:
                 client.files.delete(name=myfile.name)
 
             else:
-                with open(audio_file, "rb") as f:
+                with open(used_file, "rb") as f:
                     audio_data = f.read()
 
                 # Determine mimetype
-                mime_type, _ = mimetypes.guess_type(audio_file)
+                mime_type, _ = mimetypes.guess_type(used_file)
                 if mime_type is None:
                     raise ValueError("Audio format not recognized")
 
@@ -195,4 +224,3 @@ class AudioToTextConverter:
         except Exception as e:
             logger.error(f"Error during audio transcription: {str(e)}")
             raise
-
