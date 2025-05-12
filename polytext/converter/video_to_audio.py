@@ -30,7 +30,7 @@ def convert_video_to_audio(video_file):
         (
             ffmpeg
             .input(video_file)
-            .output(temp_audio_path, acodec='libmp3lame', ab='192k', vn=None)
+            .output(temp_audio_path, acodec='libmp3lame', ab='128k', vn=None)
             .overwrite_output()
             .run(capture_stdout=True, capture_stderr=True)
         )

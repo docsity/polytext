@@ -9,3 +9,9 @@ markdown==3.7
 
 # docx
 python-docx==1.1.2
+
+# google generative ai
+google-genai==1.14.0
+
+# audio video processing
+ffmpeg-python==0.2.0

@@ -10,5 +10,14 @@ I would like you to follow these steps:
 4. Markdown Output: Provide the result as a block of text formatted in Markdown.
 Important: Do not include any additional explanations or comments outside of the Markdown formatting."""
 
+AUDIO_TO_MARKDOWN_MINIMAL_PROMPT = """I need you to transcribe and format the content of this audio file into Markdown.
+I would like you to follow these steps:
+1. Audio Transcription: Accurately transcribe the content of the audio file into text.
+2. Highlight key words or important phrases using ** or _.
+3. Markdown Output: Provide the result as a block of text formatted in Markdown.
+Important:
+- Do not include any additional explanations or comments outside of the Markdown formatting.
+- Do not include any other Markdown formatting, for example for titles, subtitles or paragraphs."""
+
 AUDIO_TO_PLAIN_TEXT_PROMPT = """Transcribe the following audio to plain text format.
 Important: Do not include any additional explanations or comments outside of the transcription."""

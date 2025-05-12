@@ -5,7 +5,7 @@ import tempfile
 import logging
 
 # Local imports
-from ..converter.audio_to_text import transcribe_audio
+from ..converter.audio_to_text import transcribe_full_audio
 from ..loader.downloader.downloader import Downloader
 
 logger = logging.getLogger(__name__)
@@ -89,7 +89,7 @@ class AudioLoader:
         else:
             raise ValueError("Invalid audio source. Choose 'cloud', or 'local'.")
 
-        return transcribe_audio(audio_file=temp_file_path,
-                                markdown_output=markdown_output,
-                                llm_api_key=self.llm_api_key
-                                )
+        return transcribe_full_audio(audio_file=temp_file_path,
+                                     markdown_output=markdown_output,
+                                     llm_api_key=self.llm_api_key
+                                     )

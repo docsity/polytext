@@ -7,7 +7,7 @@ import logging
 # Local imports
 from ..loader.downloader.downloader import Downloader
 from ..converter.video_to_audio import convert_video_to_audio
-from ..converter.audio_to_text import transcribe_audio
+from ..converter.audio_to_text import transcribe_full_audio
 
 logger = logging.getLogger(__name__)
 
@@ -130,10 +130,10 @@ class VideoLoader:
         # saved_audio_path = self.save_file_locally(audio_path, os.getcwd(), 'audio')
 
         # Get text from audio
-        return transcribe_audio(audio_file=audio_path,
-                                markdown_output=markdown_output,
-                                llm_api_key=self.llm_api_key
-                                )
+        return transcribe_full_audio(audio_file=audio_path,
+                                     markdown_output=markdown_output,
+                                     llm_api_key=self.llm_api_key
+                                     )
 
     @staticmethod
     def save_file_locally(source_path, destination_dir, file_type):
