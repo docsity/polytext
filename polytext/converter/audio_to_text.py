@@ -48,7 +48,7 @@ def compress_and_convert_audio(input_path: str, target_bitrate="128k"):
     except Exception as e:
         raise RuntimeError(f"FFmpeg error during audio compression/conversion: {e}") from e
 
-def transcribe_full_audio(audio_file, markdown_output=False, llm_api_key=None):
+def transcribe_full_audio(audio_file, markdown_output=False, llm_api_key=None, save_transcript_chunks=False):
     """
     Convenience function to transcribe an audio file into text, optionally formatted as Markdown.
 
@@ -61,12 +61,13 @@ def transcribe_full_audio(audio_file, markdown_output=False, llm_api_key=None):
         markdown_output (bool, optional): If True, the transcription will be
             formatted as Markdown. Defaults to True.
         llm_api_key (str, optional): API key for the LLM service. If provided, it will override the default configuration.
+        save_transcript_chunks (bool, optional): Whether to save chunk transcripts in final output. Defaults to False.
 
     Returns:
         str: The transcribed text from the audio file.
     """
     converter = AudioToTextConverter(markdown_output=markdown_output, llm_api_key=llm_api_key)
-    return converter.transcribe_full_audio(audio_file)
+    return converter.transcribe_full_audio(audio_file, save_transcript_chunks)
 
 class AudioToTextConverter:
     def __init__(self, transcription_model="gemini-2.0-flash", transcription_model_provider="google",
@@ -240,27 +241,23 @@ class AudioToTextConverter:
             logger.error(f"Error during audio transcription: {str(e)}")
             raise
 
-    def process_chunk(self, chunk, index, save_intermediate):
+    def process_chunk(self, chunk, index):
         """Process a single audio chunk and return its transcript"""
         logger.info(f"Transcribing chunk {index + 1}...")
         transcript_dict = self.transcribe_audio(chunk["file_path"])
         transcript = transcript_dict["transcript"]
 
-        if save_intermediate:
-            with open(f"transcript_chunk_{index}.txt", "w") as f:
-                f.write(transcript)
-
         return index, transcript_dict
 
     def transcribe_full_audio(self,
             audio_path,
-            save_intermediate=False):
+            save_transcript_chunks=False):
         """
         Process and transcribe a long audio file by chunking, parallel transcription, and merging.
 
         Args:
             audio_path (str): Path to the audio file to be transcribed
-            save_intermediate (bool, optional): Whether to save intermediate chunk transcripts. Defaults to False.
+            save_transcript_chunks (bool, optional): Whether to save chunk transcripts in final output. Defaults to False.
 
         Returns:
             dict: Dictionary containing:
@@ -315,7 +312,7 @@ class AudioToTextConverter:
             with ThreadPoolExecutor() as executor:
                 # Submit all chunks to the thread pool
                 future_to_chunk = {
-                    executor.submit(self.process_chunk, chunk, i, save_intermediate): i
+                    executor.submit(self.process_chunk, chunk, i): i
                     for i, chunk in enumerate(chunks)
                 }
 
@@ -340,6 +337,8 @@ class AudioToTextConverter:
                 "completion_model": self.transcription_model,
                 "completion_model_provider": self.transcription_model_provider
             }
+            if save_transcript_chunks:
+                final_transcript_dict["text_chunks"] = transcript_chunks
 
             # Clean up temporary files
             if len(chunks) > 1:

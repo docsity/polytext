@@ -20,12 +20,14 @@ def main():
     gcs_client = storage.Client()
 
     markdown_output = True
+    save_transcript_chunks = True
 
     # Initialize VideoLoader with GCS client and bucket
     video_loader = VideoLoader(
         gcs_client=gcs_client,
         document_gcs_bucket='opit-da-test-ml-ai-store-bucket',
         # llm_api_key=os.getenv("GOOGLE_API_KEY"),
+        save_transcript_chunks=save_transcript_chunks,
     )
 
     # Define document data
@@ -39,7 +41,7 @@ def main():
         document_text = video_loader.get_text_from_video(
             file_path=file_path,
             video_source="cloud",
-            markdown_output=markdown_output
+            markdown_output=markdown_output,
         )
 
         import ipdb; ipdb.set_trace()

@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 class AudioLoader:
 
     def __init__(self, s3_client=None, document_aws_bucket=None, gcs_client=None, document_gcs_bucket=None,
-                 llm_api_key=None, temp_dir="temp"):
+                 llm_api_key=None, save_transcript_chunks=False, temp_dir="temp"):
         """
         Initialize the AudioLoader with cloud storage and LLM configurations.
 
@@ -27,6 +27,7 @@ class AudioLoader:
                 Defaults to None.
             document_gcs_bucket (str, optional): GCS bucket name for document storage. Defaults to None.
             llm_api_key (str, optional): API key for language model service. Defaults to None.
+            save_transcript_chunks (bool, optional): Whether to save chunk transcripts in final output. Defaults to False.
             temp_dir (str, optional): Path for temporary file storage. Defaults to "temp".
 
         Raises:
@@ -38,6 +39,7 @@ class AudioLoader:
         self.gcs_client = gcs_client
         self.document_gcs_bucket = document_gcs_bucket
         self.llm_api_key = llm_api_key
+        self.save_transcript_chunks = save_transcript_chunks
 
         # Set up custom temp directory
         self.temp_dir = os.path.abspath(temp_dir)
@@ -105,7 +107,8 @@ class AudioLoader:
 
         audio_transcript = transcribe_full_audio(audio_file=temp_file_path,
                                                  markdown_output=markdown_output,
-                                                 llm_api_key=self.llm_api_key
+                                                 llm_api_key=self.llm_api_key,
+                                                 save_transcript_chunks=self.save_transcript_chunks
                                                  )
 
         # Clean up temporary file if it was downloaded
