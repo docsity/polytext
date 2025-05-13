@@ -5,9 +5,11 @@ import tempfile
 import time
 import mimetypes
 import ffmpeg
+from retry import retry
 from google import genai
 from google.genai import types
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from google.api_core import exceptions as google_exceptions
 
 from ..prompts.transcription import AUDIO_TO_MARKDOWN_PROMPT, AUDIO_TO_PLAIN_TEXT_PROMPT, \
     AUDIO_TO_MARKDOWN_MINIMAL_PROMPT
@@ -102,6 +104,18 @@ class AudioToTextConverter:
         os.makedirs(self.temp_dir, exist_ok=True)
         tempfile.tempdir = self.temp_dir
 
+    @retry(
+        (
+                google_exceptions.DeadlineExceeded,
+                google_exceptions.ResourceExhausted,
+                google_exceptions.ServiceUnavailable,
+                google_exceptions.InternalServerError
+        ),
+        tries=8,
+        delay=1,
+        backoff=2,
+        logger=logger,
+    )
     def transcribe_audio(self, audio_file):
         """
         Transcribe audio using a specified model and prompt template.
