@@ -12,16 +12,12 @@ class AudioChunker:
             self,
             audio_path: str,
             max_llm_tokens: int = 8000,  # maximum output tokens for LLM
-            min_silence_len: int = 500,  # minimum silence length in ms
-            silence_thresh: int = -35,  # silence threshold in dB
             overlap_duration: int = 5000,  # overlap duration in ms
             tokens_per_minute: int = 200,  # estimated tokens per minute of speech
             prompt_overhead: int = 500  # tokens used for the LLM prompt
     ):
         self.audio_path = audio_path
         self.max_llm_tokens = max_llm_tokens
-        self.min_silence_len = min_silence_len
-        self.silence_thresh = silence_thresh
         self.overlap_duration = overlap_duration
         self.tokens_per_minute = tokens_per_minute
         self.prompt_overhead = prompt_overhead
