@@ -15,7 +15,7 @@ A Python package for document conversion and text extraction.
 
 ```bash
 # Basic installation
-pip install plytext
+pip install polytext
 ```
 
 ## Requirements

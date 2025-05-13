@@ -29,8 +29,8 @@ def main():
     )
 
     # Define document data
-    # file_path = "learning_resources/course_id=406/module_id=2658/id=31427/8434.mp4"
-    file_path = "learning_resources/course_id=132/module_id=312/id=4020/2333.mp4"
+    file_path = "learning_resources/course_id=406/module_id=2658/id=31427/8434.mp4"
+    # file_path = "learning_resources/course_id=132/module_id=312/id=4020/2333.mp4"
 
     local_file_path = "/Users/marcodelgiudice/Projects/polytext/tmp1mq7s7nt_video.mp4"
 
@@ -47,7 +47,7 @@ def main():
         try:
             output_file = "transcript.md" if markdown_output else "transcript.txt"
             with open(output_file, "w", encoding="utf-8") as f:
-                f.write(document_text)
+                f.write(document_text["text"])
             print(f"Transcript saved to {output_file}")
         except IOError as e:
             logging.error(f"Failed to save transcript: {str(e)}")

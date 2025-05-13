@@ -1,4 +1,4 @@
-#pdf
+# pdf
 pypdf==5.3.0
 PyMuPDF>=1.25.3
 pycryptodome==3.21.0
@@ -11,8 +11,13 @@ markdown==3.7
 python-docx==1.1.2
 
 # google
-google-api-core==2.24.2
-google-genai==1.14.0
+google-api-core>=2.24.2
+google-cloud-storage>=3.1.0
+google-genai>=1.14.0
+
+# aws
+boto3>=1.37.0
+botocore>=1.37.0
 
 # audio video processing
 ffmpeg-python==0.2.0

@@ -31,7 +31,7 @@ def main():
     # Define document data
     file_path = "learning_resources/course_id=406/module_id=2658/id=31427/8434.mp4"
 
-    local_file_path = "/Users/marcodelgiudice/Projects/polytext/tmpa35u2a8u_audio.mp3"
+    local_file_path = "/Users/marcodelgiudice/Projects/polytext/tmpb3jr41pd.mp3"
 
     try:
         # Call get_document_text method
@@ -46,7 +46,7 @@ def main():
         try:
             output_file = "transcript.md" if markdown_output else "transcript.txt"
             with open(output_file, "w", encoding="utf-8") as f:
-                f.write(document_text)
+                f.write(document_text["text"])
             print(f"Transcript saved to {output_file}")
         except IOError as e:
             logging.error(f"Failed to save transcript: {str(e)}")

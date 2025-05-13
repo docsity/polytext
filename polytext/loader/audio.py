@@ -13,22 +13,36 @@ logger = logging.getLogger(__name__)
 class AudioLoader:
 
     def __init__(self, s3_client=None, document_aws_bucket=None, gcs_client=None, document_gcs_bucket=None,
-                 llm_api_key=None):
+                 llm_api_key=None, temp_dir="temp"):
         """
-        Initialize the AudioLoader class with optional configurations for S3, GCS, and LLM API.
+        Initialize the AudioLoader with cloud storage and LLM configurations.
+
+        Handles audio file loading and storage operations across AWS S3 and Google Cloud Storage.
+        Sets up temporary directory for processing files.
 
         Args:
-            s3_client (boto3.client, optional): Boto3 S3 client instance for AWS operations. Defaults to None.
-            document_aws_bucket (str, optional): Name of the S3 bucket for document storage. Defaults to None.
-            gcs_client (google.cloud.storage.Client, optional): GCS client instance for Google Cloud operations. Defaults to None.
-            document_gcs_bucket (str, optional): Name of the GCS bucket for document storage. Defaults to None.
-            llm_api_key (str, optional): API key for the LLM service. Defaults to None.
+            s3_client (boto3.client, optional): AWS S3 client for S3 operations. Defaults to None.
+            document_aws_bucket (str, optional): S3 bucket name for document storage. Defaults to None.
+            gcs_client (google.cloud.storage.Client, optional): GCS client for Cloud Storage operations.
+                Defaults to None.
+            document_gcs_bucket (str, optional): GCS bucket name for document storage. Defaults to None.
+            llm_api_key (str, optional): API key for language model service. Defaults to None.
+            temp_dir (str, optional): Path for temporary file storage. Defaults to "temp".
+
+        Raises:
+            ValueError: If cloud storage clients are provided without bucket names
+            OSError: If temp directory creation fails
         """
         self.s3_client = s3_client
         self.document_aws_bucket = document_aws_bucket
         self.gcs_client = gcs_client
         self.document_gcs_bucket = document_gcs_bucket
         self.llm_api_key = llm_api_key
+
+        # Set up custom temp directory
+        self.temp_dir = os.path.abspath(temp_dir)
+        os.makedirs(self.temp_dir, exist_ok=True)
+        tempfile.tempdir = self.temp_dir
 
     def download_audio(self, file_path, temp_file_path):
         """
@@ -89,7 +103,14 @@ class AudioLoader:
         else:
             raise ValueError("Invalid audio source. Choose 'cloud', or 'local'.")
 
-        return transcribe_full_audio(audio_file=temp_file_path,
-                                     markdown_output=markdown_output,
-                                     llm_api_key=self.llm_api_key
-                                     )
+        audio_transcript = transcribe_full_audio(audio_file=temp_file_path,
+                                                 markdown_output=markdown_output,
+                                                 llm_api_key=self.llm_api_key
+                                                 )
+
+        # Clean up temporary file if it was downloaded
+        if audio_source == "cloud" and os.path.exists(temp_file_path):
+            os.remove(temp_file_path)
+            logger.info(f"Removed temporary file {temp_file_path}")
+
+        return audio_transcript

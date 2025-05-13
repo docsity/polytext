@@ -75,20 +75,18 @@ class AudioToTextConverter:
         Initialize the AudioToTextConverter class with a specified transcription model and provider.
 
         Args:
-            transcription_model (str, optional): The name of the transcription model to use.
-                Defaults to "gemini-2.0-flash".
-            transcription_model_provider (str, optional): The provider of the transcription model.
-                Defaults to "google".
-            k (int, optional): Number of words to use when searching for overlap between chunks.
-                Defaults to 5.
-            min_matches (int, optional): Minimum number of matching words required to merge chunks.
-                Defaults to 3.
-            markdown_output (bool, optional): Whether to format the output as Markdown.
-                Defaults to True.
-            llm_api_key (str, optional): API key for the language model service.
-                Defaults to None.
-            max_llm_tokens (int, optional): Maximum number of tokens for the language model output.
-                Defaults to 8000.
+            transcription_model (str): Model name for transcription. Defaults to "gemini-2.0-flash".
+            transcription_model_provider (str): Provider of transcription service. Defaults to "google".
+            k (int): Number of words to use when searching for overlap between chunks. Defaults to 5.
+            min_matches (int): Minimum matching words for chunk merging. Defaults to 3.
+            markdown_output (bool): Enable markdown formatting in output. Defaults to True.
+            llm_api_key (str, optional): Override API key for language model. Defaults to None.
+            max_llm_tokens (int): Maximum number of tokens for the language model output. Defaults to 8000.
+            temp_dir (str): Directory for temporary files. Defaults to "temp".
+
+        Raises:
+            OSError: If temp directory creation fails
+            ValueError: If invalid model or provider specified
         """
         self.transcription_model = transcription_model
         self.transcription_model_provider = transcription_model_provider
@@ -124,7 +122,10 @@ class AudioToTextConverter:
             audio_file (str): Path to the audio file to be transcribed.
 
         Returns:
-            str: The transcribed text from the audio file.
+            dict: Dictionary containing:
+                - transcript (str): The transcribed text
+                - completion_tokens (int): Number of tokens in completion
+                - prompt_tokens (int): Number of tokens in prompt
 
         Raises:
             ValueError: If the audio file format is not recognized.
@@ -138,7 +139,7 @@ class AudioToTextConverter:
             prompt_template = AUDIO_TO_MARKDOWN_PROMPT
         elif self.markdown_output and self.chunked_audio:
             # Convert the text to minimal markdown format
-            prompt_template = AUDIO_TO_MARKDOWN_MINIMAL_PROMPT
+            prompt_template = AUDIO_TO_MARKDOWN_PROMPT  # TODO: update whit merging with LLM
         else:
             # Convert the text to plain text format
             prompt_template = AUDIO_TO_PLAIN_TEXT_PROMPT
@@ -225,8 +226,15 @@ class AudioToTextConverter:
             end_time = time.time()
             time_elapsed = end_time - start_time
 
+            logger.info(f"Completion tokens: {response.usage_metadata.candidates_token_count}")
+            logger.info(f"Prompt tokens: {response.usage_metadata.prompt_token_count}")
+
+            response_dict = {"transcript": response.text,
+                             "completion_tokens": response.usage_metadata.candidates_token_count,
+                             "prompt_tokens": response.usage_metadata.prompt_token_count}
+
             logger.info(f"Transcribed text from {audio_file} using {self.transcription_model} in {time_elapsed:.2f} seconds")
-            return response.text
+            return response_dict
 
         except Exception as e:
             logger.error(f"Error during audio transcription: {str(e)}")
@@ -235,20 +243,40 @@ class AudioToTextConverter:
     def process_chunk(self, chunk, index, save_intermediate):
         """Process a single audio chunk and return its transcript"""
         logger.info(f"Transcribing chunk {index + 1}...")
-        transcript = self.transcribe_audio(chunk["file_path"])
+        transcript_dict = self.transcribe_audio(chunk["file_path"])
+        transcript = transcript_dict["transcript"]
 
         if save_intermediate:
             with open(f"transcript_chunk_{index}.txt", "w") as f:
                 f.write(transcript)
 
-        return index, transcript
+        return index, transcript_dict
 
     def transcribe_full_audio(self,
             audio_path,
-            save_intermediate=True):
-        """Process a long audio file by chunking, transcribing, and merging"""
+            save_intermediate=False):
+        """
+        Process and transcribe a long audio file by chunking, parallel transcription, and merging.
+
+        Args:
+            audio_path (str): Path to the audio file to be transcribed
+            save_intermediate (bool, optional): Whether to save intermediate chunk transcripts. Defaults to False.
+
+        Returns:
+            dict: Dictionary containing:
+                - text (str): The final merged transcript
+                - completion_tokens (int): Total number of completion tokens used
+                - prompt_tokens (int): Total number of prompt tokens used
+                - completion_model (str): Name of the transcription model used
+                - completion_model_provider (str): Provider of the transcription model
+
+        Raises:
+            ValueError: If the audio file format is not recognized
+            RuntimeError: If there's an error during audio processing or transcription
+        """
         processed_audio_path = None
         try:
+            logger.info(f"Processing audio file {audio_path}...")
             file_size = os.path.getsize(audio_path)
             logger.info(f"Audio file size: {file_size / (1024 * 1024):.2f} MB")
 
@@ -261,13 +289,13 @@ class AudioToTextConverter:
 
             # If you need at least one of the two, apply compress_and_convert_audio
             if needs_conversion:  # or needs_compression:
-                logger.info("Audio file needs conversion/compression, processing file...")
+                logger.info("Audio file needs conversion, processing file...")
                 processed_audio_path = compress_and_convert_audio(audio_path)
                 used_file = processed_audio_path
-                logger.info(f"Audio file processed (conversion/compression): {used_file}")
+                logger.info(f"Audio file processed (conversion): {used_file}")
             else:
                 used_file = audio_path
-                logger.info("Audio file is already in supported format and under size limit.")
+                logger.info("Audio file is already in supported format")
 
             # Create chunker and extract chunks
             logger.info("Creating AudioChunker instance...")
@@ -292,18 +320,32 @@ class AudioToTextConverter:
                 }
 
                 # Process completed transcriptions in order of completion
+                completion_tokens = 0
+                prompt_tokens = 0
                 for future in as_completed(future_to_chunk):
-                    index, transcript = future.result()
-                    chunks[index]["transcript"] = transcript
-                    transcript_chunks[index] = transcript
+                    index, transcript_dict = future.result()
+                    chunks[index]["transcript"] = transcript_dict["transcript"]
+                    transcript_chunks[index] = transcript_dict["transcript"]
+                    completion_tokens += transcript_dict["completion_tokens"]
+                    prompt_tokens += transcript_dict["prompt_tokens"]
+
 
             # Merge all transcripts
             final_transcript = merge_chunks(chunks=transcript_chunks, k=self.k, min_matches=self.min_matches)
 
-            # Clean up temporary files
-            chunker.cleanup_temp_files(chunks)
+            final_transcript_dict = {
+                "text": final_transcript,
+                "completion_tokens": completion_tokens,
+                "prompt_tokens": prompt_tokens,
+                "completion_model": self.transcription_model,
+                "completion_model_provider": self.transcription_model_provider
+            }
 
-            return final_transcript
+            # Clean up temporary files
+            if len(chunks) > 1:
+                chunker.cleanup_temp_files(chunks)
+
+            return final_transcript_dict
         finally:
             # Clean up the temporary compressed file
             if processed_audio_path and os.path.exists(processed_audio_path):
