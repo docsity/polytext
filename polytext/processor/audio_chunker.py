@@ -1,8 +1,6 @@
 import os
 import logging
 from pydub import AudioSegment
-from pydub.silence import detect_silence
-import difflib
 from typing import List, Tuple, Dict, Any
 
 logger = logging.getLogger(__name__)

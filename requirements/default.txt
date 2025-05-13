@@ -15,3 +15,4 @@ google-genai==1.14.0
 
 # audio video processing
 ffmpeg-python==0.2.0
+pydub==0.25.1
