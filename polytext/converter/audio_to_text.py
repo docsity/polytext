@@ -11,10 +11,9 @@ from google.genai import types
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from google.api_core import exceptions as google_exceptions
 
-from ..prompts.transcription import AUDIO_TO_MARKDOWN_PROMPT, AUDIO_TO_PLAIN_TEXT_PROMPT, \
-    AUDIO_TO_MARKDOWN_MINIMAL_PROMPT
+from ..prompts.transcription import AUDIO_TO_MARKDOWN_PROMPT, AUDIO_TO_PLAIN_TEXT_PROMPT
 from ..processor.audio_chunker import AudioChunker
-from ..processor.text_merger import merge_chunks
+from ..processor.text_merger import TextMerger
 
 logger = logging.getLogger(__name__)
 
@@ -165,13 +164,12 @@ class AudioToTextConverter:
 
         start_time = time.time()
 
-        if self.markdown_output and not self.chunked_audio:
+        if self.markdown_output:
+            logger.info("Using prompt for markdown format")
             # Convert the text to markdown format
             prompt_template = AUDIO_TO_MARKDOWN_PROMPT
-        elif self.markdown_output and self.chunked_audio:
-            # Convert the text to minimal markdown format
-            prompt_template = AUDIO_TO_MARKDOWN_PROMPT  # TODO: update whit merging with LLM
         else:
+            logger.info("Using prompt for plain text format")
             # Convert the text to plain text format
             prompt_template = AUDIO_TO_PLAIN_TEXT_PROMPT
 
@@ -356,9 +354,9 @@ class AudioToTextConverter:
                     completion_tokens += transcript_dict["completion_tokens"]
                     prompt_tokens += transcript_dict["prompt_tokens"]
 
-
+            text_merger = TextMerger()
             # Merge all transcripts
-            final_transcript = merge_chunks(chunks=transcript_chunks, k=self.k, min_matches=self.min_matches)
+            final_transcript = text_merger.merge_chunks_with_llm_sequential(chunks=transcript_chunks)
 
             final_transcript_dict = {
                 "text": final_transcript,

@@ -11,7 +11,7 @@ INSTRUCTIONS:
 6. Return only the merged text in markdown format without explanations.
 
 TEXT SEGMENT 1:
-{chunk_1}
+{text_1}
 
 TEXT SEGMENT 2:
-{chunk_2}"""
+{text_2}"""
