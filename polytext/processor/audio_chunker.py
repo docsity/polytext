@@ -1,5 +1,6 @@
 import os
 import logging
+import ffmpeg
 from pydub import AudioSegment
 from typing import List, Tuple, Dict, Any
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -63,11 +64,8 @@ class AudioChunker:
         return chunks
 
     def _process_single_chunk(self, chunk_info: tuple) -> Dict[str, Any]:
-        """Helper method to process a single audio chunk"""
+        """Helper method to process a single audio chunk using ffmpeg"""
         i, (start_ms, end_ms) = chunk_info
-
-        # Extract the audio segment
-        chunk_audio = self.audio[start_ms:end_ms]
 
         # Ensure temp directory exists
         os.makedirs("temp", exist_ok=True)
@@ -75,17 +73,24 @@ class AudioChunker:
         # Create a temporary file for this chunk
         temp_filename = f"temp/temp_chunk_{i}.mp3"
 
-        # Export with more efficient settings
-        chunk_audio.export(
-            temp_filename,
-            format="mp3",
-            parameters=[
-                "-q:a", "9",  # Variable bitrate quality (0-9, 9 being lowest)
-                "-ac", "1",  # Convert to mono
-                "-ar", "16000",  # Lower sample rate
-                "-c:a", "libmp3lame",  # Use LAME MP3 encoder
-            ]
+        # Calculate duration in seconds
+        duration = (end_ms - start_ms) / 1000
+        start_seconds = start_ms / 1000
+
+        # Build ffmpeg command
+        stream = (
+            ffmpeg
+            .input(self.audio_path, ss=start_seconds, t=duration)
+            .output(temp_filename,
+                    acodec='libmp3lame',
+                    ar=16000,
+                    ac=1,
+                    q=9)
+            .overwrite_output()
         )
+
+        # Run ffmpeg command
+        ffmpeg.run(stream, quiet=True)
         logger.info(f"Exported chunk {i + 1} to {temp_filename}")
 
         return {

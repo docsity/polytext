@@ -20,6 +20,9 @@ def convert_video_to_audio(video_file):
         ffmpeg.Error: If FFmpeg conversion fails
         Exception: If any other error occurs during conversion
     """
+
+    logger.info("Converting video to audio.")
+
     temp_audio_path = None
     try:
         # Create temporary file for audio output
@@ -30,7 +33,16 @@ def convert_video_to_audio(video_file):
         (
             ffmpeg
             .input(video_file)
-            .output(temp_audio_path, acodec='libmp3lame', ab='64k', vn=None)
+            .output(temp_audio_path,
+                    acodec='libmp3lame',
+                    # ab='64k',
+                    q=9,  # Variable bitrate quality (0-9, 9 being lowest)
+                    ac=1,  # Convert to mono
+                    ar=16000,  # Lower sample rate
+                    vn=None,
+                    threads=0,  # Use maximum available threads
+                    loglevel='error',  # Reduce logging overhead
+                    )
             .overwrite_output()
             .run(capture_stdout=True, capture_stderr=True)
         )

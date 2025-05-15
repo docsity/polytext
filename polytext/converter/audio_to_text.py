@@ -23,25 +23,55 @@ SUPPORTED_MIME_TYPES = {
     'audio/mpga', 'audio/mp4', 'audio/opus', 'audio/pcm', 'audio/wav', 'audio/webm'
 }
 
-def compress_and_convert_audio(input_path: str, target_bitrate="64k"):
+def compress_and_convert_audio(input_path: str, target_bitrate=None, bitrate_quality=9):
     """
     Compress and convert an audio file to MP3 using ffmpeg.
 
     Args:
-        input_path (str): Original audio file path.
-        output_path (str): Path to save the converted/compressed audio file.
-        target_bitrate (str): Desired audio bitrate, e.g., "128k", etc.
+        input_path (str): Path to the original audio file
+        target_bitrate (str, optional): Target audio bitrate (e.g. '128k'). If provided, overrides bitrate_quality
+        bitrate_quality (int, optional): Variable bitrate quality from 0-9 (9 being lowest). Defaults to 9
+
+    Returns:
+        str: Path to the temporary compressed/converted MP3 file
+
+    Raises:
+        RuntimeError: If FFmpeg compression/conversion fails
+
+    Notes:
+        - Creates a temporary MP3 file that should be deleted after use
+        - Converts audio to mono and 16kHz sample rate for smaller file size
+        - Uses maximum available CPU threads for faster processing
     """
     try:
         # Create temporary file for audio output
         fd, temp_audio_path = tempfile.mkstemp(suffix='.mp3')
         os.close(fd)
 
-        ffmpeg.input(input_path).output(
-            temp_audio_path,
-            audio_bitrate=target_bitrate,
-            acodec='mp3'
-        ).run(quiet=True, overwrite_output=True)
+        if target_bitrate is not None:
+            logger.info(f"Compressing audio to target bitrate: {target_bitrate}")
+            ffmpeg.input(input_path).output(
+                temp_audio_path,
+                audio_bitrate=target_bitrate,
+                acodec='libmp3lame',
+                ac=1,  # Convert to mono
+                ar=16000,  # Lower sample rate
+                vn=None,
+                threads=0,  # Use maximum available threads
+                loglevel='error',  # Reduce logging overhead
+            ).run(quiet=True, overwrite_output=True)
+        else:
+            logger.info(f"Compressing audio to bitrate quality: {bitrate_quality}")
+            ffmpeg.input(input_path).output(
+                temp_audio_path,
+                q=bitrate_quality, # Variable bitrate quality (0-9, 9 being lowest)
+                acodec='libmp3lame',
+                ac=1,  # Convert to mono
+                ar=16000,  # Lower sample rate
+                vn=None,
+                threads=0,  # Use maximum available threads
+                loglevel='error',  # Reduce logging overhead
+            ).run(quiet=True, overwrite_output=True)
 
         logger.info(f"Successfully converted and compressed audio: {temp_audio_path}")
         return temp_audio_path

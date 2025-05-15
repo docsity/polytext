@@ -122,6 +122,8 @@ class VideoLoader:
             str: Extracted text from the video.
         """
 
+        logger.info("Starting text extraction from video...")
+
         # Load or download the video file
         if video_source == "cloud":
             fd, temp_file_path = tempfile.mkstemp()

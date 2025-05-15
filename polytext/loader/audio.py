@@ -90,6 +90,9 @@ class AudioLoader:
         Raises:
             ValueError: If the `audio_source` is not "cloud" or "local".
         """
+
+        logger.info("Starting text extraction from audio...")
+
         # Load or download the video file
         if audio_source == "cloud":
             fd, temp_file_path = tempfile.mkstemp()
