@@ -149,9 +149,13 @@ class VideoLoader:
                                                  )
 
         # Clean up temporary files
+        logger.info(f"Removing temporary files: {temp_file_path} and {audio_path}")
         if video_source == "cloud" and os.path.exists(temp_file_path):
             os.remove(temp_file_path)
             logger.info(f"Removed temporary file {temp_file_path}")
+        if video_source == "cloud" and os.path.exists(audio_path):
+            os.remove(audio_path)
+            logger.info(f"Removed temporary file {audio_path}")
 
         return video_transcript
 

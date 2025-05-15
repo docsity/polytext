@@ -82,7 +82,8 @@ class AudioChunker:
             parameters=[
                 "-q:a", "9",  # Variable bitrate quality (0-9, 9 being lowest)
                 "-ac", "1",  # Convert to mono
-                "-ar", "16000"  # Lower sample rate
+                "-ar", "16000",  # Lower sample rate
+                "-c:a", "libmp3lame",  # Use LAME MP3 encoder
             ]
         )
         logger.info(f"Exported chunk {i + 1} to {temp_filename}")

@@ -23,9 +23,9 @@ SUPPORTED_MIME_TYPES = {
     'audio/mpga', 'audio/mp4', 'audio/opus', 'audio/pcm', 'audio/wav', 'audio/webm'
 }
 
-def compress_and_convert_audio(input_path: str, target_bitrate="128k"):
+def compress_and_convert_audio(input_path: str, target_bitrate="64k"):
     """
-    Compress and convert an audio file to AAC using ffmpeg.
+    Compress and convert an audio file to MP3 using ffmpeg.
 
     Args:
         input_path (str): Original audio file path.
@@ -34,13 +34,13 @@ def compress_and_convert_audio(input_path: str, target_bitrate="128k"):
     """
     try:
         # Create temporary file for audio output
-        fd, temp_audio_path = tempfile.mkstemp(suffix='.aac')
+        fd, temp_audio_path = tempfile.mkstemp(suffix='.mp3')
         os.close(fd)
 
         ffmpeg.input(input_path).output(
             temp_audio_path,
             audio_bitrate=target_bitrate,
-            acodec='aac'
+            acodec='mp3'
         ).run(quiet=True, overwrite_output=True)
 
         logger.info(f"Successfully converted and compressed audio: {temp_audio_path}")
