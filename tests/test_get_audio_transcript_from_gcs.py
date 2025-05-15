@@ -33,7 +33,7 @@ def main():
     # Define document data
     file_path = "learning_resources/course_id=406/module_id=2658/id=31427/8434.mp4"
 
-    local_file_path = "/Users/marcodelgiudice/Projects/polytext/tmpb3jr41pd.mp3"
+    local_file_path = "/Users/marcodelgiudice/Projects/polytext/tmpveixi001_audio.mp3"
 
     try:
         # Call get_document_text method

@@ -31,8 +31,8 @@ def main():
     )
 
     # Define document data
-    file_path = "learning_resources/course_id=406/module_id=2658/id=31427/8434.mp4"
-    # file_path = "learning_resources/course_id=132/module_id=312/id=4020/2333.mp4"
+    # file_path = "learning_resources/course_id=406/module_id=2658/id=31427/8434.mp4"
+    file_path = "learning_resources/course_id=132/module_id=312/id=4020/2333.mp4"
 
     local_file_path = "/Users/marcodelgiudice/Projects/polytext/tmp1mq7s7nt_video.mp4"
 

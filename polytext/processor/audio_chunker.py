@@ -2,6 +2,7 @@ import os
 import logging
 from pydub import AudioSegment
 from typing import List, Tuple, Dict, Any
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 logger = logging.getLogger(__name__)
 
@@ -61,48 +62,73 @@ class AudioChunker:
 
         return chunks
 
+    def _process_single_chunk(self, chunk_info: tuple) -> Dict[str, Any]:
+        """Helper method to process a single audio chunk"""
+        i, (start_ms, end_ms) = chunk_info
+
+        # Extract the audio segment
+        chunk_audio = self.audio[start_ms:end_ms]
+
+        # Ensure temp directory exists
+        os.makedirs("temp", exist_ok=True)
+
+        # Create a temporary file for this chunk
+        temp_filename = f"temp/temp_chunk_{i}.mp3"
+
+        # Export with more efficient settings
+        chunk_audio.export(
+            temp_filename,
+            format="mp3",
+            parameters=[
+                "-q:a", "9",  # Variable bitrate quality (0-9, 9 being lowest)
+                "-ac", "1",  # Convert to mono
+                "-ar", "16000"  # Lower sample rate
+            ]
+        )
+        logger.info(f"Exported chunk {i + 1} to {temp_filename}")
+
+        return {
+            "index": i,
+            "start_ms": start_ms,
+            "end_ms": end_ms,
+            "duration_ms": end_ms - start_ms,
+            "file_path": temp_filename,
+            "transcript": None
+        }
+
     def extract_chunks(self) -> List[Dict[str, Any]]:
         """Extract audio chunks based on calculated boundaries"""
         logger.info("Extracting chunks...")
         boundaries = self.find_chunk_boundaries()
-        logger.info("Found {} chunks".format(len(boundaries)))
-        chunks = []
-
-        logger.info(f"Boundaries: {boundaries}")
+        logger.info(f"Found {len(boundaries)} chunks")
 
         if len(boundaries) == 1:
             logger.info("Only one chunk found, no need to split.")
             start_ms, end_ms = boundaries[0]
-            chunks.append({
+            return [{
                 "index": 0,
                 "start_ms": start_ms,
                 "end_ms": end_ms,
                 "duration_ms": end_ms - start_ms,
                 "file_path": self.audio_path,
-                "transcript": None  # To be filled after transcription
-            })
-            return chunks
+                "transcript": None
+            }]
 
-        for i, (start_ms, end_ms) in enumerate(boundaries):
-            logger.info(f"Processing chunk {i + 1}: {start_ms}ms to {end_ms}ms")
-            # Extract the audio segment
-            chunk_audio = self.audio[start_ms:end_ms]
+        # Process chunks in parallel
+        chunks = [None] * len(boundaries)
+        with ThreadPoolExecutor() as executor:
+            # Submit all chunks to thread pool
+            future_to_chunk = {
+                executor.submit(self._process_single_chunk, (i, boundary)): i
+                for i, boundary in enumerate(boundaries)
+            }
 
-            # Create a temporary file for this chunk
-            temp_filename = f"temp/temp_chunk_{i}.mp3"
-            chunk_audio.export(temp_filename, format="mp3", bitrate="128k")
+            # Collect results maintaining order
+            for future in as_completed(future_to_chunk):
+                chunk_index = future_to_chunk[future]
+                chunks[chunk_index] = future.result()
 
-            chunks.append({
-                "index": i,
-                "start_ms": start_ms,
-                "end_ms": end_ms,
-                "duration_ms": end_ms - start_ms,
-                "file_path": temp_filename,
-                "transcript": None  # To be filled after transcription
-            })
-
-        logger.info(f"chunks: {chunks}")
-
+        logger.info(f"Processed {len(chunks)} chunks in parallel")
         return chunks
 
     @staticmethod
