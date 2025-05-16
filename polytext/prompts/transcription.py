@@ -1,4 +1,4 @@
-AUDIO_TO_MARKDOWN_PROMPT_OLD = """I need you to transcribe and format the content of this audio file into Markdown.
+AUDIO_TO_MARKDOWN_PROMPT = """I need you to transcribe and format the content of this audio file into Markdown.
 I would like you to follow these steps:
 1. Audio Transcription: Accurately transcribe the content of the audio file into text.
 2. Text Structuring:

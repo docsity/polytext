@@ -356,12 +356,12 @@ class AudioToTextConverter:
 
             text_merger = TextMerger()
             # Merge all transcripts
-            final_transcript = text_merger.merge_chunks_with_llm_sequential(chunks=transcript_chunks)
+            full_text_merged_dict = text_merger.merge_chunks_with_llm_sequential(chunks=transcript_chunks)
 
             final_transcript_dict = {
-                "text": final_transcript,
-                "completion_tokens": completion_tokens,
-                "prompt_tokens": prompt_tokens,
+                "text": full_text_merged_dict["full_text_merged"],
+                "completion_tokens": completion_tokens + full_text_merged_dict["completion_tokens"],
+                "prompt_tokens": prompt_tokens + full_text_merged_dict["prompt_tokens"],
                 "completion_model": self.transcription_model,
                 "completion_model_provider": self.transcription_model_provider
             }
