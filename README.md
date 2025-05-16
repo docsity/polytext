@@ -14,14 +14,21 @@ A Python package for document conversion and text extraction.
 ## Installation
 
 ```bash
-# Basic installation
+# Library only – assumes system requirements are already present
 pip install polytext
 ```
 
-## Requirements
+> **Heads-up:** Polytext’s PDF generator relies on [WeasyPrint] under the hood.  
+> The PyPI wheel contains *only* Python code; you still need WeasyPrint’s **native libraries** (Pango, Cairo, GDK-PixBuf, HarfBuzz, Fontconfig) installed at the OS level.
 
-- Python 3.6 or higher
-- LibreOffice (for PDF conversion)
+### System requirements
+
+| Requirement | Notes                                                                           | macOS (Homebrew) | Ubuntu / Debian |
+|-------------|---------------------------------------------------------------------------------|------------------|-----------------|
+| **Python**  | ✔️ Tested on **3.12**<br> Older versions may fail to locate WeasyPrint’s dylibs | `brew install python@3.12` | `sudo apt install python3.12` |
+| **WeasyPrint – native stack** | installs Pango, Cairo, etc.                                                     | `brew install weasyprint` | `sudo apt install weasyprint` |
+| **LibreOffice** | used for Office → PDF conversion                                                | `brew install --cask libreoffice` | `sudo apt install libreoffice` |
+
 
 ## Usage
 

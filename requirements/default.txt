@@ -4,8 +4,8 @@ PyMuPDF>=1.25.3
 pycryptodome==3.21.0
 
 # markdown to pdf
-weasyprint==64.1
-markdown==3.7
+weasyprint==65.1
+markdown==3.8
 
 # docx
 python-docx==1.1.2
