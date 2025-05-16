@@ -218,6 +218,7 @@ class TextMerger:
                 client = genai.Client()
 
             config = types.GenerateContentConfig(
+                # temperature=0,
                 safety_settings=[
                     types.SafetySetting(
                         category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
@@ -298,13 +299,11 @@ class TextMerger:
             completion_tokens += merged_text_dict["completion_tokens"]
             prompt_tokens += merged_text_dict["prompt_tokens"]
 
-        return merged_text
-
-        # return {
-        #     "full_text_merged": merged_text,
-        #     "completion_tokens": completion_tokens,
-        #     "prompt_tokens": prompt_tokens
-        # }
+        return {
+            "full_text_merged": merged_text,
+            "completion_tokens": completion_tokens,
+            "prompt_tokens": prompt_tokens
+        }
 
 
     def process_chunk_pair(self, chunk_pair, index):
