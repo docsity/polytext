@@ -23,6 +23,9 @@ botocore>=1.37.0
 ffmpeg-python==0.2.0
 pydub==0.25.1
 
+# requests
+requests==2.32.3
+
 # html to markdown
 markitdown==0.1.1
 
