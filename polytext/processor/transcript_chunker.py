@@ -1,5 +1,3 @@
-# processor/transcript_chunker.py
-
 from typing import List, Dict
 
 

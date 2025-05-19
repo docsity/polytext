@@ -1,16 +1,18 @@
-# YouTube.py
-
 # Standard library imports
 import os
 import tempfile
 import logging
-import random
 
 # External library imports
 from youtube_transcript_api import YouTubeTranscriptApi
+from xml.etree.ElementTree import ParseError
+from requests.exceptions import ConnectionError
+from retry import retry
 
 # Local imports
 from ..converter.text_to_md import text_to_md
+
+logger = logging.getLogger(__name__)
 
 
 class YoutubeTranscriptLoader:
@@ -27,7 +29,6 @@ class YoutubeTranscriptLoader:
             save_transcript_chunks (bool, optional): Whether to include processed chunks in final output.
             temp_dir (str, optional): Temporary directory to store intermediate transcript files.
         """
-        self.ytt_api = YouTubeTranscriptApi()
         self.llm_api_key = llm_api_key
         self.save_transcript_chunks = save_transcript_chunks
 
@@ -37,6 +38,16 @@ class YoutubeTranscriptLoader:
 
         self.output_path = os.path.join(self.temp_dir, f"youtube_transcript.txt")
 
+    @retry(
+        (
+                ParseError,
+                ConnectionError,
+        ),
+        tries=8,
+        delay=3,
+        backoff=2,
+        logger=logger,
+    )
     def download_transcript_from_youtube(self, video_url: str, output_path: str) -> str:
         """
         Download the transcript of a YouTube video and save it as plain text.
@@ -51,31 +62,27 @@ class YoutubeTranscriptLoader:
         Raises:
             Exception: If transcript is not found or any error occurs during download.
         """
-        try:
-            video_id = self.extract_video_id(video_url)
+        ytt_api = YouTubeTranscriptApi()
+        video_id = self.extract_video_id(video_url)
 
-            # Get available transcripts
-            transcripts = self.ytt_api.list(video_id)
-            languages = [t.language_code for t in transcripts]
+        # Get available transcripts
+        transcripts = ytt_api.list(video_id)
+        languages = [t.language_code for t in transcripts]
 
-            logging.info("****Fetching transcript from YouTube****")
-            transcript_data = self.ytt_api.fetch(video_id, languages)
+        logging.info("****Fetching transcript from YouTube****")
+        transcript_data = ytt_api.fetch(video_id, languages)
 
-            if not transcript_data:
-                raise Exception("No subtitles found in the transcript")
+        if not transcript_data:
+            raise Exception("No subtitles found in the transcript")
 
-            # Extract plain text
-            plain_text = "\n".join(line.text for line in transcript_data)
+        # Extract plain text
+        plain_text = "\n".join(line.text for line in transcript_data)
 
-            os.makedirs(os.path.dirname(output_path), exist_ok=True)
-            with open(output_path, 'w', encoding='utf-8') as f_out:
-                f_out.write(plain_text)
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        with open(output_path, 'w', encoding='utf-8') as f_out:
+            f_out.write(plain_text)
 
-            return plain_text
-
-        except Exception as e:
-            logging.error(f"Error while downloading transcript: {e}")
-            raise
+        return plain_text
 
     @staticmethod
     def extract_video_id(url: str) -> str:
@@ -140,20 +147,16 @@ class YoutubeTranscriptLoader:
         Raises:
             Exception: If there is an error during transcript extraction or LLM processing.
         """
-        try:
-            transcript_text = self.download_transcript(video_url)
-            logging.info("****Transcript text obtained****")
 
-            md_transcript = text_to_md(
-                transcript_text=transcript_text,
-                markdown_output=markdown_output,
-                llm_api_key=self.llm_api_key,
-                output_path=self.output_path,
-                save_transcript_chunks=self.save_transcript_chunks
-            )
+        transcript_text = self.download_transcript(video_url)
+        logging.info("****Transcript text obtained****")
 
-            return md_transcript
+        md_transcript = text_to_md(
+            transcript_text=transcript_text,
+            markdown_output=markdown_output,
+            llm_api_key=self.llm_api_key,
+            output_path=self.output_path,
+            save_transcript_chunks=self.save_transcript_chunks
+        )
 
-        except Exception as e:
-            logging.error(f"Error extracting text: {str(e)}")
-            raise
+        return md_transcript

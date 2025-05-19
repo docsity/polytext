@@ -1,5 +1,4 @@
 # converter/text_to_md.py
-
 import logging
 import time
 import os
@@ -139,34 +138,30 @@ class TextToMdConverter:
 
         start_time = time.time()
 
-        try:
-            config = types.GenerateContentConfig(
-                safety_settings=[
-                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold=types.HarmBlockThreshold.BLOCK_NONE),
-                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
-                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
-                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
-                ]
-            )
+        config = types.GenerateContentConfig(
+            safety_settings=[
+                types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+                types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+                types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+                types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+            ]
+        )
 
-            response = client.models.generate_content(
-                model=self.model,
-                contents=[prompt_template, chunk_text],
-                config=config
-            )
+        response = client.models.generate_content(
+            model=self.model,
+            contents=[prompt_template, chunk_text],
+            config=config
+        )
 
-            elapsed = time.time() - start_time
-            logging.info(f"Chunk {index + 1} processed in {elapsed:.2f}s")
+        elapsed = time.time() - start_time
+        logging.info(f"Chunk {index + 1} processed in {elapsed:.2f}s")
 
-            return {
-                "transcript": response.text,
-                "completion_tokens": response.usage_metadata.candidates_token_count,
-                "prompt_tokens": response.usage_metadata.prompt_token_count,
-            }
+        return {
+            "transcript": response.text,
+            "completion_tokens": response.usage_metadata.candidates_token_count,
+            "prompt_tokens": response.usage_metadata.prompt_token_count,
+        }
 
-        except Exception as e:
-            logging.error(f"Error during transcription: {str(e)}")
-            raise
 
     def convert_text_to_md(self, transcript_text: str, save_transcript_chunks=False):
         """
