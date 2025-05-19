@@ -3,10 +3,12 @@ import os
 import tempfile
 import logging
 import requests
-from retry import retry
 
 # Local imports
 from ..converter import md_to_text, html_to_md
+
+# External imports
+from retry import retry
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +58,11 @@ class HtmlLoader:
             result = html_to_md(self.url)
             if self.is_text:
                 result = md_to_text(result)
-            return result
+
+            final_text_dict = {
+                "text": result,
+            }
+            return final_text_dict
         except requests.exceptions.RequestException as e:
             print(f"Irreversible error during fetching of {self.url} after retries: {e}")
             return None

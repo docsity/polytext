@@ -1,7 +1,7 @@
 from markitdown import MarkItDown
 
 
-def html_to_md(html):
+def html_to_md(html: str) -> str:
     """
        Convert an HTML string to Markdown using MarkItDown.
 
