@@ -62,11 +62,15 @@ class YoutubeTranscriptLoader:
         Raises:
             Exception: If transcript is not found or any error occurs during download.
         """
+
         ytt_api = YouTubeTranscriptApi()
+
+        # Get video id
         video_id = self.extract_video_id(video_url)
 
         # Get available transcripts
         transcripts = ytt_api.list(video_id)
+        # Get the available languages of the transcript
         languages = [t.language_code for t in transcripts]
 
         logging.info("****Fetching transcript from YouTube****")
@@ -105,13 +109,12 @@ class YoutubeTranscriptLoader:
         else:
             raise ValueError("Invalid YouTube URL format")
 
-    def download_transcript(self, video_url: str, markdown_output=True):
+    def download_transcript(self, video_url: str):
         """
         Download and return the transcript from a YouTube video.
 
         Args:
             video_url (str): URL of the YouTube video.
-            markdown_output (bool, optional): Whether the transcript should later be formatted as Markdown.
 
         Returns:
             str: Transcript text in plain format.

@@ -9,7 +9,8 @@ load_dotenv('..env')
 
 from polytext.loader import YoutubeTranscriptLoader
 
-url = 'https://www.youtube.com/watch?v=xY5x0q5JoPI'
+url = 'https://www.youtube.com/watch?v=Md4Fs-Zc3tg&t=173s'
+# 'https://www.youtube.com/watch?v=xY5x0q5JoPI'
 # 'https://www.youtube.com/watch?v=6Ql5mQdxeWk'
 # 'https://www.youtube.com/watch?v=Md4Fs-Zc3tg&t=173s'
 # 'https://www.youtube.com/watch?v=xY5x0q5JoPI'

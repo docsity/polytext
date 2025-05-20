@@ -17,7 +17,7 @@ from polytext.prompts.text_to_md import TEXT_TO_MARKDOWN_PROMPT, TEXT_PROMPT
 dotenv.load_dotenv()
 
 
-def text_to_md(transcript_text: str, markdown_output, llm_api_key, output_path: str, save_transcript_chunks: bool):
+def text_to_md(transcript_text: str, markdown_output: bool, llm_api_key, output_path: str, save_transcript_chunks: bool):
     """
     Transform raw transcript text into Markdown using a language model.
 
