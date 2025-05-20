@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 # Standalone functions that wrap TextLoader methods
-def get_document_text(doc_data, page_range=None):
+def get_document_text(doc_data: dict, page_range: tuple[int, int] = None) -> str:
     """
     Convenience function to extract text from a document using PyMuPDF.
 
@@ -39,7 +39,7 @@ def get_document_text(doc_data, page_range=None):
     return loader.get_document_text(doc_data, page_range)
 
 
-def extract_text_from_file(file_path, page_range=None, backend='auto'):
+def extract_text_from_file(file_path: str, page_range: tuple[int, int] = None, backend: str = 'auto') -> str:
     """
     Convenience function to extract text from a local file.
 
@@ -74,7 +74,13 @@ class TextLoader:
         document_aws_bucket (str): Default S3 bucket name for document storage
     """
 
-    def __init__(self, s3_client=None, document_aws_bucket=None, gcs_client=None, document_gcs_bucket=None):
+    def __init__(
+            self,
+            s3_client: Optional[object] = None,
+            document_aws_bucket: Optional[str] = None,
+            gcs_client: Optional[object] = None,
+            document_gcs_bucket: Optional[str] = None
+    ) -> None:
         """
         Initialize TextLoader with optional S3 or GCS configuration.
 
@@ -87,7 +93,7 @@ class TextLoader:
         self.gcs_client = gcs_client
         self.document_gcs_bucket = document_gcs_bucket
 
-    def download_document(self, file_path, temp_file_path):
+    def download_document(self, file_path: str, temp_file_path: str) -> str:
         """
         Download a document file from S3 or GCS to a local temporary path.
 
@@ -133,8 +139,9 @@ class TextLoader:
                 # Download file
                 blob.download_to_filename(temp_file_path)
             return temp_file_path
+        raise AttributeError('Storage client not provided')
 
-    def convert_doc_to_pdf(self, bucket, file_prefix, input_file):
+    def convert_doc_to_pdf(self, bucket: str, file_prefix: str, input_file: str) -> str:
         """
         Convert a document from S3 to PDF format.
 
@@ -183,7 +190,7 @@ class TextLoader:
 
     # PDF text extraction methods
 
-    def get_document_text(self, doc_data, page_range=None):
+    def get_document_text(self, doc_data: dict, page_range: tuple[int, int] = None) -> str:
         """
         Extract text from a document using PyMuPDF as primary backend.
 
@@ -284,7 +291,7 @@ class TextLoader:
 
         return text
 
-    def get_document_text_pypdf(self, bucket, file_path, page_range=None):
+    def extract_text_from_file(self, file_path: str, page_range: Optional[Tuple[int, int]] = None, backend: str = 'auto') -> str:
         """
         Extract text from a document using PyPDF as fallback backend.
 
@@ -385,7 +392,7 @@ class TextLoader:
         os.remove(temp_file_path)
         return text
 
-    def extract_text_from_file(self, file_path, page_range=None, backend='auto'):
+    def extract_text_from_file(self, file_path: str, page_range: tuple[int, int] = None, backend: str = 'auto') -> str:
         """
         Extract text from a local file using specified backend.
 
@@ -506,7 +513,7 @@ class TextLoader:
     # Helper methods
 
     @staticmethod
-    def validate_page_range(page_range, total_pages):
+    def validate_page_range(page_range: tuple[int, int], total_pages: int) -> tuple[int, int]:
         """
         Validate and normalize the page range for text extraction.
 
@@ -539,7 +546,7 @@ class TextLoader:
         return start_page, end_page
 
     @staticmethod
-    def clean_text(text):
+    def clean_text(text: str) -> str:
         """
         Clean and normalize extracted text.
 
@@ -561,7 +568,7 @@ class TextLoader:
         return text
 
     @staticmethod
-    def has_repeated_rows(text, threshold=100):
+    def has_repeated_rows(text: str, threshold: int = 100) -> bool:
         """
         Check if text contains rows repeated above threshold.
 
@@ -588,7 +595,7 @@ class TextLoader:
         return False
 
     @staticmethod
-    def has_low_text_quality(text, chars_threshold=2000):
+    def has_low_text_quality(text: str, chars_threshold: int = 2000) -> bool:
         """
         Check if extracted text has low quality.
 

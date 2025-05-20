@@ -13,8 +13,16 @@ logger = logging.getLogger(__name__)
 
 class VideoLoader:
 
-    def __init__(self, s3_client=None, document_aws_bucket=None, gcs_client=None, document_gcs_bucket=None,
-                 llm_api_key=None, save_transcript_chunks=False, temp_dir='temp'):
+    def __init__(
+            self,
+            s3_client: object = None,
+            document_aws_bucket: str = None,
+            gcs_client: object = None,
+            document_gcs_bucket: str = None,
+            llm_api_key: str = None,
+            save_transcript_chunks: bool = False,
+            temp_dir: str = 'temp'
+    ) -> None:
         """
         Initialize VideoLoader class with optional configurations for S3, GCS, and LLM API.
 
@@ -43,7 +51,7 @@ class VideoLoader:
         os.makedirs(self.temp_dir, exist_ok=True)
         tempfile.tempdir = self.temp_dir
 
-    def download_video(self, file_path, temp_file_path):
+    def download_video(self, file_path: str, temp_file_path: str) -> str:
         """
         Download a video file from S3 or GCS to a local temporary path.
 
@@ -67,6 +75,7 @@ class VideoLoader:
             downloader.download_file_from_gcs(file_path, temp_file_path)
             logger.info(f'Downloaded {file_path} to {temp_file_path}')
             return temp_file_path
+        raise AttributeError('Storage client not provided')
 
     # @staticmethod
     # def convert_video_to_audio_ffmpeg(video_file):
@@ -109,7 +118,7 @@ class VideoLoader:
     #         logger.info(f"Successfully converted video to audio: {temp_audio_path}")
     #         return temp_audio_path
 
-    def get_text_from_video(self, file_path, video_source, markdown_output=True):
+    def get_text_from_video(self, file_path: str, video_source: str, markdown_output: bool = True) -> str:
         """
         Extract text from a video file.
 
@@ -162,7 +171,7 @@ class VideoLoader:
         return video_transcript
 
     @staticmethod
-    def save_file_locally(source_path, destination_dir, file_type):
+    def save_file_locally(source_path: str, destination_dir: str, file_type: str) -> str:
         """
         Save a file to a local directory with proper naming.
 

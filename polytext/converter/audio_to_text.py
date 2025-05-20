@@ -22,7 +22,7 @@ SUPPORTED_MIME_TYPES = {
     'audio/mpga', 'audio/mp4', 'audio/opus', 'audio/pcm', 'audio/wav', 'audio/webm'
 }
 
-def compress_and_convert_audio(input_path: str, target_bitrate=None, bitrate_quality=9):
+def compress_and_convert_audio(input_path: str, target_bitrate: str = None, bitrate_quality: int = 9) -> str:
     """
     Compress and convert an audio file to MP3 using ffmpeg.
 
@@ -42,42 +42,41 @@ def compress_and_convert_audio(input_path: str, target_bitrate=None, bitrate_qua
         - Converts audio to mono and 16kHz sample rate for smaller file size
         - Uses maximum available CPU threads for faster processing
     """
-    try:
-        # Create temporary file for audio output
-        fd, temp_audio_path = tempfile.mkstemp(suffix='.mp3')
-        os.close(fd)
+    # Create temporary file for audio output
+    fd, temp_audio_path = tempfile.mkstemp(suffix='.mp3')
+    os.close(fd)
 
-        if target_bitrate is not None:
-            logger.info(f"Compressing audio to target bitrate: {target_bitrate}")
-            ffmpeg.input(input_path).output(
-                temp_audio_path,
-                audio_bitrate=target_bitrate,
-                acodec='libmp3lame',
-                ac=1,  # Convert to mono
-                ar=16000,  # Lower sample rate
-                vn=None,
-                threads=0,  # Use maximum available threads
-                loglevel='error',  # Reduce logging overhead
-            ).run(quiet=True, overwrite_output=True)
-        else:
-            logger.info(f"Compressing audio to bitrate quality: {bitrate_quality}")
-            ffmpeg.input(input_path).output(
-                temp_audio_path,
-                q=bitrate_quality, # Variable bitrate quality (0-9, 9 being lowest)
-                acodec='libmp3lame',
-                ac=1,  # Convert to mono
-                ar=16000,  # Lower sample rate
-                vn=None,
-                threads=0,  # Use maximum available threads
-                loglevel='error',  # Reduce logging overhead
-            ).run(quiet=True, overwrite_output=True)
+    if target_bitrate is not None:
+        logger.info(f"Compressing audio to target bitrate: {target_bitrate}")
+        ffmpeg.input(input_path).output(
+            temp_audio_path,
+            audio_bitrate=target_bitrate,
+            acodec='libmp3lame',
+            ac=1,  # Convert to mono
+            ar=16000,  # Lower sample rate
+            vn=None,
+            threads=0,  # Use maximum available threads
+            loglevel='error',  # Reduce logging overhead
+        ).run(quiet=True, overwrite_output=True)
+    else:
+        logger.info(f"Compressing audio to bitrate quality: {bitrate_quality}")
+        ffmpeg.input(input_path).output(
+            temp_audio_path,
+            q=bitrate_quality, # Variable bitrate quality (0-9, 9 being lowest)
+            acodec='libmp3lame',
+            ac=1,  # Convert to mono
+            ar=16000,  # Lower sample rate
+            vn=None,
+            threads=0,  # Use maximum available threads
+            loglevel='error',  # Reduce logging overhead
+        ).run(quiet=True, overwrite_output=True)
 
-        logger.info(f"Successfully converted and compressed audio: {temp_audio_path}")
-        return temp_audio_path
-    except Exception as e:
-        raise RuntimeError(f"FFmpeg error during audio compression/conversion: {e}") from e
+    logger.info(f"Successfully converted and compressed audio: {temp_audio_path}")
+    return temp_audio_path
 
-def transcribe_full_audio(audio_file, markdown_output=False, llm_api_key=None, save_transcript_chunks=False):
+def transcribe_full_audio(audio_file, markdown_output: bool = False,
+                          llm_api_key: str = None,
+                          save_transcript_chunks: bool = False) -> str:
     """
     Convenience function to transcribe an audio file into text, optionally formatted as Markdown.
 
@@ -99,8 +98,9 @@ def transcribe_full_audio(audio_file, markdown_output=False, llm_api_key=None, s
     return converter.transcribe_full_audio(audio_file, save_transcript_chunks)
 
 class AudioToTextConverter:
-    def __init__(self, transcription_model="gemini-2.0-flash", transcription_model_provider="google",
-                 k=5, min_matches=3, markdown_output=True, llm_api_key=None, max_llm_tokens=8000, temp_dir="temp"):
+    def __init__(self, transcription_model: str = "gemini-2.0-flash", transcription_model_provider: str = "google",
+                 k: int = 5, min_matches: int = 3, markdown_output: bool = True, llm_api_key: str = None,
+                 max_llm_tokens: int = 8000, temp_dir: str = "temp") -> None:
         """
         Initialize the AudioToTextConverter class with a specified transcription model and provider.
 
@@ -144,7 +144,7 @@ class AudioToTextConverter:
         backoff=2,
         logger=logger,
     )
-    def transcribe_audio(self, audio_file):
+    def transcribe_audio(self, audio_file: str) -> dict:
         """
         Transcribe audio using a specified model and prompt template.
 
@@ -173,113 +173,106 @@ class AudioToTextConverter:
             # Convert the text to plain text format
             prompt_template = AUDIO_TO_PLAIN_TEXT_PROMPT
 
-        try:
-            if self.llm_api_key:
-                logger.info("Using provided Google API key")
-                client = genai.Client(api_key=self.llm_api_key)
-            else:
-                logger.info("Using Google API key from ENV")
-                client = genai.Client()
+        if self.llm_api_key:
+            logger.info("Using provided Google API key")
+            client = genai.Client(api_key=self.llm_api_key)
+        else:
+            logger.info("Using Google API key from ENV")
+            client = genai.Client()
 
-            config = types.GenerateContentConfig(
-                safety_settings=[
-                    types.SafetySetting(
-                        category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-                        threshold=types.HarmBlockThreshold.BLOCK_NONE,
-                    ),
-                    types.SafetySetting(
-                        category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-                        threshold=types.HarmBlockThreshold.BLOCK_NONE,
-                    ),
-                    types.SafetySetting(
-                        category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-                        threshold=types.HarmBlockThreshold.BLOCK_NONE,
-                    ),
-                    types.SafetySetting(
-                        category=types.HarmCategory.HARM_CATEGORY_HARASSMENT,
-                        threshold=types.HarmBlockThreshold.BLOCK_NONE,
-                    ),
-                ]
+        config = types.GenerateContentConfig(
+            safety_settings=[
+                types.SafetySetting(
+                    category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                    threshold=types.HarmBlockThreshold.BLOCK_NONE,
+                ),
+                types.SafetySetting(
+                    category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                    threshold=types.HarmBlockThreshold.BLOCK_NONE,
+                ),
+                types.SafetySetting(
+                    category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                    threshold=types.HarmBlockThreshold.BLOCK_NONE,
+                ),
+                types.SafetySetting(
+                    category=types.HarmCategory.HARM_CATEGORY_HARASSMENT,
+                    threshold=types.HarmBlockThreshold.BLOCK_NONE,
+                ),
+            ]
+        )
+
+        file_size = os.path.getsize(audio_file)
+        logger.info(f"Audio file size: {file_size / (1024 * 1024):.2f} MB")
+        if file_size > 20 * 1024 * 1024:
+            logger.info("Audio file size exceeds 20MB, uploading file before transcription")
+
+            myfile = client.files.upload(file=audio_file)
+
+            response = client.models.count_tokens(
+                model='gemini-2.0-flash',
+                contents=[myfile]
+            )
+            logger.info(f"File size in tokens: {response}")
+
+            logger.info(f"Uploaded file: {myfile.name} - Starting transcription...")
+
+            response = client.models.generate_content(
+                model=self.transcription_model,
+                contents=[prompt_template, myfile],
+                config=config
             )
 
-            file_size = os.path.getsize(audio_file)
-            logger.info(f"Audio file size: {file_size / (1024 * 1024):.2f} MB")
-            if file_size > 20 * 1024 * 1024:
-                logger.info("Audio file size exceeds 20MB, uploading file before transcription")
+            client.files.delete(name=myfile.name)
 
-                myfile = client.files.upload(file=audio_file)
+        else:
+            logger.info("Audio file size does not exceed 20MB")
+            with open(audio_file, "rb") as f:
+                audio_data = f.read()
 
-                response = client.models.count_tokens(
-                    model='gemini-2.0-flash',
-                    contents=[myfile]
-                )
-                logger.info(f"File size in tokens: {response}")
+            # Determine mimetype
+            mime_type, _ = mimetypes.guess_type(audio_file)
+            if mime_type is None:
+                raise ValueError("Audio format not recognized")
 
-                logger.info(f"Uploaded file: {myfile.name} - Starting transcription...")
+            content = []
+            if prompt_template:
+                content.append(prompt_template)
+            content.append({"mime_type": mime_type, "data": audio_data})
 
-                response = client.models.generate_content(
-                    model=self.transcription_model,
-                    contents=[prompt_template, myfile],
-                    config=config
-                )
+            response = client.models.generate_content(
+                model=self.transcription_model,
+                contents=[
+                    prompt_template,
+                    types.Part.from_bytes(
+                        data=audio_data,
+                        mime_type=mime_type,
+                    )
+                ],
+                config=config
+            )
 
-                client.files.delete(name=myfile.name)
+        end_time = time.time()
+        time_elapsed = end_time - start_time
 
-            else:
-                logger.info("Audio file size does not exceed 20MB")
-                with open(audio_file, "rb") as f:
-                    audio_data = f.read()
+        logger.info(f"Completion tokens: {response.usage_metadata.candidates_token_count}")
+        logger.info(f"Prompt tokens: {response.usage_metadata.prompt_token_count}")
 
-                # Determine mimetype
-                mime_type, _ = mimetypes.guess_type(audio_file)
-                if mime_type is None:
-                    raise ValueError("Audio format not recognized")
+        response_dict = {"transcript": response.text,
+                         "completion_tokens": response.usage_metadata.candidates_token_count,
+                         "prompt_tokens": response.usage_metadata.prompt_token_count}
 
-                content = []
-                if prompt_template:
-                    content.append(prompt_template)
-                content.append({"mime_type": mime_type, "data": audio_data})
+        logger.info(f"Transcribed text from {audio_file} using {self.transcription_model} in {time_elapsed:.2f} seconds")
+        return response_dict
 
-                response = client.models.generate_content(
-                    model=self.transcription_model,
-                    contents=[
-                        prompt_template,
-                        types.Part.from_bytes(
-                            data=audio_data,
-                            mime_type=mime_type,
-                        )
-                    ],
-                    config=config
-                )
-
-            end_time = time.time()
-            time_elapsed = end_time - start_time
-
-            logger.info(f"Completion tokens: {response.usage_metadata.candidates_token_count}")
-            logger.info(f"Prompt tokens: {response.usage_metadata.prompt_token_count}")
-
-            response_dict = {"transcript": response.text,
-                             "completion_tokens": response.usage_metadata.candidates_token_count,
-                             "prompt_tokens": response.usage_metadata.prompt_token_count}
-
-            logger.info(f"Transcribed text from {audio_file} using {self.transcription_model} in {time_elapsed:.2f} seconds")
-            return response_dict
-
-        except Exception as e:
-            logger.error(f"Error during audio transcription: {str(e)}")
-            raise
-
-    def process_chunk(self, chunk, index):
+    def process_chunk(self, chunk: dict, index: int) -> tuple[int, dict]:
         """Process a single audio chunk and return its transcript"""
         logger.info(f"Transcribing chunk {index + 1}...")
         transcript_dict = self.transcribe_audio(chunk["file_path"])
-        transcript = transcript_dict["transcript"]
 
         return index, transcript_dict
 
     def transcribe_full_audio(self,
-            audio_path,
-            save_transcript_chunks=False):
+            audio_path: str, save_transcript_chunks: bool = False) -> dict:
         """
         Process and transcribe a long audio file by chunking, parallel transcription, and merging.
 

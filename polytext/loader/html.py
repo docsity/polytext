@@ -22,7 +22,7 @@ class HtmlLoader:
         is_text (bool): If True, the output will be plain text instead of Markdown.
     """
 
-    def __init__(self, is_text=False):
+    def __init__(self, is_text: bool = False) -> None:
         """
         Initialize the HtmlLoader object.
 
@@ -33,7 +33,7 @@ class HtmlLoader:
 
 
     @retry(requests.exceptions.RequestException, tries=3, delay=2)
-    def get_text_from_url(self, url: str):
+    def get_text_from_url(self, url: str) -> dict:
         """
         Retrieves the HTML content, converts it to Markdown, and optionally to plain text.
         Handles request failures with retry and a final try-except block.
@@ -44,18 +44,10 @@ class HtmlLoader:
         Returns:
             str: The converted Markdown or plain text content, or None in case of irreversible error.
         """
-        try:
-            result = html_to_md(url)
-            if self.is_text:
-                result = md_to_text(result)
+        result = html_to_md(url)
+        if self.is_text:
+            result = md_to_text(result)
 
-            final_text_dict = {
-                "text": result,
-            }
-            return final_text_dict
-        except requests.exceptions.RequestException as e:
-            print(f"Irreversible error during fetching of {url} after retries: {e}")
-            return None
-        except Exception as e:
-            print(f"An unexpected error occurred in get_html: {e}")
-            return None
+        return {
+            "text": result,
+        }

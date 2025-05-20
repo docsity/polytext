@@ -11,7 +11,7 @@ class ConversionError(Exception):
         original_exception: The underlying exception that caused the conversion failure
     """
 
-    def __init__(self, message, original_exception=None):
+    def __init__(self, message: str, original_exception: Exception = None) -> None:
         super().__init__(message)
         self.message = message
         self.original_exception = original_exception
@@ -29,7 +29,7 @@ class EmptyDocument(Exception):
         message (str): Description of why the document is considered empty
         code (int): Error code for categorizing the type of emptiness (default: None)
     """
-    def __init__(self, message, code=None):
+    def __init__(self, message: str, code: int = None) -> None:
         super().__init__(message)
         self.message = message
         self.code = code
@@ -46,7 +46,7 @@ class ExceededMaxPages(Exception):
         message (str): Description of the page range error
         code (int): Error code for tracking purposes (default: None)
     """
-    def __init__(self, message, code=None):
+    def __init__(self, message: str, code: int = None) -> None:
         super().__init__(message)
         self.message = message
         self.code = code

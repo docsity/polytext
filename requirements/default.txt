@@ -1,7 +1,7 @@
 # pdf
-pypdf==5.3.0
-PyMuPDF>=1.25.3
-pycryptodome==3.21.0
+pypdf==5.5.0
+PyMuPDF>=1.25.5
+pycryptodome==3.23.0
 
 # markdown to pdf
 weasyprint==65.1
@@ -13,11 +13,11 @@ python-docx==1.1.2
 # google
 google-api-core>=2.24.2
 google-cloud-storage>=3.1.0
-google-genai>=1.14.0
+google-genai>=1.16.1
 
 # aws
-boto3>=1.37.0
-botocore>=1.37.0
+boto3>=1.38.19
+botocore>=1.18.19
 
 # audio video processing
 ffmpeg-python==0.2.0
@@ -27,6 +27,7 @@ pydub==0.25.1
 youtube-transcript-api==1.0.3
 
 # requests
+charset-normalizer==3.4.2
 requests==2.32.3
 
 # html to markdown

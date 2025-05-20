@@ -9,7 +9,7 @@ from weasyprint.text.fonts import FontConfiguration
 logger = logging.getLogger(__name__)
 
 
-def get_customized_pdf_from_markdown(input_markdown, output_file=None, use_custom_css=True):
+def get_customized_pdf_from_markdown(input_markdown: str, output_file: str = None, use_custom_css: bool = True) -> bytes:
     """
     Convenience function to convert Markdown content to a PDF with custom styling.
 
@@ -30,10 +30,10 @@ class PDFGenerator:
     A class to generate PDFs from Markdown content with custom CSS styling.
     """
 
-    def __init__(self, font_family="Georgia, serif", title_color="#1a5276", title_text_align="center",
-                 body_color="white", text_color="#333", h2_color="#d35400", h3_color="#2e86c1",
-                 blockquote_border="#3498db", table_header_bg="#2e86c1", page_margin="0.8in", image_max_width="80%",
-                 add_page_numbers=True, font_path=None):
+    def __init__(self, font_family: str = "Georgia, serif", title_color: str = "#1a5276", title_text_align: str = "center",
+                 body_color: str = "white", text_color: str = "#333", h2_color: str = "#d35400", h3_color: str = "#2e86c1",
+                 blockquote_border: str = "#3498db", table_header_bg: str = "#2e86c1", page_margin: str = "0.8in",
+                 image_max_width: str = "80%", add_page_numbers: bool = True, font_path: str = None) -> None:
         """
         Initialize the PDFGenerator with custom styling options.
 
@@ -65,7 +65,7 @@ class PDFGenerator:
         self.add_page_numbers = add_page_numbers
         self.font_path = font_path
 
-    def generate_custom_css(self):
+    def generate_custom_css(self) -> str:
         """
         Generate custom CSS based on the provided styling options.
 
@@ -218,7 +218,7 @@ class PDFGenerator:
         """
         return css_template
 
-    def get_customized_pdf_from_markdown(self, input_markdown, output_file=None, use_custom_css=True):
+    def get_customized_pdf_from_markdown(self, input_markdown: str, output_file: str = None, use_custom_css: bool = True) -> bytes:
         """
         Convert Markdown content to a PDF with custom styling.
 

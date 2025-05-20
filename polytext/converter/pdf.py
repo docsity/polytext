@@ -7,7 +7,7 @@ from ..exceptions.base import ConversionError
 logger = logging.getLogger(__name__)
 
 
-def convert_to_pdf(input_file, original_file, output_file=None):
+def convert_to_pdf(input_file, original_file: str, output_file: str = None) -> str:
     """
     Convenience function to convert a document to PDF format using LibreOffice.
 
@@ -38,7 +38,7 @@ class DocumentConverter:
         supported_extensions (list): List of supported file extensions
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the DocumentConverter."""
         self.supported_extensions = [
             '.txt', '.docx', '.doc', '.odt',
@@ -46,7 +46,7 @@ class DocumentConverter:
         ]
 
     @staticmethod
-    def check_libreoffice_installed():
+    def check_libreoffice_installed() -> bool:
         """
         Check if LibreOffice is installed and accessible in the system PATH.
 
@@ -64,7 +64,7 @@ class DocumentConverter:
         except (subprocess.SubprocessError, FileNotFoundError):
             return False
 
-    def convert_to_pdf(self, input_file, original_file, output_file=None):
+    def convert_to_pdf(self, input_file: str, original_file: str, output_file: str = None) -> str:
         """
         Convert a document to PDF format using LibreOffice.
 

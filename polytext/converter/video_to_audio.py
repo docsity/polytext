@@ -6,7 +6,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def convert_video_to_audio(video_file):
+def convert_video_to_audio(video_file: str) -> str:
     """
     Convert a video file to audio format using ffmpeg-python.
 

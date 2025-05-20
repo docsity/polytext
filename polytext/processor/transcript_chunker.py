@@ -7,13 +7,13 @@ class TranscriptChunker:
     """
 
     def __init__(
-        self,
-        transcript: str,
-        max_llm_tokens: int = 8000,
-        prompt_overhead: int = 1000,
-        tokens_per_char: float = 0.25,
-        overlap_chars: int = 500
-    ):
+            self,
+            transcript: str,
+            max_llm_tokens: int = 8000,
+            prompt_overhead: int = 1000,
+            tokens_per_char: float = 0.25,
+            overlap_chars: int = 500
+    ) -> None:
         """
         Initialize the TranscriptChunker.
 
@@ -32,7 +32,7 @@ class TranscriptChunker:
 
         self.max_chars_per_chunk = int((self.max_llm_tokens - self.prompt_overhead) / self.tokens_per_char)
 
-    def chunk_transcript(self) -> List[Dict[str, any]]:
+    def chunk_transcript(self) -> List[Dict[str, Any]]:
         """
         Split the transcript into overlapping character-based chunks for LLM input.
 

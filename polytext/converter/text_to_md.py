@@ -17,7 +17,11 @@ from polytext.prompts.text_to_md import TEXT_TO_MARKDOWN_PROMPT, TEXT_PROMPT
 dotenv.load_dotenv()
 
 
-def text_to_md(transcript_text: str, markdown_output: bool, llm_api_key, output_path: str, save_transcript_chunks: bool):
+def text_to_md(    transcript_text: str,
+    markdown_output: bool,
+    llm_api_key: str,
+    output_path: str,
+    save_transcript_chunks: bool) -> dict:
     """
     Transform raw transcript text into Markdown using a language model.
 
@@ -44,18 +48,18 @@ def text_to_md(transcript_text: str, markdown_output: bool, llm_api_key, output_
 class TextToMdConverter:
     def __init__(
         self,
-        markdown_output=True,
-        llm_api_key=None,
-        max_llm_tokens=8000,
-        prompt_overhead=1000,
-        tokens_per_char=0.25,
-        overlap_chars=500,
-        k=5,
-        min_matches=3,
-        model="gemini-2.0-flash",
-        model_provider="google",
-        output_path=None
-    ):
+            markdown_output: bool = True,
+            llm_api_key: str = None,
+            max_llm_tokens: int = 8000,
+            prompt_overhead: int = 1000,
+            tokens_per_char: float = 0.25,
+            overlap_chars: int = 500,
+            k: int = 5,
+            min_matches: int = 3,
+            model: str = "gemini-2.0-flash",
+            model_provider: str = "google",
+            output_path: str = None
+    ) -> None:
         """
         Initialize the converter with configuration parameters.
 
@@ -84,7 +88,7 @@ class TextToMdConverter:
         self.model_provider = model_provider
         self.output_path = output_path
 
-    def get_client(self):
+    def get_client(self) -> genai.Client:
         """
         Instantiate the GenAI client using the API key.
 
@@ -93,7 +97,7 @@ class TextToMdConverter:
         """
         return genai.Client(api_key=self.llm_api_key) if self.llm_api_key else genai.Client()
 
-    def get_prompt_template(self):
+    def get_prompt_template(self) -> str:
         """
         Select appropriate prompt template based on output format.
 
@@ -118,7 +122,10 @@ class TextToMdConverter:
         delay=2,
         backoff=2,
     )
-    def process_chunk(self, client, prompt_template, chunk_text, index):
+    def process_chunk(self, client: genai.Client,
+        prompt_template: str,
+        chunk_text: str,
+        index: int) -> dict:
         """
         Send a chunk of text to the LLM for processing.
 
@@ -163,7 +170,8 @@ class TextToMdConverter:
         }
 
 
-    def convert_text_to_md(self, transcript_text: str, save_transcript_chunks=False):
+    def convert_text_to_md(self, transcript_text: str,
+        save_transcript_chunks: bool = False) -> dict:
         """
         Chunk the transcript, process each chunk in parallel, and merge results.
 

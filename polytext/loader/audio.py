@@ -12,8 +12,16 @@ logger = logging.getLogger(__name__)
 
 class AudioLoader:
 
-    def __init__(self, s3_client=None, document_aws_bucket=None, gcs_client=None, document_gcs_bucket=None,
-                 llm_api_key=None, save_transcript_chunks=False, temp_dir="temp"):
+    def __init__(
+            self,
+            s3_client: object = None,
+            document_aws_bucket: str = None,
+            gcs_client: object = None,
+            document_gcs_bucket: str = None,
+            llm_api_key: str = None,
+            save_transcript_chunks: bool = False,
+            temp_dir: str = "temp"
+    ) -> None:
         """
         Initialize the AudioLoader with cloud storage and LLM configurations.
 
@@ -46,7 +54,7 @@ class AudioLoader:
         os.makedirs(self.temp_dir, exist_ok=True)
         tempfile.tempdir = self.temp_dir
 
-    def download_audio(self, file_path, temp_file_path):
+    def download_audio(self, file_path: str, temp_file_path: str) -> str:
         """
         Download an audio file from S3 or GCS to a local temporary path.
 
@@ -70,8 +78,9 @@ class AudioLoader:
             downloader.download_file_from_gcs(file_path, temp_file_path)
             logger.info(f'Downloaded {file_path} to {temp_file_path}')
             return temp_file_path
+        raise AttributeError('Storage client not provided')
 
-    def get_text_from_audio(self, file_path, audio_source, markdown_output=True):
+    def get_text_from_audio(self, file_path: str, audio_source: str, markdown_output: bool = True) -> str:
         """
         Extract text from an audio file by transcribing it.
 

@@ -20,7 +20,7 @@ class YoutubeTranscriptLoader:
     Class to download, and process transcripts from YouTube videos.
     """
 
-    def __init__(self, llm_api_key=None, save_transcript_chunks=False, temp_dir='temp'):
+    def __init__(self, llm_api_key: str = None, save_transcript_chunks: bool = False, temp_dir: str = 'temp') -> None:
         """
         Initialize YoutubeTranscriptLoader class with API key and configuration.
 
@@ -109,7 +109,7 @@ class YoutubeTranscriptLoader:
         else:
             raise ValueError("Invalid YouTube URL format")
 
-    def download_transcript(self, video_url: str):
+    def download_transcript(self, video_url: str) -> str:
         """
         Download and return the transcript from a YouTube video.
 
@@ -130,7 +130,7 @@ class YoutubeTranscriptLoader:
 
         return transcript_text
 
-    def get_text_from_youtube(self, video_url: str, markdown_output=True):
+    def get_text_from_youtube(self, video_url: str, markdown_output: bool = True) -> dict:
         """
         Get and optionally format transcript from a YouTube video using a language model.
 

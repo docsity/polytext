@@ -6,14 +6,24 @@ from google import genai
 from google.genai import types
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from google.api_core import exceptions as google_exceptions
+from typing import List, Tuple, Dict, Any
+
 
 from ..prompts.text_merging import TEXT_MERGE_PROMPT
 
 logger = logging.getLogger(__name__)
 
 class TextMerger:
-    def __init__(self, completion_model="gemini-2.0-flash", completion_model_provider="google",
-                 llm_api_key=None, max_llm_tokens=8000, k=5, min_matches=3, n_words_for_llm_merge=200):
+    def __init__(
+            self,
+            completion_model: str = "gemini-2.0-flash",
+            completion_model_provider: str = "google",
+            llm_api_key: str = None,
+            max_llm_tokens: int = 8000,
+            k: int = 5,
+            min_matches: int = 3,
+            n_words_for_llm_merge: int = 200
+    ) -> None:
         self.completion_model = completion_model
         self.completion_model_provider = completion_model_provider
         self.k = k
@@ -22,7 +32,7 @@ class TextMerger:
         self.max_llm_tokens = max_llm_tokens
         self.n_words_for_llm_merge = n_words_for_llm_merge
 
-    def merge_texts(self, text1, text2):
+    def merge_texts(self, text1: str, text2: str) -> str:
         """
         Merge two texts by finding where they overlap and combining them.
 
@@ -91,7 +101,7 @@ class TextMerger:
         # If no good merge found, just concatenate the texts
         return text1 + " " + text2
 
-    def merge_chunks(self, chunks):
+    def merge_chunks(self, chunks: List[str]) -> str:
         """
         Merge an ordered list of text chunks into a single document.
 
@@ -119,7 +129,7 @@ class TextMerger:
 
 
     @staticmethod
-    def extract_complete_sentences(text, n_words):
+    def extract_complete_sentences(text: str, n_words: int) -> List[str]:
         """
         Extract the first N words, central text, and last N words that form complete sentences.
 
@@ -190,7 +200,7 @@ class TextMerger:
         backoff=2,
         logger=logger,
     )
-    def merge_texts_with_llm(self, text1, text2):
+    def merge_texts_with_llm(self, text1: str, text2: str) -> Dict[str, Any]:
         """
         Merge two texts using a language model to ensure coherence and fluency.
 
@@ -266,7 +276,7 @@ class TextMerger:
             raise
 
 
-    def merge_chunks_with_llm_sequential(self, chunks):
+    def merge_chunks_with_llm_sequential(self, chunks: List[str]) -> Dict[str, Any]:
         """
         Merge chunks using LLM sequentially.
 
@@ -306,7 +316,7 @@ class TextMerger:
         }
 
 
-    def process_chunk_pair(self, chunk_pair, index):
+    def process_chunk_pair(self, chunk_pair: Tuple[str, str], index: int) -> Tuple[int, Dict[str, Any]]:
         """Process a couple of chunks and return their merged text."""
         logger.info(f"Processing chunk pair {index + 1}...")
         merged_text_dict = self.merge_texts_with_llm(chunk_pair[0], chunk_pair[1])
@@ -314,7 +324,7 @@ class TextMerger:
         return index, merged_text_dict
 
 
-    def merge_chunks_with_llm(self, chunks):
+    def merge_chunks_with_llm(self, chunks: List[str]) -> Dict[str, Any]:
         """
         Merge chunks using LLM in parallel.
 

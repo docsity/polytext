@@ -11,11 +11,11 @@ class AudioChunker:
     def __init__(
             self,
             audio_path: str,
-            max_llm_tokens: int = 8000,  # maximum output tokens for LLM
-            overlap_duration: int = 5000,  # overlap duration in ms
-            tokens_per_minute: int = 200,  # estimated tokens per minute of speech
-            prompt_overhead: int = 500  # tokens used for the LLM prompt
-    ):
+            max_llm_tokens: int = 8000,
+            overlap_duration: int = 5000,
+            tokens_per_minute: int = 200,
+            prompt_overhead: int = 500
+    ) -> None:
         self.audio_path = audio_path
         self.max_llm_tokens = max_llm_tokens
         self.overlap_duration = overlap_duration
@@ -138,7 +138,7 @@ class AudioChunker:
         return chunks
 
     @staticmethod
-    def cleanup_temp_files(chunks: List[Dict[str, Any]]):
+    def cleanup_temp_files(chunks: List[Dict[str, Any]]) -> None:
         """Remove temporary audio chunk files"""
         for chunk in chunks:
             if os.path.exists(chunk["file_path"]):
