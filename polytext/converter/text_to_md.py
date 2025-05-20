@@ -88,7 +88,7 @@ class TextToMdConverter:
         self.model_provider = model_provider
         self.output_path = output_path
 
-    def get_client(self) -> genai.Client:
+    def get_client(self) -> object:
         """
         Instantiate the GenAI client using the API key.
 
@@ -122,7 +122,7 @@ class TextToMdConverter:
         delay=2,
         backoff=2,
     )
-    def process_chunk(self, client: genai.Client,
+    def process_chunk(self, client: object,
         prompt_template: str,
         chunk_text: str,
         index: int) -> dict:
@@ -130,7 +130,7 @@ class TextToMdConverter:
         Send a chunk of text to the LLM for processing.
 
         Args:
-            client (genai.Client): The GenAI client instance.
+            client (object): The GenAI client instance.
             prompt_template (str): Prompt template to guide the model.
             chunk_text (str): The text chunk to process.
             index (int): Index of the chunk (used for logging and ordering).

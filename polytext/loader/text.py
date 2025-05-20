@@ -76,10 +76,10 @@ class TextLoader:
 
     def __init__(
             self,
-            s3_client: Optional[object] = None,
-            document_aws_bucket: Optional[str] = None,
-            gcs_client: Optional[object] = None,
-            document_gcs_bucket: Optional[str] = None
+            s3_client: object = None,
+            document_aws_bucket: str = None,
+            gcs_client: object = None,
+            document_gcs_bucket: str = None
     ) -> None:
         """
         Initialize TextLoader with optional S3 or GCS configuration.
@@ -291,7 +291,7 @@ class TextLoader:
 
         return text
 
-    def extract_text_from_file(self, file_path: str, page_range: Optional[Tuple[int, int]] = None, backend: str = 'auto') -> str:
+    def extract_text_from_file(self, bucket: str, file_path: str, page_range: tuple[int, int] = None, backend: str = 'auto') -> str:
         """
         Extract text from a document using PyPDF as fallback backend.
 
