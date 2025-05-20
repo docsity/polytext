@@ -17,7 +17,7 @@ url = 'https://it.wikipedia.org/wiki/Diritto_privato'
     # 'https://www.youmath.it/domande-a-risposte/view/5393-integrale-cos2x.html'
 
 def main():
-        html_loader = HtmlLoader(is_text=True)
+        html_loader = HtmlLoader(is_text=False)
 
         try:
             result = html_loader.get_text_from_url(url=url)
