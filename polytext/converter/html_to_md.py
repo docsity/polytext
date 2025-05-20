@@ -11,7 +11,6 @@ def html_to_md(html: str) -> str:
        Returns:
            str: A Markdown-formatted string generated from the input HTML.
     """
-
     md = MarkItDown()
     md_text = md.convert(html).markdown
     return md_text

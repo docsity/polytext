@@ -13,13 +13,14 @@ load_dotenv(".env")
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
-url = 'https://www.youmath.it/domande-a-risposte/view/5393-integrale-cos2x.html'
+url = 'https://it.wikipedia.org/wiki/Diritto_privato'
+    # 'https://www.youmath.it/domande-a-risposte/view/5393-integrale-cos2x.html'
 
 def main():
-        html_loader = HtmlLoader(url=url, is_text=False)
+        html_loader = HtmlLoader(is_text=True)
 
         try:
-            result = html_loader.get_html()
+            result = html_loader.get_text_from_url(url=url)
             return result
         except Exception as e:
             logging.error(f"Error extracting markdown or plain text: {str(e)}")
