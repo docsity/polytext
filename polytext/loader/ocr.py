@@ -13,8 +13,8 @@ logger = logging.getLogger(__name__)
 
 class OCRLoader:
 
-    def __init__(self, s3_client=None, document_aws_bucket=None, gcs_client=None, document_gcs_bucket=None,
-                 llm_api_key=None, temp_dir="temp"):
+    def __init__(self, source, markdown_output=True, s3_client=None, document_aws_bucket=None, gcs_client=None, document_gcs_bucket=None,
+                 llm_api_key=None, temp_dir="temp", target_size=1):
         """
         Initialize the OCRLoader with cloud storage and LLM configurations.
 
@@ -22,6 +22,9 @@ class OCRLoader:
         Sets up temporary directory for processing files.
 
         Args:
+            source (str): Source of the document. Must be either "cloud" or "local".
+            markdown_output (bool, optional): If True, the extracted text will be formatted as Markdown.
+                Defaults to True.
             s3_client (boto3.client, optional): AWS S3 client for S3 operations. Defaults to None.
             document_aws_bucket (str, optional): S3 bucket name for document storage. Defaults to None.
             gcs_client (google.cloud.storage.Client, optional): GCS client for Cloud Storage operations.
@@ -29,16 +32,20 @@ class OCRLoader:
             document_gcs_bucket (str, optional): GCS bucket name for document storage. Defaults to None.
             llm_api_key (str, optional): API key for language model service. Defaults to None.
             temp_dir (str, optional): Path for temporary file storage. Defaults to "temp".
+            target_size (int, optional): Target file size in bytes. Defaults to 1MB
 
         Raises:
             ValueError: If cloud storage clients are provided without bucket names
             OSError: If temp directory creation fails
         """
+        self.source = source
+        self.markdown_output = markdown_output
         self.s3_client = s3_client
         self.document_aws_bucket = document_aws_bucket
         self.gcs_client = gcs_client
         self.document_gcs_bucket = document_gcs_bucket
         self.llm_api_key = llm_api_key
+        self.target_size = target_size
 
         # Set up custom temp directory
         self.temp_dir = os.path.abspath(temp_dir)
@@ -70,7 +77,7 @@ class OCRLoader:
             logger.info(f'Downloaded {file_path} to {temp_file_path}')
             return temp_file_path
 
-    def get_text_from_ocr(self, file_path, source, markdown_output=True):
+    def get_text_from_ocr(self, file_path):
         """
         Extract text from a document using OCR.
 
@@ -80,9 +87,6 @@ class OCRLoader:
 
         Args:
             file_path (str): Path to the document. This can be a cloud storage path or a local file path.
-            source (str): Source of the document. Must be either "cloud" or "local".
-            markdown_output (bool, optional): If True, the extracted text will be formatted as Markdown.
-                Defaults to True.
 
         Returns:
             str: The extracted text from the document.
@@ -93,7 +97,7 @@ class OCRLoader:
         logger.info("Starting text extraction using OCR...")
 
         # Load or download the document file
-        if source == "cloud":
+        if self.source == "cloud":
             fd, temp_file_path = tempfile.mkstemp()
             try:
                 fd, temp_file = tempfile.mkstemp()
@@ -101,18 +105,19 @@ class OCRLoader:
                 logger.info(f"Successfully loaded document from {file_path}")
             finally:
                 os.close(fd)  # Close the file descriptor
-        elif source == "local":
+        elif self.source == "local":
             temp_file_path = file_path  # For local files, use the path directly
             logger.info(f"Successfully loaded document from local path {file_path}")
         else:
             raise ValueError("Invalid OCR source. Choose 'cloud' or 'local'.")
 
         text_from_ocr = get_ocr(file_for_ocr=temp_file_path,
-                                markdown_output=markdown_output,
-                                llm_api_key=self.llm_api_key)
+                                markdown_output=self.markdown_output,
+                                llm_api_key=self.llm_api_key,
+                                target_size=self.target_size)
 
         # Clean up temporary file if it was downloaded
-        if source == "cloud":
+        if self.source == "cloud":
             if os.path.exists(temp_file_path):
                 os.remove(temp_file_path)
                 logger.info(f"Removed temporary file {temp_file_path}")

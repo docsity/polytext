@@ -21,12 +21,17 @@ def main():
     gcs_client = storage.Client()
 
     markdown_output = True
+    target_size = 1
+    source = "local"
 
     # Initialize OCRLoader with GCS client and bucket
     ocr_loader = OCRLoader(
         gcs_client=None, #gcs_client,
         document_gcs_bucket=None, #'opit-da-test-ml-ai-store-bucket',
         # llm_api_key=os.getenv("GOOGLE_API_KEY"),
+        target_size=target_size,
+        source=source,
+        markdown_output=markdown_output
     )
 
     # Define document data
@@ -38,8 +43,6 @@ def main():
         # Call get_text_from_ocr method
         document_text = ocr_loader.get_text_from_ocr(
             file_path=local_file_path,
-            source="local",
-            markdown_output=markdown_output
         )
 
         import ipdb; ipdb.set_trace()

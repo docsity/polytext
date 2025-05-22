@@ -19,7 +19,7 @@ SUPPORTED_MIME_TYPES = {
 }
 
 
-def compress_and_convert_image(input_path: str, target_size=1 * 1024 * 1024):
+def compress_and_convert_image(input_path: str, target_size=1):
     """
     Compress and convert image files to PNG format using ffmpeg.
 
@@ -38,6 +38,7 @@ def compress_and_convert_image(input_path: str, target_size=1 * 1024 * 1024):
         - Compresses images over target_size
         - Uses maximum available CPU threads for faster processing
     """
+    target_size = target_size * 1024 * 1024
     temp_dir = os.path.abspath("temp")
     os.makedirs(temp_dir, exist_ok=True)
     tempfile.tempdir = temp_dir
@@ -80,7 +81,7 @@ def compress_and_convert_image(input_path: str, target_size=1 * 1024 * 1024):
     except Exception as e:
         raise RuntimeError(f"FFmpeg error during image processing: {e}") from e
 
-def get_ocr(file_for_ocr, markdown_output=False, llm_api_key=None):
+def get_ocr(file_for_ocr, markdown_output=False, llm_api_key=None, target_size=1):
     """
     Convenience function to extract text from an image file using OCR, optionally formatted as Markdown.
 
@@ -94,16 +95,17 @@ def get_ocr(file_for_ocr, markdown_output=False, llm_api_key=None):
             formatted as Markdown. Defaults to False.
         llm_api_key (str, optional): API key for the LLM service. If provided,
             it will override the default configuration.
+        target_size (int, optional): Target file size in bytes. Defaults to 1MB
 
     Returns:
         dict: Dictionary containing the OCR results and metadata.
     """
-    converter = OCRToTextConverter(markdown_output=markdown_output, llm_api_key=llm_api_key)
+    converter = OCRToTextConverter(markdown_output=markdown_output, llm_api_key=llm_api_key, target_size=target_size)
     return converter.get_ocr(file_for_ocr)
 
 class OCRToTextConverter:
     def __init__(self, ocr_model="gemini-2.0-flash", ocr_model_provider="google",
-                markdown_output=True, llm_api_key=None, max_llm_tokens=8000, temp_dir="temp"):
+                markdown_output=True, llm_api_key=None, target_size=1, temp_dir="temp"):
         """
         Initialize the OCRToTextConverter class with specified OCR model and formatting options.
 
@@ -115,7 +117,7 @@ class OCRToTextConverter:
             ocr_model_provider (str): Provider of OCR service. Defaults to "google".
             markdown_output (bool): Enable markdown formatting in output. Defaults to True.
             llm_api_key (str, optional): Override API key for language model. Defaults to None.
-            max_llm_tokens (int): Maximum number of tokens for model output. Defaults to 8000.
+            target_size (int, optional): Target file size in bytes. Defaults to 1MB
             temp_dir (str): Directory for temporary files. Defaults to "temp".
 
         Raises:
@@ -126,7 +128,7 @@ class OCRToTextConverter:
         self.ocr_model_provider = ocr_model_provider
         self.markdown_output = markdown_output
         self.llm_api_key = llm_api_key
-        self.max_llm_tokens = max_llm_tokens
+        self.target_size = target_size
 
         # Set up custom temp directory
         self.temp_dir = os.path.abspath(temp_dir)
@@ -213,12 +215,12 @@ class OCRToTextConverter:
             logger.info(f"OCR mime type: {mime_type}")
             file_size = os.path.getsize(file_for_ocr)
             logger.info(f"Initial image file size: {file_size}")
-            if file_size > 1 * 1024 * 1024 or mime_type not in SUPPORTED_MIME_TYPES:
-                logger.info("Image file size exceeds 1MB or unsupported mime type, compressing and converting image")
-                temp_file_for_ocr = compress_and_convert_image(file_for_ocr)
+            if file_size > self.target_size * 1024 * 1024 or mime_type not in SUPPORTED_MIME_TYPES:
+                logger.info(f"Image file size exceeds {self.target_size}MB or unsupported mime type, compressing and converting image")
+                temp_file_for_ocr = compress_and_convert_image(input_path=file_for_ocr, target_size=self.target_size)
                 file_size = os.path.getsize(temp_file_for_ocr)
             else:
-                logger.info("Image file size does not exceed 0.5MB and mime type is supported, no compression or conversion needed")
+                logger.info(f"Image file size does not exceed {self.target_size}MB and mime type is supported, no compression or conversion needed")
                 temp_file_for_ocr = file_for_ocr
 
             logger.info(f"Final image file size: {file_size / (1024 * 1024):.2f} MB")
@@ -260,8 +262,6 @@ class OCRToTextConverter:
                     ],
                     config=config
                 )
-
-            logger.info(f"OCR response: {response.text}")
 
             end_time = time.time()
             time_elapsed = end_time - start_time
