@@ -1,5 +1,5 @@
 OCR_TO_MARKDOWN_PROMPT = """
-These are pages from a PDF document. Extract all text content while preserving the structure.
+These are pages from a document. Extract all text content while preserving the structure.
 Pay special attention to tables, columns, headers, and any structured content.
 Maintain paragraph breaks and formatting.
 Your output must be a markdown-formatted text.
@@ -9,4 +9,7 @@ Furthermore, you must omit page numbers in the final text.
 """
 
 OCR_TO_PLAIN_TEXT_PROMPT = """
+These are pages from a document. Extract all text content while preserving the structure.
+Maintain paragraph breaks and formatting.
+Your output must be a plain text.
 """

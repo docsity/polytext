@@ -5,7 +5,7 @@ import tempfile
 import logging
 
 # Local imports
-from ..converter.audio_to_text import transcribe_full_audio # TODO: Update import to OCR module
+from ..converter.ocr_to_text import get_ocr
 from ..loader.downloader.downloader import Downloader
 
 logger = logging.getLogger(__name__)
@@ -70,13 +70,13 @@ class OCRLoader:
             logger.info(f'Downloaded {file_path} to {temp_file_path}')
             return temp_file_path
 
-    def get_text_from_ocr(self, image_paths, source, markdown_output=True):
+    def get_text_from_ocr(self, file_path, source, markdown_output=True):
         """
         Extract text from a document using OCR.
 
         This method handles loading the document from either a cloud storage
         service (S3 or GCS) or a local path, and then performs OCR to extract
-        text content using the `get_full_ocr` function.
+        text content using the `get_ocr` function.
 
         Args:
             file_path (str): Path to the document. This can be a cloud storage path or a local file path.
@@ -96,31 +96,25 @@ class OCRLoader:
         if source == "cloud":
             fd, temp_file_path = tempfile.mkstemp()
             try:
-                temp_files = []
-                for image_path in image_paths:
-                    fd, temp_file = tempfile.mkstemp()
-                    os.close(fd)
-                    temp_file_path = self.download_document(image_path, temp_file)
-                    temp_files.append(temp_file_path)
-                    logger.info(f"Successfully loaded document from {image_path}")
+                fd, temp_file = tempfile.mkstemp()
+                temp_file_path = self.download_document(file_path, temp_file)
+                logger.info(f"Successfully loaded document from {file_path}")
             finally:
                 os.close(fd)  # Close the file descriptor
         elif source == "local":
-            temp_files = image_paths  # For local files, use the paths directly
-            for image_path in image_paths:
-                logger.info(f"Successfully loaded document from local path {image_path}")
+            temp_file_path = file_path  # For local files, use the path directly
+            logger.info(f"Successfully loaded document from local path {file_path}")
         else:
             raise ValueError("Invalid OCR source. Choose 'cloud' or 'local'.")
 
-        text_from_ocr = get_full_ocr(document_file=temp_files,
-                                    markdown_output=markdown_output,
-                                    llm_api_key=self.llm_api_key)
+        text_from_ocr = get_ocr(file_for_ocr=temp_file_path,
+                                markdown_output=markdown_output,
+                                llm_api_key=self.llm_api_key)
 
         # Clean up temporary file if it was downloaded
         if source == "cloud":
-            for temp_file in temp_files:
-                if os.path.exists(temp_file):
-                    os.remove(temp_file)
-                    logger.info(f"Removed temporary file {temp_file}")
+            if os.path.exists(temp_file_path):
+                os.remove(temp_file_path)
+                logger.info(f"Removed temporary file {temp_file_path}")
 
         return text_from_ocr

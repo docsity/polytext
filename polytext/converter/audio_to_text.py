@@ -235,11 +235,6 @@ class AudioToTextConverter:
                 if mime_type is None:
                     raise ValueError("Audio format not recognized")
 
-                content = []
-                if prompt_template:
-                    content.append(prompt_template)
-                content.append({"mime_type": mime_type, "data": audio_data})
-
                 response = client.models.generate_content(
                     model=self.transcription_model,
                     contents=[
