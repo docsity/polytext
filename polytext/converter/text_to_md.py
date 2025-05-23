@@ -17,7 +17,7 @@ from polytext.prompts.text_to_md import TEXT_TO_MARKDOWN_PROMPT, TEXT_PROMPT
 dotenv.load_dotenv()
 
 
-def text_to_md(    transcript_text: str,
+def text_to_md(transcript_text: str,
     markdown_output: bool,
     llm_api_key: str,
     output_path: str,
@@ -228,7 +228,7 @@ class TextToMdConverter:
         final_text = text_merger.merge_chunks_with_llm_sequential(chunks=transcript_chunks)
 
         result_dict = {
-            "text": final_text,
+            "text": final_text["full_text_merged"],
             "completion_tokens": total_completion_tokens,
             "prompt_tokens": total_prompt_tokens,
             "completion_model": self.model,

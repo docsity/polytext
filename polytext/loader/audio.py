@@ -8,7 +8,9 @@ import logging
 from ..converter.audio_to_text import transcribe_full_audio
 from ..loader.downloader.downloader import Downloader
 
+
 logger = logging.getLogger(__name__)
+
 
 class AudioLoader:
 
@@ -20,7 +22,8 @@ class AudioLoader:
             document_gcs_bucket: str = None,
             llm_api_key: str = None,
             save_transcript_chunks: bool = False,
-            temp_dir: str = "temp"
+            temp_dir: str = "temp",
+            **kwargs,
     ) -> None:
         """
         Initialize the AudioLoader with cloud storage and LLM configurations.
@@ -48,6 +51,7 @@ class AudioLoader:
         self.document_gcs_bucket = document_gcs_bucket
         self.llm_api_key = llm_api_key
         self.save_transcript_chunks = save_transcript_chunks
+        self.type = "audio"
 
         # Set up custom temp directory
         self.temp_dir = os.path.abspath(temp_dir)
@@ -80,7 +84,7 @@ class AudioLoader:
             return temp_file_path
         raise AttributeError('Storage client not provided')
 
-    def get_text_from_audio(self, file_path: str, audio_source: str, markdown_output: bool = True) -> str:
+    def get_text_from_audio(self, file_path: str, markdown_output: bool = True, **kwargs) -> dict:
         """
         Extract text from an audio file by transcribing it.
 
@@ -90,8 +94,9 @@ class AudioLoader:
 
         Args:
             file_path (str): Path to the audio file. This can be a cloud storage path or a local file path.
-            audio_source (str): Source of the audio file. Must be either "cloud" or "local".
             markdown_output (bool, optional): If True, the transcription will be formatted as Markdown. Defaults to True.
+            **kwargs: Additional options, including:
+                - source (str): Source of the Audio ('cloud' or 'local'). Defaults to 'cloud'.
 
         Returns:
             str: The transcribed text from the audio file.
@@ -99,6 +104,8 @@ class AudioLoader:
         Raises:
             ValueError: If the `audio_source` is not "cloud" or "local".
         """
+
+        audio_source = kwargs.get("source", "cloud")
 
         logger.info("Starting text extraction from audio...")
 
@@ -117,15 +124,32 @@ class AudioLoader:
         else:
             raise ValueError("Invalid audio source. Choose 'cloud', or 'local'.")
 
-        audio_transcript = transcribe_full_audio(audio_file=temp_file_path,
+        result_dict = transcribe_full_audio(audio_file=temp_file_path,
                                                  markdown_output=markdown_output,
                                                  llm_api_key=self.llm_api_key,
                                                  save_transcript_chunks=self.save_transcript_chunks
                                                  )
+
+        result_dict["type"] = self.type
 
         # Clean up temporary file if it was downloaded
         if audio_source == "cloud" and os.path.exists(temp_file_path):
             os.remove(temp_file_path)
             logger.info(f"Removed temporary file {temp_file_path}")
 
-        return audio_transcript
+        return result_dict
+
+    def load(self, input_list: list[str], markdown_output: bool = True, **kwargs) -> dict:
+        """
+        Extract text from an audio file.
+
+        Args:
+            input_list (list[str]): A list containing one audio file paths or URLs.
+            markdown_output (bool, default: True): Whether to format the extracted text as Markdown.
+            **kwargs: Additional options passed to the audio extraction method, such as:
+                      - source (str): Source of the audio ('cloud' or 'local'). Defaults to 'cloud'.
+
+        Returns:
+            dict: A dictionary containing the transcribed text and related metadata.
+        """
+        return self.get_text_from_audio(file_path=input_list[0], markdown_output=markdown_output, **kwargs)

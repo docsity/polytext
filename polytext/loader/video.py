@@ -11,6 +11,7 @@ from ..converter.audio_to_text import transcribe_full_audio
 
 logger = logging.getLogger(__name__)
 
+
 class VideoLoader:
 
     def __init__(
@@ -21,7 +22,8 @@ class VideoLoader:
             document_gcs_bucket: str = None,
             llm_api_key: str = None,
             save_transcript_chunks: bool = False,
-            temp_dir: str = 'temp'
+            temp_dir: str = 'temp',
+            **kwargs,
     ) -> None:
         """
         Initialize VideoLoader class with optional configurations for S3, GCS, and LLM API.
@@ -45,6 +47,7 @@ class VideoLoader:
         self.document_gcs_bucket = document_gcs_bucket
         self.llm_api_key = llm_api_key
         self.save_transcript_chunks = save_transcript_chunks
+        self.type = "video"
 
         # Set up custom temp directory
         self.temp_dir = os.path.abspath(temp_dir)
@@ -118,18 +121,21 @@ class VideoLoader:
     #         logger.info(f"Successfully converted video to audio: {temp_audio_path}")
     #         return temp_audio_path
 
-    def get_text_from_video(self, file_path: str, video_source: str, markdown_output: bool = True) -> str:
+    def get_text_from_video(self, file_path: str, markdown_output: bool = True, **kwargs) -> dict:
         """
         Extract text from a video file.
 
         Args:
             file_path (str): Path to the video file.
-            video_source (str): Source of the video ('cloud' or 'local').
             markdown_output (bool): Whether to convert the text to markdown format. Defaults to True.
+            **kwargs: Additional options, including:
+                - source (str): Source of the video ('cloud' or 'local'). Defaults to 'cloud'.
 
         Returns:
-            str: Extracted text from the video.
+            dict: Extracted text and related metadata from the video.
         """
+
+        video_source = kwargs.get("source", "cloud")
 
         logger.info("Starting text extraction from video...")
 
@@ -153,11 +159,13 @@ class VideoLoader:
         # saved_audio_path = self.save_file_locally(audio_path, os.getcwd(), 'audio')
 
         # Get text from audio
-        video_transcript = transcribe_full_audio(audio_file=audio_path,
+        result_dict = transcribe_full_audio(audio_file=audio_path,
                                                  markdown_output=markdown_output,
                                                  llm_api_key=self.llm_api_key,
                                                  save_transcript_chunks=self.save_transcript_chunks
                                                  )
+
+        result_dict["type"] = self.type
 
         # Clean up temporary files
         logger.info(f"Removing temporary files: {temp_file_path} and {audio_path}")
@@ -168,7 +176,7 @@ class VideoLoader:
             os.remove(audio_path)
             logger.info(f"Removed temporary file {audio_path}")
 
-        return video_transcript
+        return result_dict
 
     @staticmethod
     def save_file_locally(source_path: str, destination_dir: str, file_type: str) -> str:
@@ -205,3 +213,18 @@ class VideoLoader:
         logger.info(f"Saved {file_type} file to: {destination_path}")
         return destination_path
 
+    def load(self, input_list: str, markdown_output: bool = True, **kwargs) -> dict:
+        """
+        Load and extract text content from a video file.
+
+        Args:
+            input_list (list[str]): A path to the video file.
+            markdown_output (bool, default: True): Whether to format the extracted text as Markdown.
+            **kwargs: Additional parameters passed to the underlying extraction method,
+                      such as:
+                      - source (str): Source of the video ('cloud' or 'local'). Defaults to 'cloud'.
+
+        Returns:
+            dict: A dictionary containing the extracted text and related metadata.
+        """
+        return self.get_text_from_video(file_path=input_list[0], markdown_output=markdown_output, **kwargs)

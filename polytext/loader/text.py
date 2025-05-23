@@ -79,7 +79,8 @@ class TextLoader:
             s3_client: object = None,
             document_aws_bucket: str = None,
             gcs_client: object = None,
-            document_gcs_bucket: str = None
+            document_gcs_bucket: str = None,
+            **kwargs,
     ) -> None:
         """
         Initialize TextLoader with optional S3 or GCS configuration.
@@ -92,6 +93,7 @@ class TextLoader:
         self.document_aws_bucket = document_aws_bucket
         self.gcs_client = gcs_client
         self.document_gcs_bucket = document_gcs_bucket
+        self.type = "text"
 
     def download_document(self, file_path: str, temp_file_path: str) -> str:
         """
@@ -502,6 +504,7 @@ class TextLoader:
 
             return text
 
+        # TODO: necessario finally? perchè lato tipizzazione aoutput da warning (Expected type 'str', got 'None' instead)
         finally:
             # Clean up temporary file
             if temp_pdf_path and os.path.exists(temp_pdf_path):
@@ -624,4 +627,5 @@ class TextLoader:
         # Consider the text low quality if 30% or fewer characters are valid
         return valid_percentage <= 0.3
 
-
+    def load(self, input: list[str], markdown_output: bool = True, **kwargs) -> dict:
+        pass

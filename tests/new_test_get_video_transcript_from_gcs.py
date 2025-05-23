@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from dotenv import load_dotenv
 load_dotenv(".env")
 
-from polytext.loader import AudioLoader
+from polytext.loader import BaseLoader
 
 # Set up logging
 logging.basicConfig(level=logging.INFO,
@@ -16,31 +16,27 @@ logging.basicConfig(level=logging.INFO,
 
 
 def main():
-    # Initialize GCS client
-    gcs_client = storage.Client()
-
     markdown_output = True
     save_transcript_chunks = True
 
     # Initialize VideoLoader with GCS client and bucket
-    audio_loader = AudioLoader(
-        gcs_client=gcs_client,
-        document_gcs_bucket='opit-da-test-ml-ai-store-bucket',
-        # llm_api_key=os.getenv("GOOGLE_API_KEY"),
-        save_transcript_chunks=save_transcript_chunks,
-    )
+    loader = BaseLoader()
 
     # Define document data
-    file_path = "learning_resources/course_id=406/module_id=2658/id=31427/8434.mp4"
+    # file_path = "learning_resources/course_id=132/module_id=312/id=4020/2333.mp4"
+    # learning_resources/course_id=406/module_id=2658/id=31427/8434.mp4
+    file_url = "gcs://opit-da-test-ml-ai-store-bucket/learning_resources/course_id=132/module_id=312/id=4020/2333.mp4"
 
-    local_file_path = "/Users/andreasolfanelli/Projects/polytext/lunedì alle 16-25.aac"
+    local_file_path = "/Users/marcodelgiudice/Projects/polytext/tmp1mq7s7nt_video.mp4"
 
     try:
         # Call get_document_text method
-        document_text = audio_loader.get_text_from_audio(
-            file_path=local_file_path,
-            audio_source="local",
-            markdown_output=markdown_output
+        result_dict = loader.get_text(
+            input_list=[file_url],
+            source="cloud",
+            markdown_output=markdown_output,
+            llm_api_key=os.getenv("GOOGLE_API_KEY"),
+            save_transcript_chunks=save_transcript_chunks,
         )
 
         import ipdb; ipdb.set_trace()
@@ -48,7 +44,7 @@ def main():
         try:
             output_file = "transcript.md" if markdown_output else "transcript.txt"
             with open(output_file, "w", encoding="utf-8") as f:
-                f.write(document_text["text"])
+                f.write(result_dict["text"])
             print(f"Transcript saved to {output_file}")
         except IOError as e:
             logging.error(f"Failed to save transcript: {str(e)}")

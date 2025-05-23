@@ -1,5 +1,3 @@
-from typing import List, Dict
-
 
 class TranscriptChunker:
     """
@@ -32,7 +30,7 @@ class TranscriptChunker:
 
         self.max_chars_per_chunk = int((self.max_llm_tokens - self.prompt_overhead) / self.tokens_per_char)
 
-    def chunk_transcript(self) -> List[Dict[str, Any]]:
+    def chunk_transcript(self) -> list[dict[str, any]]:
         """
         Split the transcript into overlapping character-based chunks for LLM input.
 
