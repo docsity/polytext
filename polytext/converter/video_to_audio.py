@@ -6,12 +6,13 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def convert_video_to_audio(video_file):
+def convert_video_to_audio(video_file, bitrate_quality=9):
     """
     Convert a video file to audio format using ffmpeg-python.
 
     Args:
         video_file (str): Path to the video file.
+        bitrate_quality (int, optional): Variable bitrate quality from 0-9 (9 being lowest). Defaults to 9.
 
     Returns:
         str: Path to the converted audio file.
@@ -21,7 +22,7 @@ def convert_video_to_audio(video_file):
         Exception: If any other error occurs during conversion
     """
 
-    logger.info("Converting video to audio.")
+    logger.info(f"Converting video to audio with bitrate quality {bitrate_quality}.")
 
     temp_audio_path = None
     try:
@@ -36,7 +37,7 @@ def convert_video_to_audio(video_file):
             .output(temp_audio_path,
                     acodec='libmp3lame',
                     # ab='64k',
-                    q=9,  # Variable bitrate quality (0-9, 9 being lowest)
+                    q=bitrate_quality,  # Variable bitrate quality (0-9, 9 being lowest)
                     ac=1,  # Convert to mono
                     ar=16000,  # Lower sample rate
                     vn=None,

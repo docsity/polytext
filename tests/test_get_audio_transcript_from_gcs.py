@@ -21,13 +21,18 @@ def main():
 
     markdown_output = True
     save_transcript_chunks = True
+    source = "local"
+    bitrate_quality = 8
 
     # Initialize VideoLoader with GCS client and bucket
     audio_loader = AudioLoader(
+        source=source,
+        markdown_output=markdown_output,
         gcs_client=gcs_client,
         document_gcs_bucket=os.getenv("GCS_BUCKET"),
         # llm_api_key=os.getenv("GOOGLE_API_KEY"),
         save_transcript_chunks=save_transcript_chunks,
+        bitrate_quality=bitrate_quality
     )
 
     # Define document data
@@ -39,8 +44,6 @@ def main():
         # Call get_document_text method
         document_text = audio_loader.get_text_from_audio(
             file_path=local_file_path,
-            audio_source="local",
-            markdown_output=markdown_output
         )
 
         import ipdb; ipdb.set_trace()

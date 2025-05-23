@@ -77,7 +77,8 @@ def compress_and_convert_audio(input_path: str, target_bitrate=None, bitrate_qua
     except Exception as e:
         raise RuntimeError(f"FFmpeg error during audio compression/conversion: {e}") from e
 
-def transcribe_full_audio(audio_file, markdown_output=False, llm_api_key=None, save_transcript_chunks=False):
+def transcribe_full_audio(audio_file, markdown_output=False, llm_api_key=None, save_transcript_chunks=False,
+                          bitrate_quality=9):
     """
     Convenience function to transcribe an audio file into text, optionally formatted as Markdown.
 
@@ -91,16 +92,19 @@ def transcribe_full_audio(audio_file, markdown_output=False, llm_api_key=None, s
             formatted as Markdown. Defaults to True.
         llm_api_key (str, optional): API key for the LLM service. If provided, it will override the default configuration.
         save_transcript_chunks (bool, optional): Whether to save chunk transcripts in final output. Defaults to False.
+        bitrate_quality (int, optional): Variable bitrate quality from 0-9 (9 being lowest). Defaults to 9
 
     Returns:
         str: The transcribed text from the audio file.
     """
-    converter = AudioToTextConverter(markdown_output=markdown_output, llm_api_key=llm_api_key)
+    converter = AudioToTextConverter(markdown_output=markdown_output, llm_api_key=llm_api_key,
+                                     bitrate_quality=bitrate_quality)
     return converter.transcribe_full_audio(audio_file, save_transcript_chunks)
 
 class AudioToTextConverter:
     def __init__(self, transcription_model="gemini-2.0-flash", transcription_model_provider="google",
-                 k=5, min_matches=3, markdown_output=True, llm_api_key=None, max_llm_tokens=8000, temp_dir="temp"):
+                 k=5, min_matches=3, markdown_output=True, llm_api_key=None, max_llm_tokens=8000, temp_dir="temp",
+                 bitrate_quality=9):
         """
         Initialize the AudioToTextConverter class with a specified transcription model and provider.
 
@@ -113,6 +117,7 @@ class AudioToTextConverter:
             llm_api_key (str, optional): Override API key for language model. Defaults to None.
             max_llm_tokens (int): Maximum number of tokens for the language model output. Defaults to 8000.
             temp_dir (str): Directory for temporary files. Defaults to "temp".
+            bitrate_quality (int, optional): Variable bitrate quality from 0-9 (9 being lowest). Defaults to 9
 
         Raises:
             OSError: If temp directory creation fails
@@ -126,6 +131,7 @@ class AudioToTextConverter:
         self.llm_api_key = llm_api_key
         self.max_llm_tokens = max_llm_tokens
         self.chunked_audio = False
+        self.bitrate_quality = bitrate_quality
 
         # Set up custom temp directory
         self.temp_dir = os.path.abspath(temp_dir)
@@ -310,7 +316,8 @@ class AudioToTextConverter:
             # If you need at least one of the two, apply compress_and_convert_audio
             if needs_conversion:  # or needs_compression:
                 logger.info("Audio file needs conversion, processing file...")
-                processed_audio_path = compress_and_convert_audio(audio_path)
+                processed_audio_path = compress_and_convert_audio(input_path=audio_path,
+                                                                  bitrate_quality=self.bitrate_quality)
                 used_file = processed_audio_path
                 logger.info(f"Audio file processed (conversion): {used_file}")
             else:
