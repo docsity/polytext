@@ -22,13 +22,12 @@ def main():
     # Initialize TextLoader with GCS client and bucket
     text_loader = TextLoader(
         gcs_client=gcs_client,
-        document_gcs_bucket='opit-da-test-ml-ai-store-bucket'
+        document_gcs_bucket=os.getenv("GCS_BUCKET")
     )
 
     # Define document data
     doc_data = {
         "file_path": "learning_resources/course_id=353/module_id=3056/id=31617/Supervisory+Agreement+Form+-+MSc.pdf",
-        # "bucket": "docsity-data"  # Optional if already set in TextLoader initialization
     }
 
     # Optional: specify page range (start_page, end_page) - pages are 1-indexed

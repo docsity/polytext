@@ -25,7 +25,7 @@ def main():
     # Initialize VideoLoader with GCS client and bucket
     audio_loader = AudioLoader(
         gcs_client=gcs_client,
-        document_gcs_bucket='opit-da-test-ml-ai-store-bucket',
+        document_gcs_bucket=os.getenv("GCS_BUCKET"),
         # llm_api_key=os.getenv("GOOGLE_API_KEY"),
         save_transcript_chunks=save_transcript_chunks,
     )

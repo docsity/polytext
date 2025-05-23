@@ -89,7 +89,7 @@ class OCRLoader:
             file_path (str): Path to the document. This can be a cloud storage path or a local file path.
 
         Returns:
-            str: The extracted text from the document.
+            dict: Dictionary containing the OCR results and metadata.
 
         Raises:
             ValueError: If the `source` is not "cloud" or "local".

@@ -22,7 +22,7 @@ def main():
     # Initialize TextLoader with S3 client and bucket
     text_loader = TextLoader(
         s3_client=s3_client,
-        document_aws_bucket='docsity-data'
+        document_aws_bucket=os.getenv("AWS_BUCKET")
     )
 
     # Define document data
