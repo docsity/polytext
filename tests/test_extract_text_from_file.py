@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from dotenv import load_dotenv
 load_dotenv(".env")
 
-from polytext.loader import TextLoader
+from polytext.loader import DocumentLoader
 
 # Set up logging
 logging.basicConfig(level=logging.INFO,
@@ -15,8 +15,8 @@ logging.basicConfig(level=logging.INFO,
 
 
 def main():
-    # Initialize TextLoader
-    text_loader = TextLoader()
+    # Initialize DocumentLoader
+    text_loader = DocumentLoader()
 
     # Optional: specify page range (start_page, end_page) - pages are 1-indexed
     page_range = (1, 2)  # Extract text from pages 1 to 10

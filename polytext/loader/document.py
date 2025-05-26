@@ -1,4 +1,4 @@
-# text.py
+# document.py
 # Standard library imports
 import os
 import re
@@ -20,47 +20,47 @@ logger = logging.getLogger(__name__)
 
 
 # Standalone functions that wrap TextLoader methods
-def get_document_text(doc_data, page_range=None):
-    """
-    Convenience function to extract text from a document using PyMuPDF.
-
-    Args:
-        doc_data (dict): Dictionary containing 'file_path' and optional 'bucket'
-        page_range (tuple, optional): Tuple of (start_page, end_page), 1-indexed. Note: When converting from .odt or .rtf files, the page range selection might not exactly match the original document's page numbers due to formatting differences during PDF conversion and variations in how LibreOffice renders these formats.
-
-    Returns:
-        str: Extracted text from the document
-
-    Raises:
-        EmptyDocument: If extracted text is empty or fails quality checks
-        ExceededMaxPages: If requested page range is invalid
-    """
-    loader = TextLoader()
-    return loader.get_document_text(doc_data, page_range)
-
-
-def extract_text_from_file(file_path, page_range=None, backend='auto'):
-    """
-    Convenience function to extract text from a local file.
-
-    Args:
-        file_path (str): Path to the local file
-        page_range (tuple, optional): Tuple of (start_page, end_page), 1-indexed. Note: When converting from .odt or .rtf files, the page range selection might not exactly match the original document's page numbers due to formatting differences during PDF conversion and variations in how LibreOffice renders these formats.
-        backend (str, optional): Text extraction backend ('auto', 'pymupdf', or 'pypdf')
-
-    Returns:
-        str: Extracted text from the document
-
-    Raises:
-        FileNotFoundError: If input file doesn't exist
-        ValueError: If invalid backend is specified
-        EmptyDocument: If no text could be extracted
-    """
-    loader = TextLoader()
-    return loader.extract_text_from_file(file_path, page_range, backend)
+# def get_document_text(doc_data, page_range=None):
+#     """
+#     Convenience function to extract text from a document using PyMuPDF.
+#
+#     Args:
+#         doc_data (dict): Dictionary containing 'file_path' and optional 'bucket'
+#         page_range (tuple, optional): Tuple of (start_page, end_page), 1-indexed. Note: When converting from .odt or .rtf files, the page range selection might not exactly match the original document's page numbers due to formatting differences during PDF conversion and variations in how LibreOffice renders these formats.
+#
+#     Returns:
+#         str: Extracted text from the document
+#
+#     Raises:
+#         EmptyDocument: If extracted text is empty or fails quality checks
+#         ExceededMaxPages: If requested page range is invalid
+#     """
+#     loader = TextLoader()
+#     return loader.get_document_text(doc_data, page_range)
 
 
-class TextLoader:
+# def extract_text_from_file(file_path, page_range=None, backend='auto'):
+#     """
+#     Convenience function to extract text from a local file.
+#
+#     Args:
+#         file_path (str): Path to the local file
+#         page_range (tuple, optional): Tuple of (start_page, end_page), 1-indexed. Note: When converting from .odt or .rtf files, the page range selection might not exactly match the original document's page numbers due to formatting differences during PDF conversion and variations in how LibreOffice renders these formats.
+#         backend (str, optional): Text extraction backend ('auto', 'pymupdf', or 'pypdf')
+#
+#     Returns:
+#         str: Extracted text from the document
+#
+#     Raises:
+#         FileNotFoundError: If input file doesn't exist
+#         ValueError: If invalid backend is specified
+#         EmptyDocument: If no text could be extracted
+#     """
+#     loader = TextLoader()
+#     return loader.extract_text_from_file(file_path, page_range, backend)
+
+
+class DocumentLoader:
     """
     Loads and extracts text from documents with support for S3 or GCS storage.
 
@@ -74,9 +74,10 @@ class TextLoader:
         document_aws_bucket (str): Default S3 bucket name for document storage
     """
 
-    def __init__(self, s3_client=None, document_aws_bucket=None, gcs_client=None, document_gcs_bucket=None):
+    def __init__(self, s3_client=None, document_aws_bucket=None, gcs_client=None,
+                 document_gcs_bucket=None):
         """
-        Initialize TextLoader with optional S3 or GCS configuration.
+        Initialize DocumentLoader with optional S3 or GCS configuration.
 
         Args:
             s3_client: Boto3 S3 client instance for AWS operations (optional)

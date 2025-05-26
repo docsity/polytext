@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from dotenv import load_dotenv
 load_dotenv(".env")
 
-from polytext.loader import TextLoader
+from polytext.loader import DocumentLoader
 
 # Set up logging
 logging.basicConfig(level=logging.INFO,
@@ -19,8 +19,8 @@ def main():
     # Initialize S3 client (optional, only needed if loading from S3)
     s3_client = boto3.client('s3')
 
-    # Initialize TextLoader with S3 client and bucket
-    text_loader = TextLoader(
+    # Initialize DocumentLoader with S3 client and bucket
+    text_loader = DocumentLoader(
         s3_client=s3_client,
         document_aws_bucket=os.getenv("AWS_BUCKET")
     )

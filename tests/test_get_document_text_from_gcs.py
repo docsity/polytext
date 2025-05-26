@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from dotenv import load_dotenv
 load_dotenv(".env")
 
-from polytext.loader import TextLoader
+from polytext.loader import DocumentLoader
 
 # Set up logging
 logging.basicConfig(level=logging.INFO,
@@ -19,8 +19,8 @@ def main():
     # Initialize GCS client
     gcs_client = storage.Client()
 
-    # Initialize TextLoader with GCS client and bucket
-    text_loader = TextLoader(
+    # Initialize DocumentLoader with GCS client and bucket
+    text_loader = DocumentLoader(
         gcs_client=gcs_client,
         document_gcs_bucket=os.getenv("GCS_BUCKET")
     )
