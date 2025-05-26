@@ -8,23 +8,13 @@ import logging
 from ..converter.audio_to_text import transcribe_full_audio
 from ..loader.downloader.downloader import Downloader
 
-
 logger = logging.getLogger(__name__)
-
 
 class AudioLoader:
 
-    def __init__(
-            self,
-            s3_client: object = None,
-            document_aws_bucket: str = None,
-            gcs_client: object = None,
-            document_gcs_bucket: str = None,
-            llm_api_key: str = None,
-            save_transcript_chunks: bool = False,
-            temp_dir: str = "temp",
-            **kwargs,
-    ) -> None:
+    def __init__(self, source, markdown_output=True, s3_client=None, document_aws_bucket=None, gcs_client=None,
+                 document_gcs_bucket=None, llm_api_key=None, save_transcript_chunks=False, temp_dir="temp",
+                 bitrate_quality=9, **kwargs,):
         """
         Initialize the AudioLoader with cloud storage and LLM configurations.
 
@@ -32,6 +22,8 @@ class AudioLoader:
         Sets up temporary directory for processing files.
 
         Args:
+            source (str): Source of the audio file. Must be either "cloud" or "local".
+            markdown_output (bool, optional): If True, the transcription will be formatted as Markdown. Defaults to True.
             s3_client (boto3.client, optional): AWS S3 client for S3 operations. Defaults to None.
             document_aws_bucket (str, optional): S3 bucket name for document storage. Defaults to None.
             gcs_client (google.cloud.storage.Client, optional): GCS client for Cloud Storage operations.
@@ -39,12 +31,15 @@ class AudioLoader:
             document_gcs_bucket (str, optional): GCS bucket name for document storage. Defaults to None.
             llm_api_key (str, optional): API key for language model service. Defaults to None.
             save_transcript_chunks (bool, optional): Whether to save chunk transcripts in final output. Defaults to False.
-            temp_dir (str, optional): Path for temporary file storage. Defaults to "temp".
+            temp_dir (str, optional): Path for temporary file storage. Defaults to "temp"
+            bitrate_quality (int, optional): Variable bitrate quality from 0-9 (9 being lowest). Defaults to 9.
 
         Raises:
             ValueError: If cloud storage clients are provided without bucket names
             OSError: If temp directory creation fails
         """
+        self.source = source
+        self.markdown_output = markdown_output
         self.s3_client = s3_client
         self.document_aws_bucket = document_aws_bucket
         self.gcs_client = gcs_client
@@ -52,6 +47,7 @@ class AudioLoader:
         self.llm_api_key = llm_api_key
         self.save_transcript_chunks = save_transcript_chunks
         self.type = "audio"
+        self.bitrate_quality = bitrate_quality
 
         # Set up custom temp directory
         self.temp_dir = os.path.abspath(temp_dir)
@@ -84,7 +80,7 @@ class AudioLoader:
             return temp_file_path
         raise AttributeError('Storage client not provided')
 
-    def get_text_from_audio(self, file_path: str, markdown_output: bool = True, **kwargs) -> dict:
+    def get_text_from_audio(self, file_path: str, **kwargs) -> dict:
         """
         Extract text from an audio file by transcribing it.
 
@@ -94,7 +90,6 @@ class AudioLoader:
 
         Args:
             file_path (str): Path to the audio file. This can be a cloud storage path or a local file path.
-            markdown_output (bool, optional): If True, the transcription will be formatted as Markdown. Defaults to True.
             **kwargs: Additional options, including:
                 - source (str): Source of the Audio ('cloud' or 'local'). Defaults to 'cloud'.
 
@@ -105,12 +100,10 @@ class AudioLoader:
             ValueError: If the `audio_source` is not "cloud" or "local".
         """
 
-        audio_source = kwargs.get("source", "cloud")
-
         logger.info("Starting text extraction from audio...")
 
         # Load or download the video file
-        if audio_source == "cloud":
+        if self.source == "cloud":
             fd, temp_file_path = tempfile.mkstemp()
             try:
                 temp_file_path = self.download_audio(file_path, temp_file_path)
@@ -118,22 +111,23 @@ class AudioLoader:
                 # saved_video_path = self.save_file_locally(temp_file_path, os.getcwd(), 'video')
             finally:
                 os.close(fd)  # Close the file descriptor
-        elif audio_source == "local":
+        elif self.source == "local":
             temp_file_path = file_path
             logger.info(f"Successfully loaded audio file from local path {file_path}")
         else:
             raise ValueError("Invalid audio source. Choose 'cloud', or 'local'.")
 
         result_dict = transcribe_full_audio(audio_file=temp_file_path,
-                                                 markdown_output=markdown_output,
+                                                 markdown_output=self.markdown_output,
                                                  llm_api_key=self.llm_api_key,
-                                                 save_transcript_chunks=self.save_transcript_chunks
+                                                 save_transcript_chunks=self.save_transcript_chunks,
+                                                 bitrate_quality=self.bitrate_quality
                                                  )
 
         result_dict["type"] = self.type
 
         # Clean up temporary file if it was downloaded
-        if audio_source == "cloud" and os.path.exists(temp_file_path):
+        if self.source == "cloud" and os.path.exists(temp_file_path):
             os.remove(temp_file_path)
             logger.info(f"Removed temporary file {temp_file_path}")
 

@@ -11,7 +11,6 @@ from ..converter.audio_to_text import transcribe_full_audio
 
 logger = logging.getLogger(__name__)
 
-
 class VideoLoader:
 
     def __init__(
@@ -23,12 +22,17 @@ class VideoLoader:
             llm_api_key: str = None,
             save_transcript_chunks: bool = False,
             temp_dir: str = 'temp',
+            markdown_output=True,
+            source,
+            bitrate_quality=9,
             **kwargs,
     ) -> None:
         """
         Initialize VideoLoader class with optional configurations for S3, GCS, and LLM API.
 
         Args:
+            source (str): Source of the video ('cloud' or 'local').
+            markdown_output (bool): Whether to convert the text to markdown format. Defaults to True.
             s3_client (boto3.client, optional): Boto3 S3 client instance for AWS operations. Defaults to None.
             document_aws_bucket (str, optional): Name of the S3 bucket for document storage. Defaults to None.
             gcs_client (google.cloud.storage.Client, optional): GCS client instance for Google Cloud operations. Defaults to None.
@@ -36,11 +40,14 @@ class VideoLoader:
             llm_api_key (str, optional): API key for the LLM service. Defaults to None.
             save_transcript_chunks (bool, optional): Whether to save chunk transcripts in final output. Defaults to False.
             temp_dir (str, optional): Path for temporary file storage. Defaults to "temp".
+            bitrate_quality (int, optional): Variable bitrate quality from 0-9 (9 being lowest). Defaults to 9.
 
         Raises:
             ValueError: If cloud storage clients are provided without bucket names
             OSError: If temp directory creation fails
         """
+        self.source = source
+        self.markdown_output = markdown_output
         self.s3_client = s3_client
         self.document_aws_bucket = document_aws_bucket
         self.gcs_client = gcs_client
@@ -48,6 +55,7 @@ class VideoLoader:
         self.llm_api_key = llm_api_key
         self.save_transcript_chunks = save_transcript_chunks
         self.type = "video"
+        self.bitrate_quality = bitrate_quality
 
         # Set up custom temp directory
         self.temp_dir = os.path.abspath(temp_dir)
@@ -121,26 +129,21 @@ class VideoLoader:
     #         logger.info(f"Successfully converted video to audio: {temp_audio_path}")
     #         return temp_audio_path
 
-    def get_text_from_video(self, file_path: str, markdown_output: bool = True, **kwargs) -> dict:
+    def get_text_from_video(self, file_path: str) -> dict:
         """
         Extract text from a video file.
 
         Args:
             file_path (str): Path to the video file.
-            markdown_output (bool): Whether to convert the text to markdown format. Defaults to True.
-            **kwargs: Additional options, including:
-                - source (str): Source of the video ('cloud' or 'local'). Defaults to 'cloud'.
 
         Returns:
             dict: Extracted text and related metadata from the video.
         """
 
-        video_source = kwargs.get("source", "cloud")
-
         logger.info("Starting text extraction from video...")
 
         # Load or download the video file
-        if video_source == "cloud":
+        if self.source == "cloud":
             fd, temp_file_path = tempfile.mkstemp()
             try:
                 temp_file_path = self.download_video(file_path, temp_file_path)
@@ -148,31 +151,32 @@ class VideoLoader:
                 # saved_video_path = self.save_file_locally(temp_file_path, os.getcwd(), 'video')
             finally:
                 os.close(fd)  # Close the file descriptor
-        elif video_source == "local":
+        elif self.source == "local":
             temp_file_path = file_path
             logger.info(f"Successfully loaded video file from local path {file_path}")
         else:
             raise ValueError("Invalid video source. Choose 'cloud', or 'local'.")
 
         # Convert the video to audio
-        audio_path = convert_video_to_audio(temp_file_path)
+        audio_path = convert_video_to_audio(video_file=temp_file_path, bitrate_quality=self.bitrate_quality)
         # saved_audio_path = self.save_file_locally(audio_path, os.getcwd(), 'audio')
 
         # Get text from audio
         result_dict = transcribe_full_audio(audio_file=audio_path,
-                                                 markdown_output=markdown_output,
+                                                 markdown_output=self.markdown_output,
                                                  llm_api_key=self.llm_api_key,
-                                                 save_transcript_chunks=self.save_transcript_chunks
+                                                 save_transcript_chunks=self.save_transcript_chunks,
+                                                 bitrate_quality=self.bitrate_quality
                                                  )
 
         result_dict["type"] = self.type
 
         # Clean up temporary files
         logger.info(f"Removing temporary files: {temp_file_path} and {audio_path}")
-        if video_source == "cloud" and os.path.exists(temp_file_path):
+        if self.source == "cloud" and os.path.exists(temp_file_path):
             os.remove(temp_file_path)
             logger.info(f"Removed temporary file {temp_file_path}")
-        if video_source == "cloud" and os.path.exists(audio_path):
+        if self.source == "cloud" and os.path.exists(audio_path):
             os.remove(audio_path)
             logger.info(f"Removed temporary file {audio_path}")
 
@@ -227,4 +231,4 @@ class VideoLoader:
         Returns:
             dict: A dictionary containing the extracted text and related metadata.
         """
-        return self.get_text_from_video(file_path=input_list[0], markdown_output=markdown_output, **kwargs)
+        return self.get_text_from_video(file_path=input_list[0])

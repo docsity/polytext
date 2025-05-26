@@ -62,7 +62,7 @@ def compress_and_convert_audio(input_path: str, bitrate_quality: int = 9) -> str
 
 def transcribe_full_audio(audio_file, markdown_output: bool = False,
                           llm_api_key: str = None,
-                          save_transcript_chunks: bool = False) -> dict:
+                          save_transcript_chunks: bool = False, bitrate_quality=9) -> dict:
     """
     Convenience function to transcribe an audio file into text, optionally formatted as Markdown.
 
@@ -76,17 +76,19 @@ def transcribe_full_audio(audio_file, markdown_output: bool = False,
             formatted as Markdown. Defaults to True.
         llm_api_key (str, optional): API key for the LLM service. If provided, it will override the default configuration.
         save_transcript_chunks (bool, optional): Whether to save chunk transcripts in final output. Defaults to False.
+        bitrate_quality (int, optional): Variable bitrate quality from 0-9 (9 being lowest). Defaults to 9
 
     Returns:
         str: The transcribed text from the audio file.
     """
-    converter = AudioToTextConverter(markdown_output=markdown_output, llm_api_key=llm_api_key)
+    converter = AudioToTextConverter(markdown_output=markdown_output, llm_api_key=llm_api_key,
+                                     bitrate_quality=bitrate_quality)
     return converter.transcribe_full_audio(audio_file, save_transcript_chunks)
 
 class AudioToTextConverter:
-    def __init__(self, transcription_model: str = "gemini-2.0-flash", transcription_model_provider: str = "google",
-                 k: int = 5, min_matches: int = 3, markdown_output: bool = True, llm_api_key: str = None,
-                 max_llm_tokens: int = 8000, temp_dir: str = "temp") -> None:
+    def __init__(self, transcription_model: str ="gemini-2.0-flash", transcription_model_provider: str ="google",
+                 k: int =5, min_matches: int =3, markdown_output: bool =True, llm_api_key: str =None, max_llm_tokens: int =8000, temp_dir: str ="temp",
+                 bitrate_quality: int =9):
         """
         Initialize the AudioToTextConverter class with a specified transcription model and provider.
 
@@ -99,12 +101,12 @@ class AudioToTextConverter:
             llm_api_key (str, optional): Override API key for language model. Defaults to None.
             max_llm_tokens (int): Maximum number of tokens for the language model output. Defaults to 8000.
             temp_dir (str): Directory for temporary files. Defaults to "temp".
+            bitrate_quality (int, optional): Variable bitrate quality from 0-9 (9 being lowest). Defaults to 9
 
         Raises:
             OSError: If temp directory creation fails
             ValueError: If invalid model or provider specified
         """
-        super().__init__()
         self.transcription_model = transcription_model
         self.transcription_model_provider = transcription_model_provider
         self.k = k
@@ -113,6 +115,7 @@ class AudioToTextConverter:
         self.llm_api_key = llm_api_key
         self.max_llm_tokens = max_llm_tokens
         self.chunked_audio = False
+        self.bitrate_quality = bitrate_quality
 
         # Set up custom temp directory
         self.temp_dir = os.path.abspath(temp_dir)
@@ -221,11 +224,6 @@ class AudioToTextConverter:
             if mime_type is None:
                 raise ValueError("Audio format not recognized")
 
-            content = []
-            if prompt_template:
-                content.append(prompt_template)
-            content.append({"mime_type": mime_type, "data": audio_data})
-
             response = client.models.generate_content(
                 model=self.transcription_model,
                 contents=[
@@ -255,6 +253,7 @@ class AudioToTextConverter:
         """Process a single audio chunk and return its transcript"""
         logger.info(f"Transcribing chunk {index + 1}...")
         transcript_dict = self.transcribe_audio(chunk["file_path"])
+        transcript = transcript_dict["transcript"]
 
         return index, transcript_dict
 
@@ -300,6 +299,16 @@ class AudioToTextConverter:
         else:
             used_file = audio_path
             logger.info("Audio file is already in supported format")
+            # If you need at least one of the two, apply compress_and_convert_audio
+            if needs_conversion:  # or needs_compression:
+                logger.info("Audio file needs conversion, processing file...")
+                processed_audio_path = compress_and_convert_audio(input_path=audio_path,
+                                                                  bitrate_quality=self.bitrate_quality)
+                used_file = processed_audio_path
+                logger.info(f"Audio file processed (conversion): {used_file}")
+            else:
+                used_file = audio_path
+                logger.info("Audio file is already in supported format")
 
         # Create chunker and extract chunks
         logger.info("Creating AudioChunker instance...")

@@ -8,7 +8,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from dotenv import load_dotenv
 load_dotenv(".env")
 
-from polytext.loader import AudioLoader
+from polytext.loader import OCRLoader
+from polytext.converter.ocr_to_text import OCRToTextConverter
 
 # Set up logging
 logging.basicConfig(level=logging.INFO,
@@ -20,29 +21,27 @@ def main():
     gcs_client = storage.Client()
 
     markdown_output = True
-    save_transcript_chunks = True
+    target_size = 1
     source = "local"
-    bitrate_quality = 8
 
-    # Initialize VideoLoader with GCS client and bucket
-    audio_loader = AudioLoader(
-        source=source,
-        markdown_output=markdown_output,
-        gcs_client=gcs_client,
-        document_gcs_bucket=os.getenv("GCS_BUCKET"),
+    # Initialize OCRLoader with GCS client and bucket
+    ocr_loader = OCRLoader(
+        gcs_client=None, #gcs_client,
+        document_gcs_bucket=None, #os.getenv("GCS_BUCKET"),
         # llm_api_key=os.getenv("GOOGLE_API_KEY"),
-        save_transcript_chunks=save_transcript_chunks,
-        bitrate_quality=bitrate_quality
+        target_size=target_size,
+        source=source,
+        markdown_output=markdown_output
     )
 
     # Define document data
-    file_path = "learning_resources/course_id=406/module_id=2658/id=31427/8434.mp4"
+    file_path = ""
 
-    local_file_path = "/Users/andreasolfanelli/Projects/polytext/lunedì alle 16-25.aac"
+    local_file_path = "/Users/marcodelgiudice/Projects/polytext/IMG_9695.tiff"
 
     try:
-        # Call get_document_text method
-        document_text = audio_loader.get_text_from_audio(
+        # Call get_text_from_ocr method
+        document_text = ocr_loader.get_text_from_ocr(
             file_path=local_file_path,
         )
 
@@ -55,14 +54,6 @@ def main():
             print(f"Transcript saved to {output_file}")
         except IOError as e:
             logging.error(f"Failed to save transcript: {str(e)}")
-
-        # print(f"Successfully extracted text ({len(document_text)} characters)")
-        # #print("Sample of extracted text:")
-        # #print(document_text[:500] + "...")  # Print first 500 chars
-        #
-        # # Optionally save the extracted text to a file
-        # with open("extracted_text.txt", "w", encoding="utf-8") as f:
-        #     f.write(document_text)
 
     except Exception as e:
         logging.error(f"Error extracting text: {str(e)}")
