@@ -20,23 +20,59 @@ logger = logging.getLogger(__name__)
 
 
 class BaseLoader:
+    def __init__(self, markdown_output=True, s3_client=None, document_aws_bucket=None, gcs_client=None,
+                 document_gcs_bucket=None, llm_api_key=None, provider: str ="google", temp_dir: str ="temp", **kwargs):
+        """
+        Initialize the OCRLoader with cloud storage and LLM configurations.
 
-    def get_text(self, input_list: list[str], markdown_output: bool = True, fallback_ocr: bool = True,
-                  provider: str = "google", llm_api_key: str = None, **kwargs):
+        Handles document loading and storage operations across AWS S3 and Google Cloud Storage.
+        Sets up temporary directory for processing files.
+
+        Args:.
+            markdown_output (bool, optional): If True, the extracted text will be formatted as Markdown.
+                Defaults to True.
+            s3_client (boto3.client, optional): AWS S3 client for S3 operations. Defaults to None.
+            document_aws_bucket (str, optional): S3 bucket name for document storage. Defaults to None.
+            gcs_client (google.cloud.storage.Client, optional): GCS client for Cloud Storage operations.
+                Defaults to None.
+            document_gcs_bucket (str, optional): GCS bucket name for document storage. Defaults to None.
+            llm_api_key (str, optional): API key for language model service. Defaults to None.
+            temp_dir (str, optional): Path for temporary file storage. Defaults to "temp".
+            provider (str, optional): Provider of the model. Default to "google".
+             **kwargs: Additional keyword arguments to pass to the underlying loader or extraction logic.
+                - target_size (int, optional): Target file size in bytes. Defaults to 1MB
+                - source (str): Source of the document. Must be either "cloud" or "local"
+                - fallback_ocr (bool, optional): If True, Optical Character Recognition (OCR) will be used as a fallback
+                  if direct text extraction fails, particularly for image-based content. Defaults to True.
+                - save_transcript_chunks (bool, optional): Whether to save chunk transcripts in final output. Defaults to False.
+                - bitrate_quality (int, optional): Variable bitrate quality from 0-9 (9 being lowest). Defaults to 9
+
+        Raises:
+            ValueError: If cloud storage clients are provided without bucket names
+            OSError: If temp directory creation fails
+        """
+        self.markdown_output = markdown_output
+        self.s3_client = s3_client
+        self.document_aws_bucket = document_aws_bucket
+        self.gcs_client = gcs_client
+        self.document_gcs_bucket = document_gcs_bucket
+        self.llm_api_key = llm_api_key
+        self.temp_dir = temp_dir
+        self.provider = provider
+        self.kwargs = kwargs
+        self.target_size = kwargs.get("target_size", 1)
+        self.source = kwargs.get("source", "cloud")
+        self.fallback_ocr = kwargs.get("fallback_ocr", True)
+        self.save_transcript_chunks = kwargs.get("save_transcript_chunks", False)
+        self.bitrate_quality = kwargs.get("bitrate_quality", 9)
+
+
+    def get_text(self, input_list: list[str]):
         """
             Extracts text content from one or more specified URLs (only for images), with optional formatting and OCR fallback.
 
             Args:
                 input_list (list[str]): A list of one or more URLs (strings) from which to extract text.
-                markdown_output (bool, optional): If True, the extracted text will be formatted as Markdown. Defaults to True.
-                fallback_ocr (bool, optional): If True, Optical Character Recognition (OCR) will be used as a fallback
-                                               if direct text extraction fails, particularly for image-based content.
-                                               Defaults to True.
-                provider (str, optional): The name of the AI provider to use for text extraction or OCR.
-                                          Defaults to "google".
-                llm_api_key (str, optional): The API key required for authentication with the chosen LLM provider.
-                                             Defaults to None.
-                **kwargs: Additional keyword arguments to pass to the underlying loader or extraction logic.
 
             Returns:
                 dict: A dictionary containing the aggregated extracted data. The structure is as follows:
@@ -48,6 +84,8 @@ class BaseLoader:
                                           processed source. Defaults to "not provided" if unavailable.
               - **"completion_model_provider"** (str): The provider of the completion model, derived from the first
                                                    processed source. Defaults to "not provided" if unavailable.
+              - **"text_chunks"** (list): The list of individual chunks if chunking has been applied.
+              - **"type"** (str): The type of the single source (ocr, video, audio, text, ...).
 
             Raises:
                 TypeError: If the 'input' parameter is not a list of strings.
@@ -58,13 +96,12 @@ class BaseLoader:
 
         first_file_url = input_list[0]
 
-        storage_client = self.initiate_storage(input=first_file_url, **kwargs)
-        loader_class = self.init_loader_class(input=first_file_url, storage_client=storage_client, llm_api_key=llm_api_key, **kwargs)
+        storage_client = self.initiate_storage(input=first_file_url)
+        loader_class = self.init_loader_class(input=first_file_url, storage_client=storage_client, llm_api_key=self.llm_api_key, **self.kwargs)
 
-        return self.run_loader_class(loader_class=loader_class, input=input_list, markdown_output=markdown_output,
-                            fallback_ocr=fallback_ocr, provider=provider, llm_api_key=llm_api_key, **kwargs)
+        return self.run_loader_class(loader_class=loader_class, input_list=input_list)
 
-    def initiate_storage(self, input: str, **kwargs) -> dict:
+    def initiate_storage(self, input: str) -> dict:
         """
             Initializes and returns a client and relevant details for various cloud storage services or web URLs.
 
@@ -116,13 +153,12 @@ class BaseLoader:
                 "document_gcs_bucket": bucket,
                 "file_path": file_path,
             }
-        elif input.startswith("http://") or input.startswith("https://") or input.startswith("www.") or input.startswith("www.youtube") or kwargs.get('source'):
+        elif input.startswith("http://") or input.startswith("https://") or input.startswith("www.") or input.startswith("www.youtube") or self.source == "local":
             return dict()
         else:
             raise NotImplementedError
 
-    @staticmethod
-    def init_loader_class(input: str, storage_client: dict, llm_api_key: str, **kwargs) -> any:
+    def init_loader_class(self, input: str, storage_client: dict, llm_api_key: str, **kwargs) -> any:
         """
             Initializes and returns the appropriate content loader class based on the input URL's type.
 
@@ -157,19 +193,19 @@ class BaseLoader:
         # 1. URL - YouTube o Web
         if parsed.scheme in ["http", "https"]:
             if "youtube.com" in parsed.netloc or "youtu.be" in parsed.netloc:
-                return YoutubeTranscriptLoader(llm_api_key=llm_api_key, **kwargs)
+                return YoutubeTranscriptLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, **kwargs)
             else:
-                return HtmlLoader()
+                return HtmlLoader(markdown_output=self.markdown_output)
         # 2. Path file
         elif mime_type:
             if mime_type.startswith("text"):
                 return TextLoader(**kwargs)
             elif mime_type.startswith("audio"):
-                return AudioLoader(llm_api_key=llm_api_key, **kwargs)
+                return AudioLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, **kwargs)
             elif mime_type.startswith("video"):
-                return VideoLoader(llm_api_key=llm_api_key, **kwargs)
+                return VideoLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, **kwargs)
             # elif mime_type.startswith("image"):
-            #     return ImageLoader()
+            #     return OCRLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, **kwargs)
             else:
                 raise ValueError(f"Unsupported MIME type: {mime_type}")
 
@@ -185,7 +221,7 @@ class BaseLoader:
         elif input_list[0].startswith("gcs://"):
             prefix = "gcs://"
         else:
-            return {"file_path": input_list}
+            return {"file_path": input_list[0]}
 
         path = input_list[0].replace(prefix, "")
         parts = path.split("/", 1)
@@ -199,24 +235,23 @@ class BaseLoader:
                 "bucket": bucket,
                 "file_path": file_path
             }
+        else:
+            # Case with multiple elements
+            file_paths = []
 
-        # Case with multiple elements
-        file_paths = []
+            for path in input_list:
+                path_clean = path.replace(prefix, "")
+                path_parts = path_clean.split("/", 1)
+                file_path = path_parts[1] if len(path_parts) > 1 else ""
+                file_paths.append(file_path)
 
-        for path in input_list:
-            path_clean = path.replace(prefix, "")
-            path_parts = path_clean.split("/", 1)
-            file_path = path_parts[1] if len(path_parts) > 1 else ""
-            file_paths.append(file_path)
+            return {
+                "file_url": input_list[0],
+                "bucket": bucket,
+                "file_path": file_paths
+            }
 
-        return {
-            "file_url": input_list[0],
-            "bucket": bucket,
-            "file_path": file_paths
-        }
-
-    def run_loader_class(self, loader_class: any, input: list[str], markdown_output: bool = True, fallback_ocr: bool = True,
-                         provider: str = "google", llm_api_key: str = None, **kwargs ) -> dict:
+    def run_loader_class(self, loader_class: any, input_list: list[str]) -> dict:
         """
              Executes the appropriate loader class to extract content from input URLs,
              handling single or multiple image inputs with aggregation.
@@ -231,14 +266,7 @@ class BaseLoader:
                  loader_class (object): An instance of a content loader class
                                                     (e.g., HtmlLoader, ImageLoader) that
                                                     knows how to load the specific content type.
-                 input (list[str]): A list of one or more URLs (strings) to process.
-                 markdown_output (bool, optional): If True, the extracted text will be
-                                                   formatted as Markdown. Defaults to True.
-                 fallback_ocr (bool, optional): If True, OCR will be used as a fallback
-                                                for image-based content. Defaults to True.
-                 provider (str, optional): The AI provider to use. Defaults to "google".
-                 llm_api_key (str, optional): The API key for the LLM provider. Defaults to None.
-                 **kwargs: Additional keyword arguments to pass to the loader's `load` method.
+                 input_list (list[str]): A list of one or more URLs (strings) to process.
 
              Returns:
                  dict: A dictionary containing the extracted content and metadata.
@@ -254,18 +282,18 @@ class BaseLoader:
         result_dict = {}
 
         # Empty Input
-        if not input:
+        if not input_list:
             raise ValueError("Input list is empty.")
 
-        first_mime_type, _ = mimetypes.guess_type(input[0])
-        is_multi_input = len(input) > 1
+        first_mime_type, _ = mimetypes.guess_type(input_list[0])
+        is_multi_input = len(input_list) > 1
         is_image_type = first_mime_type and first_mime_type.startswith("image")
 
         # More images inputs (parallelization)
         if is_multi_input and is_image_type:
             with ThreadPoolExecutor() as executor:
                 # Map each URL to a future call of the load method
-                futures = {executor.submit(loader_class.load, input_list=self.parse_input(input_list=[s])["file_path"], markdown_output=markdown_output, **kwargs): s for s in input}
+                futures = {executor.submit(loader_class.load, input_path=self.parse_input(input_list=[s])["file_path"]): s for s in input_list}
 
                 is_first_iteration = True
                 for future in as_completed(futures):
@@ -286,11 +314,12 @@ class BaseLoader:
                         result_dict["prompt_tokens"] += current_dict_result.get("prompt_tokens", 0)
 
         elif is_multi_input and not is_image_type:
-            error_msg = f"Unsupported input: multiple inputs ({len(input)} provided) are not all image types (first type: {first_mime_type}). Multi-threading is only supported for multiple images."
+            error_msg = f"Unsupported input: multiple inputs ({len(input_list)} provided) are not all image types (first type: {first_mime_type}). Multi-threading is only supported for multiple images."
             logger.error(error_msg)
             raise ValueError(error_msg)
 
         else:
-            result_dict = loader_class.load(input_list=self.parse_input(input)["file_path"], markdown_output=markdown_output, **kwargs)
+            print(self.parse_input(input_list))
+            result_dict = loader_class.load(input_path=self.parse_input(input_list)["file_path"])
 
         return result_dict

@@ -274,7 +274,8 @@ class OCRToTextConverter:
                 "completion_tokens": response.usage_metadata.candidates_token_count,
                 "prompt_tokens": response.usage_metadata.prompt_token_count,
                 "completion_model": self.ocr_model,
-                "completion_model_provider": self.ocr_model_provider
+                "completion_model_provider": self.ocr_model_provider,
+                "text_chunks": "not provided",
             }
 
             logger.info(f"OCR performed using {self.ocr_model} in {time_elapsed:.2f} seconds")

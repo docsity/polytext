@@ -42,6 +42,7 @@ class MarkdownLoader:
         self.document_aws_bucket = document_aws_bucket
         self.gcs_client = gcs_client
         self.document_gcs_bucket = document_gcs_bucket
+        self.type = "markdown"
 
         # Set up custom temp directory
         self.temp_dir = os.path.abspath(temp_dir)
@@ -155,12 +156,26 @@ class MarkdownLoader:
         else:
             raise ValueError("Invalid markdown source. Choose 'cloud' or 'local'.")
 
-        return {
+        result_dict = {
             "text": text_from_markdown,
             "completion_tokens": 0,
             "prompt_tokens": 0,
             "completion_model": "not provided",
-            "completion_model_provider": "not provided"
+            "completion_model_provider": "not provided",
+            "text_chunk": "not provided",
+            "type": self.type,
         }
 
+        return result_dict
 
+    def load(self, input_path: str) -> dict:
+        """
+        Load and extract text content from markdown file.
+
+        Args:
+            input_path (str): A path to the ocr file.
+
+        Returns:
+            dict: A dictionary containing the extracted text and related metadata.
+        """
+        return self.get_text_from_markdown(file_path=input_path)

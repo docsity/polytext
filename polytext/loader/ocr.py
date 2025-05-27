@@ -46,6 +46,7 @@ class OCRLoader:
         self.document_gcs_bucket = document_gcs_bucket
         self.llm_api_key = llm_api_key
         self.target_size = target_size
+        self.type = "ocr"
 
         # Set up custom temp directory
         self.temp_dir = os.path.abspath(temp_dir)
@@ -111,10 +112,12 @@ class OCRLoader:
         else:
             raise ValueError("Invalid OCR source. Choose 'cloud' or 'local'.")
 
-        text_from_ocr = get_ocr(file_for_ocr=temp_file_path,
+        result_dict = get_ocr(file_for_ocr=temp_file_path,
                                 markdown_output=self.markdown_output,
                                 llm_api_key=self.llm_api_key,
                                 target_size=self.target_size)
+
+        result_dict["type"] = self.type
 
         # Clean up temporary file if it was downloaded
         if self.source == "cloud":
@@ -122,4 +125,16 @@ class OCRLoader:
                 os.remove(temp_file_path)
                 logger.info(f"Removed temporary file {temp_file_path}")
 
-        return text_from_ocr
+        return result_dict
+
+    def load(self, input_path: str) -> dict:
+        """
+        Load and extract text content from ocr file.
+
+        Args:
+            input_path (str): A path to the ocr file.
+
+        Returns:
+            dict: A dictionary containing the extracted text and related metadata.
+        """
+        return self.get_text_from_ocr(file_path=input_path)

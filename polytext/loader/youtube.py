@@ -20,17 +20,20 @@ class YoutubeTranscriptLoader:
     Class to download, and process transcripts from YouTube videos.
     """
 
-    def __init__(self, llm_api_key: str = None, save_transcript_chunks: bool = False, temp_dir: str = 'temp') -> None:
+    def __init__(self, llm_api_key: str = None, markdown_output: bool = True, temp_dir: str = 'temp', **kwargs) -> None:
         """
         Initialize YoutubeTranscriptLoader class with API key and configuration.
 
         Args:
             llm_api_key (str, optional): API key for the LLM used for processing.
             save_transcript_chunks (bool, optional): Whether to include processed chunks in final output.
+            markdown_output (bool, default: True): Whether to format the extracted text as Markdown.
             temp_dir (str, optional): Temporary directory to store intermediate transcript files.
         """
         self.llm_api_key = llm_api_key
-        self.save_transcript_chunks = save_transcript_chunks
+        self.save_transcript_chunks = kwargs.get("save_transcript_chunks", False)
+        self.temp_dir = temp_dir
+        self.markdown_output = markdown_output
         self.type = "youtube"
 
         self.temp_dir = os.path.abspath(temp_dir)
@@ -131,13 +134,12 @@ class YoutubeTranscriptLoader:
 
         return transcript_text
 
-    def get_text_from_youtube(self, video_url: str, markdown_output: bool = True, **kwargs) -> dict:
+    def get_text_from_youtube(self, video_url: str) -> dict:
         """
         Get and optionally format transcript from a YouTube video using a language model.
 
         Args:
             video_url (str): URL of the YouTube video.
-            markdown_output (bool, optional): Whether to return the result in Markdown format.
 
         Returns:
             dict: Dictionary containing:
@@ -157,7 +159,7 @@ class YoutubeTranscriptLoader:
 
         result_dict = text_to_md(
             transcript_text=transcript_text,
-            markdown_output=markdown_output,
+            markdown_output=self.markdown_output,
             llm_api_key=self.llm_api_key,
             output_path=self.output_path,
             save_transcript_chunks=self.save_transcript_chunks
@@ -167,16 +169,14 @@ class YoutubeTranscriptLoader:
 
         return result_dict
 
-    def load(self, input_list: list[str], markdown_output: bool = True, **kwargs) -> dict:
+    def load(self, input_path: str) -> dict:
         """
         Extract text from a YouTube video.
 
         Args:
-            input_list (list[str]): A list containing one YouTube video URLs.
-            markdown_output (bool, default: True): Whether to format the extracted text as Markdown.
-            **kwargs: Additional options passed to the extractor.
+            input_path (list[str]): A list containing one YouTube video URLs.
 
         Returns:
             dict: A dictionary containing the extracted text and metadata.
         """
-        return self.get_text_from_youtube(video_url=input_list[0], markdown_output=markdown_output, **kwargs)
+        return self.get_text_from_youtube(video_url=input_path)

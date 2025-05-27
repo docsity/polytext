@@ -1,6 +1,5 @@
 import os
 import sys
-from google.cloud import storage
 import logging
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -8,7 +7,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from dotenv import load_dotenv
 load_dotenv(".env")
 
-from polytext.loader import AudioLoader
+from polytext.loader import BaseLoader
 
 # Set up logging
 logging.basicConfig(level=logging.INFO,
@@ -16,23 +15,17 @@ logging.basicConfig(level=logging.INFO,
 
 
 def main():
-    # Initialize GCS client
-    gcs_client = storage.Client()
-
     markdown_output = True
     save_transcript_chunks = True
     source = "local"
     bitrate_quality = 8
 
-    # Initialize VideoLoader with GCS client and bucket
-    audio_loader = AudioLoader(
+    # Initialize BaseLoader
+    loader = BaseLoader(
         source=source,
         markdown_output=markdown_output,
-        gcs_client=gcs_client,
-        document_gcs_bucket=os.getenv("GCS_BUCKET"),
-        # llm_api_key=os.getenv("GOOGLE_API_KEY"),
-        save_transcript_chunks=save_transcript_chunks,
-        bitrate_quality=bitrate_quality
+        save_transcript_chunks = save_transcript_chunks,
+        bitrate_quality = bitrate_quality
     )
 
     # Define document data
@@ -40,32 +33,28 @@ def main():
 
     local_file_path = "/Users/andreasolfanelli/Projects/polytext/lunedì alle 16-25.aac"
 
+    # Call get_text method
+    result_dict = loader.get_text(
+        input_list=[local_file_path],
+    )
+
+    import ipdb; ipdb.set_trace()
+
     try:
-        # Call get_document_text method
-        document_text = audio_loader.get_text_from_audio(
-            file_path=local_file_path,
-        )
+        output_file = "transcript.md" if markdown_output else "transcript.txt"
+        with open(output_file, "w", encoding="utf-8") as f:
+            f.write(result_dict["text"])
+        print(f"Transcript saved to {output_file}")
+    except IOError as e:
+        logging.error(f"Failed to save transcript: {str(e)}")
 
-        import ipdb; ipdb.set_trace()
-
-        try:
-            output_file = "transcript.md" if markdown_output else "transcript.txt"
-            with open(output_file, "w", encoding="utf-8") as f:
-                f.write(document_text["text"])
-            print(f"Transcript saved to {output_file}")
-        except IOError as e:
-            logging.error(f"Failed to save transcript: {str(e)}")
-
-        # print(f"Successfully extracted text ({len(document_text)} characters)")
-        # #print("Sample of extracted text:")
-        # #print(document_text[:500] + "...")  # Print first 500 chars
-        #
-        # # Optionally save the extracted text to a file
-        # with open("extracted_text.txt", "w", encoding="utf-8") as f:
-        #     f.write(document_text)
-
-    except Exception as e:
-        logging.error(f"Error extracting text: {str(e)}")
+    # print(f"Successfully extracted text ({len(document_text)} characters)")
+    # #print("Sample of extracted text:")
+    # #print(document_text[:500] + "...")  # Print first 500 chars
+    #
+    # # Optionally save the extracted text to a file
+    # with open("extracted_text.txt", "w", encoding="utf-8") as f:
+    #     f.write(document_text)
 
 
 if __name__ == "__main__":

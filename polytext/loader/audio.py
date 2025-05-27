@@ -80,7 +80,7 @@ class AudioLoader:
             return temp_file_path
         raise AttributeError('Storage client not provided')
 
-    def get_text_from_audio(self, file_path: str, **kwargs) -> dict:
+    def get_text_from_audio(self, file_path: str) -> dict:
         """
         Extract text from an audio file by transcribing it.
 
@@ -90,8 +90,6 @@ class AudioLoader:
 
         Args:
             file_path (str): Path to the audio file. This can be a cloud storage path or a local file path.
-            **kwargs: Additional options, including:
-                - source (str): Source of the Audio ('cloud' or 'local'). Defaults to 'cloud'.
 
         Returns:
             str: The transcribed text from the audio file.
@@ -133,17 +131,14 @@ class AudioLoader:
 
         return result_dict
 
-    def load(self, input_list: list[str], markdown_output: bool = True, **kwargs) -> dict:
+    def load(self, input_path: str) -> dict:
         """
         Extract text from an audio file.
 
         Args:
-            input_list (list[str]): A list containing one audio file paths or URLs.
-            markdown_output (bool, default: True): Whether to format the extracted text as Markdown.
-            **kwargs: Additional options passed to the audio extraction method, such as:
-                      - source (str): Source of the audio ('cloud' or 'local'). Defaults to 'cloud'.
+            input_path (str): The audio file paths or URL.
 
         Returns:
             dict: A dictionary containing the transcribed text and related metadata.
         """
-        return self.get_text_from_audio(file_path=input_list[0], markdown_output=markdown_output, **kwargs)
+        return self.get_text_from_audio(file_path=input_path)

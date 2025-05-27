@@ -2,7 +2,7 @@ import os
 import sys
 import logging
 
-from polytext.loader import HtmlLoader
+from polytext.loader import BaseLoader
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
@@ -17,14 +17,16 @@ url = 'https://it.wikipedia.org/wiki/Diritto_privato'
     # 'https://www.youmath.it/domande-a-risposte/view/5393-integrale-cos2x.html'
 
 def main():
-        html_loader = HtmlLoader(is_text=False)
-        markdown_output = True
+    markdown_output = True
 
-        try:
-            result = html_loader.get_text_from_url(url=url, markdown_output=markdown_output)
-            return result
-        except Exception as e:
-            logging.error(f"Error extracting markdown or plain text: {str(e)}")
+    loader = BaseLoader(markdown_output=markdown_output)
+
+    try:
+        result_dict = loader.get_text(input_list=[url])
+        return result_dict
+
+    except Exception as e:
+        raise RuntimeError(f"Error extracting markdown or plain text: {str(e)}")
 
 if __name__ == "__main__":
     main()

@@ -14,6 +14,7 @@ from google.api_core import exceptions as google_exceptions
 from ..prompts.transcription import AUDIO_TO_MARKDOWN_PROMPT, AUDIO_TO_PLAIN_TEXT_PROMPT
 from ..processor.audio_chunker import AudioChunker
 from ..processor.text_merger import TextMerger
+from ..converter import BaseConverter
 
 logger = logging.getLogger(__name__)
 
@@ -97,7 +98,7 @@ class AudioToTextConverter:
             transcription_model_provider (str): Provider of transcription service. Defaults to "google".
             k (int): Number of words to use when searching for overlap between chunks. Defaults to 5.
             min_matches (int): Minimum matching words for chunk merging. Defaults to 3.
-            markdown_output (bool): Enable markdown formatting in output. Defaults to True.
+            markdown_output (bool): Enable Markdown formatting in output. Defaults to True.
             llm_api_key (str, optional): Override API key for language model. Defaults to None.
             max_llm_tokens (int): Maximum number of tokens for the language model output. Defaults to 8000.
             temp_dir (str): Directory for temporary files. Defaults to "temp".
@@ -156,7 +157,7 @@ class AudioToTextConverter:
 
         if self.markdown_output:
             logger.info("Using prompt for markdown format")
-            # Convert the text to markdown format
+            # Convert the text to Markdown format
             prompt_template = AUDIO_TO_MARKDOWN_PROMPT
         else:
             logger.info("Using prompt for plain text format")
@@ -196,23 +197,23 @@ class AudioToTextConverter:
         if file_size > 20 * 1024 * 1024:
             logger.info("Audio file size exceeds 20MB, uploading file before transcription")
 
-            myfile = client.files.upload(file=audio_file)
+            my_file = client.files.upload(file=audio_file)
 
             response = client.models.count_tokens(
                 model='gemini-2.0-flash',
-                contents=[myfile]
+                contents=[my_file]
             )
             logger.info(f"File size in tokens: {response}")
 
-            logger.info(f"Uploaded file: {myfile.name} - Starting transcription...")
+            logger.info(f"Uploaded file: {my_file.name} - Starting transcription...")
 
             response = client.models.generate_content(
                 model=self.transcription_model,
-                contents=[prompt_template, myfile],
+                contents=[prompt_template, my_file],
                 config=config
             )
 
-            client.files.delete(name=myfile.name)
+            client.files.delete(name=my_file.name)
 
         else:
             logger.info("Audio file size does not exceed 20MB")
@@ -360,9 +361,8 @@ class AudioToTextConverter:
         if len(chunks) > 1:
             chunker.cleanup_temp_files(chunks)
 
+        # Clean up the temporary compressed file
+        if processed_audio_path and os.path.exists(processed_audio_path):
+            os.remove(processed_audio_path)
+
         return result_dict
-            # TODO: si puo togliere il finally?
-            # finally:
-            #     # Clean up the temporary compressed file
-            #     if processed_audio_path and os.path.exists(processed_audio_path):
-            #         os.remove(processed_audio_path)

@@ -39,7 +39,7 @@ def get_document_text(doc_data: dict, page_range: tuple[int, int] = None) -> str
     return loader.get_document_text(doc_data, page_range)
 
 
-def extract_text_from_file(file_path: str, page_range: tuple[int, int] = None, backend: str = 'auto') -> str:
+def extract_text_from_file(file_path: str, page_range: tuple[int, int] = None, backend: str = 'auto') -> dict:
     """
     Convenience function to extract text from a local file.
 
@@ -80,6 +80,7 @@ class TextLoader:
             document_aws_bucket: str = None,
             gcs_client: object = None,
             document_gcs_bucket: str = None,
+            temp_dir: str = 'temp',
             **kwargs,
     ) -> None:
         """
@@ -95,6 +96,11 @@ class TextLoader:
         self.document_gcs_bucket = document_gcs_bucket
         self.type = "text"
 
+        # Set up custom temp directory
+        self.temp_dir = os.path.abspath(temp_dir)
+        os.makedirs(self.temp_dir, exist_ok=True)
+        tempfile.tempdir = self.temp_dir
+
     def download_document(self, file_path: str, temp_file_path: str) -> str:
         """
         Download a document file from S3 or GCS to a local temporary path.
@@ -107,7 +113,7 @@ class TextLoader:
             temp_file_path (str): Local path to save the downloaded file
 
         Returns:
-            str: Path to the downloaded file (may be converted to PDF)
+            str: Path to the downloaded file (maybe converted to PDF)
 
         Raises:
             ClientError: If download operation fails
@@ -293,108 +299,7 @@ class TextLoader:
 
         return text
 
-    def extract_text_from_file(self, bucket: str, file_path: str, page_range: tuple[int, int] = None, backend: str = 'auto') -> str:
-        """
-        Extract text from a document using PyPDF as fallback backend.
-
-        Similar to get_document_text but uses PyPDF for extraction. Useful when
-        PyMuPDF fails to extract text properly.
-
-        Args:
-            bucket (str): S3 bucket name
-            file_path (str): Path to file in S3
-            page_range (tuple, optional): Tuple of (start_page, end_page), 1-indexed. Note: When converting from .odt or .rtf files, the page range selection might not exactly match the original document's page numbers due to formatting differences during PDF conversion and variations in how LibreOffice renders these formats.
-
-        Returns:
-            str: Extracted text from the document
-
-        Raises:
-            EmptyDocument: If extracted text is empty or fails quality checks
-            ExceededMaxPages: If requested page range is invalid
-        """
-        logger.info("Using PyPDF")
-
-        fd, temp_file_path = tempfile.mkstemp()
-
-        if os.path.splitext(file_path)[1].lower() != ".pdf":
-            logger.info("Converting file to PDF")
-            file_prefix = file_path
-            temp_file_path = self.convert_doc_to_pdf(bucket=bucket, file_prefix=file_prefix, input_file=temp_file_path)
-            logger.debug(f"temp_file_path post conversion to pdf: {temp_file_path}")
-            file = open(temp_file_path, "rb")
-            pdf_reader = PdfReader(file)
-        else:
-            temp_file_path = self.download_document(file_path, temp_file_path)
-            logger.debug(f"temp_file_path: {temp_file_path}")
-            try:
-                file = open(temp_file_path, "rb")
-                pdf_reader = PdfReader(file)
-                logger.info(f"Successfully opened file with temp_file_path: {temp_file_path}")
-            except Exception as e:
-                logger.info("Converting file to PDF")
-                file_prefix = file_path
-                temp_file_path = self.convert_doc_to_pdf(bucket=bucket, file_prefix=file_prefix,
-                                                         input_file=temp_file_path)
-                logger.debug(f"temp_file_path post conversion to pdf: {temp_file_path}")
-                file = open(temp_file_path, "rb")
-                pdf_reader = PdfReader(file)
-
-        text = ""
-        last_pages_text = ""
-        last_page_index_to_start = 10
-        total_pages = len(pdf_reader.pages)
-
-        # Validate and adjust page range
-        start_page, end_page = self.validate_page_range(page_range, total_pages)
-
-        for page_number in range(start_page, end_page):
-            page = pdf_reader.pages[page_number]
-            page_text = page.extract_text()
-            page_text = self.clean_text(page_text)
-            text += page_text
-
-            if page.page_number >= (total_pages - last_page_index_to_start):
-                last_pages_text += page_text
-
-            # Early termination checks
-            if len(text) == 0 and page.page_number == 10:
-                message = "First 10 pages of the document are empty"
-                logger.info(message)
-                os.remove(temp_file_path)
-                raise EmptyDocument(message=message, code=998)
-            if len(text) < 800 and page.page_number == 20:
-                message = "First 20 pages of the document have less than 800 chars"
-                logger.info(message)
-                os.remove(temp_file_path)
-                raise EmptyDocument(message=message, code=998)
-            if (
-                    total_pages >= 500
-                    and page.page_number == 10
-                    and self.has_repeated_rows(text=text, threshold=100)
-            ):
-                message = "First 10 pages of the document have 100 repeated rows"
-                logger.info(message)
-                os.remove(temp_file_path)
-                raise EmptyDocument(message=message, code=998)
-            if (
-                    total_pages >= 500
-                    and (page.page_number == total_pages - 1)
-                    and self.has_repeated_rows(text=last_pages_text, threshold=100)
-            ):
-                message = "Last 10 pages of the document have 100 repeated rows"
-                logger.info(message)
-                os.remove(temp_file_path)
-                raise EmptyDocument(message=message, code=998)
-
-        if len(text) == 0:
-            message = "No text detected"
-            logger.info(message)
-            raise EmptyDocument(message=message, code=998)
-
-        os.remove(temp_file_path)
-        return text
-
-    def extract_text_from_file(self, file_path: str, page_range: tuple[int, int] = None, backend: str = 'auto') -> str:
+    def extract_text_from_file(self, file_path: str, page_range: tuple[int, int] = None, backend: str = 'auto') -> dict:
         """
         Extract text from a local file using specified backend.
 
@@ -430,88 +335,94 @@ class TextLoader:
         file_ext = os.path.splitext(file_path)[1].lower()
         temp_pdf_path = None
 
-        try:
-            if file_ext != '.pdf':
-                logger.info(f"Converting {file_ext} file to PDF...")
-                fd, temp_pdf_path = tempfile.mkstemp(suffix=".pdf")
-                os.close(fd)  # Close the file descriptor
+        if file_ext != '.pdf':
+            logger.info(f"Converting {file_ext} file to PDF...")
+            fd, temp_pdf_path = tempfile.mkstemp(suffix=".pdf")
+            os.close(fd)  # Close the file descriptor
 
-                # Convert to PDF using the converter
-                pdf_path = convert_to_pdf(input_file=file_path, original_file=file_path, output_file=temp_pdf_path)
-            else:
-                pdf_path = file_path
+            # Convert to PDF using the converter
+            pdf_path = convert_to_pdf(input_file=file_path, original_file=file_path, output_file=temp_pdf_path)
+        else:
+            pdf_path = file_path
 
-            text = ""
+        text = ""
 
-            # Extract text using PyMuPDF
-            if backend == 'pymupdf':
-                logger.debug("Using PyMuPDF for text extraction")
+        # Extract text using PyMuPDF
+        if backend == 'pymupdf':
+            logger.debug("Using PyMuPDF for text extraction")
+            try:
+                pdf_document = fitz.open(pdf_path)
                 try:
-                    pdf_document = fitz.open(pdf_path)
-                    try:
-                        total_pages = pdf_document.page_count
-
-                        # Validate and adjust page range
-                        start_page, end_page = self.validate_page_range(page_range, total_pages)
-
-                        for page_number in range(start_page, end_page):
-                            page = pdf_document.load_page(page_number)
-                            page_text = page.get_text("text", flags=16)  # Use cleaner text extraction
-                            page_text = self.clean_text(page_text)
-                            text += page_text
-
-                    finally:
-                        pdf_document.close()
-
-                    # Check for strange characters that might indicate PyMuPDF issues
-                    if "������������������������������������������" in text:
-                        logger.warning("PyMuPDF extracted unusual characters. Switching to PyPDF.")
-                        backend = 'pypdf'
-                    elif len(text.strip()) == 0:
-                        logger.warning("PyMuPDF extracted no text. Switching to PyPDF.")
-                        backend = 'pypdf'
-                    else:
-                        # If text was successfully extracted, return it
-                        return text
-
-                except Exception as e:
-                    logger.warning(f"PyMuPDF extraction failed: {str(e)}. Trying PyPDF.")
-                    backend = 'pypdf'  # Try PyPDF as a fallback
-
-            # Extract text using PyPDF
-            if backend == 'pypdf':
-                logger.debug("Using PyPDF for text extraction")
-                with open(pdf_path, "rb") as file:
-                    pdf_reader = PdfReader(file)
-                    total_pages = len(pdf_reader.pages)
+                    total_pages = pdf_document.page_count
 
                     # Validate and adjust page range
                     start_page, end_page = self.validate_page_range(page_range, total_pages)
 
-                    # Reset text if we're falling back from PyMuPDF
-                    text = ""
-
                     for page_number in range(start_page, end_page):
-                        page = pdf_reader.pages[page_number]
-                        page_text = page.extract_text()
+                        page = pdf_document.load_page(page_number)
+                        page_text = page.get_text("text", flags=16)  # Use cleaner text extraction
                         page_text = self.clean_text(page_text)
                         text += page_text
 
-            if not text.strip():
-                message = "No text detected in the document"
-                logger.info(message)
-                raise EmptyDocument(message=message, code=998)
+                finally:
+                    pdf_document.close()
 
-            return text
+                # Check for strange characters that might indicate PyMuPDF issues
+                if "������������������������������������������" in text:
+                    logger.warning("PyMuPDF extracted unusual characters. Switching to PyPDF.")
+                    backend = 'pypdf'
+                elif len(text.strip()) == 0:
+                    logger.warning("PyMuPDF extracted no text. Switching to PyPDF.")
+                    backend = 'pypdf'
+                else:
+                    # If text was successfully extracted, return it
+                    return text
 
-        # TODO: necessario finally? perchè lato tipizzazione aoutput da warning (Expected type 'str', got 'None' instead)
-        finally:
-            # Clean up temporary file
-            if temp_pdf_path and os.path.exists(temp_pdf_path):
-                try:
-                    os.remove(temp_pdf_path)
-                except Exception as e:
-                    logger.warning(f"Failed to remove temporary file {temp_pdf_path}: {str(e)}")
+            except Exception as e:
+                logger.warning(f"PyMuPDF extraction failed: {str(e)}. Trying PyPDF.")
+                backend = 'pypdf'  # Try PyPDF as a fallback
+
+        # Extract text using PyPDF
+        if backend == 'pypdf':
+            logger.debug("Using PyPDF for text extraction")
+            with open(pdf_path, "rb") as file:
+                pdf_reader = PdfReader(file)
+                total_pages = len(pdf_reader.pages)
+
+                # Validate and adjust page range
+                start_page, end_page = self.validate_page_range(page_range, total_pages)
+
+                # Reset text if we're falling back from PyMuPDF
+                text = ""
+
+                for page_number in range(start_page, end_page):
+                    page = pdf_reader.pages[page_number]
+                    page_text = page.extract_text()
+                    page_text = self.clean_text(page_text)
+                    text += page_text
+
+        if not text.strip():
+            message = "No text detected in the document"
+            logger.info(message)
+            raise EmptyDocument(message=message, code=998)
+
+        # Clean up temporary file
+        if temp_pdf_path and os.path.exists(temp_pdf_path):
+            try:
+                os.remove(temp_pdf_path)
+            except Exception as e:
+                logger.warning(f"Failed to remove temporary file {temp_pdf_path}: {str(e)}")
+
+        result_dict = {
+            "text": text,
+            "completion_tokens": 0,
+            "prompt_tokens": 0,
+            "completion_model": "not provided",
+            "completion_model_provider": "not provided",
+            "type": self.type,
+        }
+
+        return result_dict
 
     # Helper methods
 
@@ -627,5 +538,14 @@ class TextLoader:
         # Consider the text low quality if 30% or fewer characters are valid
         return valid_percentage <= 0.3
 
-    def load(self, input: list[str], markdown_output: bool = True, **kwargs) -> dict:
-        pass
+    def load(self, input_path: str) -> dict:
+        """
+                Load and extract text content from a video file.
+
+                Args:
+                    input_path (list[str]): A path to the video file.
+
+                Returns:
+                    dict: A dictionary containing the extracted text and related metadata.
+                """
+        return self.get_text_from_video(file_path=input_path)

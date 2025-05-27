@@ -19,6 +19,7 @@ def html_to_md(html: str) -> dict:
             "completion_tokens": 0,
             "prompt_tokens": 0,
             "completion_model": 'not provided',
-            "completion_model_provider": 'not provided'
+            "completion_model_provider": 'not provided',
+            "text_chunks": 'not provided'
     }
     return result

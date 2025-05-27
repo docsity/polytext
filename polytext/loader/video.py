@@ -22,9 +22,8 @@ class VideoLoader:
             llm_api_key: str = None,
             save_transcript_chunks: bool = False,
             temp_dir: str = 'temp',
-            markdown_output=True,
-            source,
-            bitrate_quality=9,
+            markdown_output: bool =True,
+            bitrate_quality: int =9,
             **kwargs,
     ) -> None:
         """
@@ -32,7 +31,7 @@ class VideoLoader:
 
         Args:
             source (str): Source of the video ('cloud' or 'local').
-            markdown_output (bool): Whether to convert the text to markdown format. Defaults to True.
+            markdown_output (bool): Whether to convert the text to Markdown format. Defaults to True.
             s3_client (boto3.client, optional): Boto3 S3 client instance for AWS operations. Defaults to None.
             document_aws_bucket (str, optional): Name of the S3 bucket for document storage. Defaults to None.
             gcs_client (google.cloud.storage.Client, optional): GCS client instance for Google Cloud operations. Defaults to None.
@@ -46,7 +45,7 @@ class VideoLoader:
             ValueError: If cloud storage clients are provided without bucket names
             OSError: If temp directory creation fails
         """
-        self.source = source
+        self.source = kwargs.get('source', 'cloud')
         self.markdown_output = markdown_output
         self.s3_client = s3_client
         self.document_aws_bucket = document_aws_bucket
@@ -217,18 +216,14 @@ class VideoLoader:
         logger.info(f"Saved {file_type} file to: {destination_path}")
         return destination_path
 
-    def load(self, input_list: str, markdown_output: bool = True, **kwargs) -> dict:
+    def load(self, input_path: str) -> dict:
         """
         Load and extract text content from a video file.
 
         Args:
-            input_list (list[str]): A path to the video file.
-            markdown_output (bool, default: True): Whether to format the extracted text as Markdown.
-            **kwargs: Additional parameters passed to the underlying extraction method,
-                      such as:
-                      - source (str): Source of the video ('cloud' or 'local'). Defaults to 'cloud'.
+            input_path (str): A path to the video file.
 
         Returns:
             dict: A dictionary containing the extracted text and related metadata.
         """
-        return self.get_text_from_video(file_path=input_list[0])
+        return self.get_text_from_video(file_path=input_path)
