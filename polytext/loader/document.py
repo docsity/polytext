@@ -1,4 +1,4 @@
-# text.py
+# document.py
 # Standard library imports
 import os
 import re
@@ -20,47 +20,47 @@ logger = logging.getLogger(__name__)
 
 
 # Standalone functions that wrap TextLoader methods
-def get_document_text(doc_data: dict, page_range: tuple[int, int] = None) -> str:
-    """
-    Convenience function to extract text from a document using PyMuPDF.
-
-    Args:
-        doc_data (dict): Dictionary containing 'file_path' and optional 'bucket'
-        page_range (tuple, optional): Tuple of (start_page, end_page), 1-indexed. Note: When converting from .odt or .rtf files, the page range selection might not exactly match the original document's page numbers due to formatting differences during PDF conversion and variations in how LibreOffice renders these formats.
-
-    Returns:
-        str: Extracted text from the document
-
-    Raises:
-        EmptyDocument: If extracted text is empty or fails quality checks
-        ExceededMaxPages: If requested page range is invalid
-    """
-    loader = TextLoader()
-    return loader.get_document_text(doc_data, page_range)
-
-
-def extract_text_from_file(file_path: str, page_range: tuple[int, int] = None, backend: str = 'auto') -> dict:
-    """
-    Convenience function to extract text from a local file.
-
-    Args:
-        file_path (str): Path to the local file
-        page_range (tuple, optional): Tuple of (start_page, end_page), 1-indexed. Note: When converting from .odt or .rtf files, the page range selection might not exactly match the original document's page numbers due to formatting differences during PDF conversion and variations in how LibreOffice renders these formats.
-        backend (str, optional): Text extraction backend ('auto', 'pymupdf', or 'pypdf')
-
-    Returns:
-        str: Extracted text from the document
-
-    Raises:
-        FileNotFoundError: If input file doesn't exist
-        ValueError: If invalid backend is specified
-        EmptyDocument: If no text could be extracted
-    """
-    loader = TextLoader()
-    return loader.extract_text_from_file(file_path, page_range, backend)
+# def get_document_text(doc_data, page_range=None):
+#     """
+#     Convenience function to extract text from a document using PyMuPDF.
+#
+#     Args:
+#         doc_data (dict): Dictionary containing 'file_path' and optional 'bucket'
+#         page_range (tuple, optional): Tuple of (start_page, end_page), 1-indexed. Note: When converting from .odt or .rtf files, the page range selection might not exactly match the original document's page numbers due to formatting differences during PDF conversion and variations in how LibreOffice renders these formats.
+#
+#     Returns:
+#         str: Extracted text from the document
+#
+#     Raises:
+#         EmptyDocument: If extracted text is empty or fails quality checks
+#         ExceededMaxPages: If requested page range is invalid
+#     """
+#     loader = TextLoader()
+#     return loader.get_document_text(doc_data, page_range)
 
 
-class TextLoader:
+# def extract_text_from_file(file_path, page_range=None, backend='auto'):
+#     """
+#     Convenience function to extract text from a local file.
+#
+#     Args:
+#         file_path (str): Path to the local file
+#         page_range (tuple, optional): Tuple of (start_page, end_page), 1-indexed. Note: When converting from .odt or .rtf files, the page range selection might not exactly match the original document's page numbers due to formatting differences during PDF conversion and variations in how LibreOffice renders these formats.
+#         backend (str, optional): Text extraction backend ('auto', 'pymupdf', or 'pypdf')
+#
+#     Returns:
+#         str: Extracted text from the document
+#
+#     Raises:
+#         FileNotFoundError: If input file doesn't exist
+#         ValueError: If invalid backend is specified
+#         EmptyDocument: If no text could be extracted
+#     """
+#     loader = TextLoader()
+#     return loader.extract_text_from_file(file_path, page_range, backend)
+
+
+class DocumentLoader:
     """
     Loads and extracts text from documents with support for S3 or GCS storage.
 
@@ -74,17 +74,10 @@ class TextLoader:
         document_aws_bucket (str): Default S3 bucket name for document storage
     """
 
-    def __init__(
-            self,
-            s3_client: object = None,
-            document_aws_bucket: str = None,
-            gcs_client: object = None,
-            document_gcs_bucket: str = None,
-            temp_dir: str = 'temp',
-            **kwargs,
-    ) -> None:
+    def __init__(self, s3_client: object = None, document_aws_bucket: str = None, gcs_client: object = None,
+                 document_gcs_bucket: str = None, temp_dir: str = 'temp', **kwargs) -> None:
         """
-        Initialize TextLoader with optional S3 or GCS configuration.
+        Initialize DocumentLoader with optional S3 or GCS configuration.
 
         Args:
             s3_client: Boto3 S3 client instance for AWS operations (optional)
@@ -94,7 +87,7 @@ class TextLoader:
         self.document_aws_bucket = document_aws_bucket
         self.gcs_client = gcs_client
         self.document_gcs_bucket = document_gcs_bucket
-        self.type = "text"
+        self.type = "document"
 
         # Set up custom temp directory
         self.temp_dir = os.path.abspath(temp_dir)
@@ -198,7 +191,7 @@ class TextLoader:
 
     # PDF text extraction methods
 
-    def get_document_text(self, doc_data: dict, page_range: tuple[int, int] = None) -> str:
+    def get_document_text(self, file_path: str, **kwargs) -> dict:
         """
         Extract text from a document using PyMuPDF as primary backend.
 
@@ -206,8 +199,9 @@ class TextLoader:
         and extracts text with quality checks and early termination conditions.
 
         Args:
-            doc_data (dict): Dictionary containing 'file_path' and optional 'bucket'
-            page_range (tuple, optional): Tuple of (start_page, end_page), 1-indexed. Note: When converting from .odt or .rtf files, the page range selection might not exactly match the original document's page numbers due to formatting differences during PDF conversion and variations in how LibreOffice renders these formats.
+            file_path (str): Path to the file on aws.
+            **kwargs:
+            - page_range (tuple[int, int], optional): Tuple of (start_page, end_page), 1-indexed. Note: When converting from .odt or .rtf files, the page range selection might not exactly match the original document's page numbers due to formatting differences during PDF conversion and variations in how LibreOffice renders these formats.
 
         Returns:
             str: Extracted text from the document
@@ -216,14 +210,11 @@ class TextLoader:
             EmptyDocument: If extracted text is empty or fails quality checks
             ExceededMaxPages: If requested page range is invalid
         """
+        page_range = kwargs.get('page_range', None)
         logger.debug("Using PyMuPDF")
-        file_path = doc_data["file_path"]
 
         fd, temp_file_path = tempfile.mkstemp()
-        if doc_data.get("bucket"):
-            bucket = doc_data.get("bucket")
-        else:
-            bucket = self.document_aws_bucket
+        bucket = self.document_aws_bucket
 
         if os.path.splitext(file_path)[1].lower() != ".pdf":
             logger.info("Converting file to PDF")
@@ -299,7 +290,108 @@ class TextLoader:
 
         return text
 
-    def extract_text_from_file(self, file_path: str, page_range: tuple[int, int] = None, backend: str = 'auto') -> dict:
+    def get_document_text_pypdf(self, bucket, file_path, page_range=None):
+        """
+        Extract text from a document using PyPDF as fallback backend.
+
+        Similar to get_document_text but uses PyPDF for extraction. Useful when
+        PyMuPDF fails to extract text properly.
+
+        Args:
+            bucket (str): S3 bucket name
+            file_path (str): Path to file in S3
+            page_range (tuple, optional): Tuple of (start_page, end_page), 1-indexed. Note: When converting from .odt or .rtf files, the page range selection might not exactly match the original document's page numbers due to formatting differences during PDF conversion and variations in how LibreOffice renders these formats.
+
+        Returns:
+            str: Extracted text from the document
+
+        Raises:
+            EmptyDocument: If extracted text is empty or fails quality checks
+            ExceededMaxPages: If requested page range is invalid
+        """
+        logger.info("Using PyPDF")
+
+        fd, temp_file_path = tempfile.mkstemp()
+
+        if os.path.splitext(file_path)[1].lower() != ".pdf":
+            logger.info("Converting file to PDF")
+            file_prefix = file_path
+            temp_file_path = self.convert_doc_to_pdf(bucket=bucket, file_prefix=file_prefix, input_file=temp_file_path)
+            logger.debug(f"temp_file_path post conversion to pdf: {temp_file_path}")
+            file = open(temp_file_path, "rb")
+            pdf_reader = PdfReader(file)
+        else:
+            temp_file_path = self.download_document(file_path, temp_file_path)
+            logger.debug(f"temp_file_path: {temp_file_path}")
+            try:
+                file = open(temp_file_path, "rb")
+                pdf_reader = PdfReader(file)
+                logger.info(f"Successfully opened file with temp_file_path: {temp_file_path}")
+            except Exception as e:
+                logger.info("Converting file to PDF")
+                file_prefix = file_path
+                temp_file_path = self.convert_doc_to_pdf(bucket=bucket, file_prefix=file_prefix,
+                                                         input_file=temp_file_path)
+                logger.debug(f"temp_file_path post conversion to pdf: {temp_file_path}")
+                file = open(temp_file_path, "rb")
+                pdf_reader = PdfReader(file)
+
+        text = ""
+        last_pages_text = ""
+        last_page_index_to_start = 10
+        total_pages = len(pdf_reader.pages)
+
+        # Validate and adjust page range
+        start_page, end_page = self.validate_page_range(page_range, total_pages)
+
+        for page_number in range(start_page, end_page):
+            page = pdf_reader.pages[page_number]
+            page_text = page.extract_text()
+            page_text = self.clean_text(page_text)
+            text += page_text
+
+            if page.page_number >= (total_pages - last_page_index_to_start):
+                last_pages_text += page_text
+
+            # Early termination checks
+            if len(text) == 0 and page.page_number == 10:
+                message = "First 10 pages of the document are empty"
+                logger.info(message)
+                os.remove(temp_file_path)
+                raise EmptyDocument(message=message, code=998)
+            if len(text) < 800 and page.page_number == 20:
+                message = "First 20 pages of the document have less than 800 chars"
+                logger.info(message)
+                os.remove(temp_file_path)
+                raise EmptyDocument(message=message, code=998)
+            if (
+                    total_pages >= 500
+                    and page.page_number == 10
+                    and self.has_repeated_rows(text=text, threshold=100)
+            ):
+                message = "First 10 pages of the document have 100 repeated rows"
+                logger.info(message)
+                os.remove(temp_file_path)
+                raise EmptyDocument(message=message, code=998)
+            if (
+                    total_pages >= 500
+                    and (page.page_number == total_pages - 1)
+                    and self.has_repeated_rows(text=last_pages_text, threshold=100)
+            ):
+                message = "Last 10 pages of the document have 100 repeated rows"
+                logger.info(message)
+                os.remove(temp_file_path)
+                raise EmptyDocument(message=message, code=998)
+
+        if len(text) == 0:
+            message = "No text detected"
+            logger.info(message)
+            raise EmptyDocument(message=message, code=998)
+
+        os.remove(temp_file_path)
+        return text
+
+    def extract_text_from_file(self, file_path: str, page_range: tuple[int, int]=None, backend: str = 'auto') -> dict:
         """
         Extract text from a local file using specified backend.
 
@@ -538,7 +630,7 @@ class TextLoader:
         # Consider the text low quality if 30% or fewer characters are valid
         return valid_percentage <= 0.3
 
-    def load(self, input_path: str) -> dict:
+    def load(self, input_path: str, **kwargs) -> dict:
         """
                 Load and extract text content from a video file.
 
@@ -548,4 +640,4 @@ class TextLoader:
                 Returns:
                     dict: A dictionary containing the extracted text and related metadata.
                 """
-        return self.get_text_from_video(file_path=input_path)
+        return self.get_document_text(file_path=input_path, **kwargs)
