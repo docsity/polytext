@@ -166,6 +166,7 @@ class YoutubeTranscriptLoader:
         )
 
         result_dict["type"] = self.type
+        result_dict["input"] = video_url
 
         return result_dict
 

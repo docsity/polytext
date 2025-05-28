@@ -123,6 +123,7 @@ class AudioLoader:
                                                  )
 
         result_dict["type"] = self.type
+        result_dict["input"] = file_path
 
         # Clean up temporary file if it was downloaded
         if self.source == "cloud" and os.path.exists(temp_file_path):

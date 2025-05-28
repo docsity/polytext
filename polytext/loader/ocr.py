@@ -118,6 +118,7 @@ class OCRLoader:
                                 target_size=self.target_size)
 
         result_dict["type"] = self.type
+        result_dict["input"] = file_path
 
         # Clean up temporary file if it was downloaded
         if self.source == "cloud":

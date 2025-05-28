@@ -164,6 +164,7 @@ class MarkdownLoader:
             "completion_model_provider": "not provided",
             "text_chunk": "not provided",
             "type": self.type,
+            "input": file_path,
         }
 
         return result_dict

@@ -41,6 +41,7 @@ class HtmlLoader:
         """
         result_dict = html_to_md(url)
         result_dict["type"] = self.type
+        result_dict["input"] = url
 
         if not self.markdown_output:
             result_dict["text"] = md_to_text(result_dict["text"])

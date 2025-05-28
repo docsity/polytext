@@ -288,26 +288,27 @@ class BaseLoader:
         # More images inputs (parallelization)
         if is_multi_input and is_image_type:
             with ThreadPoolExecutor() as executor:
-                # Map each URL to a future call of the load method
-                futures = {executor.submit(loader_class.load, input_path=self.parse_input(input_string=s)["file_path"]): s for s in input_list}
+                # Associa ogni future al suo indice originale
+                future_to_index = {
+                    executor.submit(loader_class.load, input_path=self.parse_input(input_string=s)["file_path"]): idx
+                    for idx, s in enumerate(input_list)
+                }
 
-                is_first_iteration = True
-                for future in as_completed(futures):
-                    current_dict_result = future.result()
+                # Prepara una lista per i risultati, ordinata per indice
+                results = [None] * len(input_list)
+                for future in as_completed(future_to_index):
+                    idx = future_to_index[future]
+                    results[idx] = future.result()
 
-                    if is_first_iteration:
-                        result_dict["text"] = current_dict_result.get("text", "")
-                        result_dict["completion_tokens"] = current_dict_result.get("completion_tokens", 0)
-                        result_dict["prompt_tokens"] = current_dict_result.get("completion_tokens", 0)
-                        result_dict["completion_model"] = current_dict_result.get("completion_model", "not provided")
-                        result_dict["completion_model_provider"] = current_dict_result.get("completion_model_provider", "not provided")
-                        result_dict["text_chunks"] = current_dict_result.get("text_chunks", "not provided")
-
-                        is_first_iteration = False
-                    else:
-                        result_dict["text"] += "\n" + current_dict_result.get("text", "")
-                        result_dict["completion_tokens"] += current_dict_result.get("completion_tokens", 0)
-                        result_dict["prompt_tokens"] += current_dict_result.get("prompt_tokens", 0)
+                # Ricostruisci result_dict mantenendo l'ordine
+                result_dict["text"] = "\n".join(r.get("text", "") for r in results)
+                result_dict["completion_tokens"] = sum(r.get("completion_tokens", 0) for r in results)
+                result_dict["prompt_tokens"] = sum(r.get("prompt_tokens", 0) for r in results)
+                result_dict["completion_model"] = results[0].get("completion_model", "not provided")
+                result_dict["completion_model_provider"] = results[0].get("completion_model_provider", "not provided")
+                result_dict["text_chunks"] = results[0].get("text_chunks", "not provided")
+                result_dict["type"] = results[0].get("type", "not provided")
+                result_dict["input"] = results[0].get("input", "not provided")
 
         elif is_multi_input and not is_image_type:
             error_msg = f"Unsupported input: multiple inputs ({len(input_list)} provided) are not all image types (first type: {first_mime_type}). Multi-threading is only supported for multiple images."
@@ -316,5 +317,12 @@ class BaseLoader:
 
         else:
             result_dict = loader_class.load(input_path=self.parse_input(input_string=input_list[0])["file_path"])
+
+        result_dict = {
+                "text": result_dict['text'],
+                "completion_tokens": result_dict['completion_tokens'],
+                "prompt_tokens": result_dict['prompt_tokens'],
+                "output_list": [result_dict]
+        }
 
         return result_dict

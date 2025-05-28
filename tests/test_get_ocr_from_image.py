@@ -33,13 +33,14 @@ def main():
     # Define document data
     file_url = ""
 
-    local_file_path = "/Users/andreasolfanelli/Projects/polytext/6a2e2886-1e4e-4bfe-8673-debfff5b0d2b.webp"
-    local_file_path_1 = "/Users/andreasolfanelli/Projects/polytext/Quaderno_Libri_17.jpg"
+    local_file_path = "/Users/andreasolfanelli/Projects/polytext/IMG_9695.jpg"
+    # local_file_path_1 = "/Users/andreasolfanelli/Projects/polytext/IMG_9701.jpg"
+    # local_file_path_2 = "/Users/andreasolfanelli/Projects/polytext/IMG_9702.jpg"
 
     try:
         # Call get_text method
         result_dict = ocr_loader.get_text(
-            input_list=[local_file_path, local_file_path_1],
+            input_list=[local_file_path],
         )
 
         import ipdb; ipdb.set_trace()

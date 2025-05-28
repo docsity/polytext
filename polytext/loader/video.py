@@ -169,6 +169,7 @@ class VideoLoader:
                                                  )
 
         result_dict["type"] = self.type
+        result_dict["input"] = file_path
 
         # Clean up temporary files
         logger.info(f"Removing temporary files: {temp_file_path} and {audio_path}")
