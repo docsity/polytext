@@ -69,26 +69,37 @@ class BaseLoader:
 
     def get_text(self, input_list: list[str], **kwargs):
         """
-            Extracts text content from one or more specified URLs (only for images), with optional formatting and OCR fallback.
+        Extracts and aggregates text content from one or more input sources (URLs or file paths).
 
-            Args:
-                input_list (list[str]): A list of one or more URLs (strings) from which to extract text.
+        This method determines the appropriate loader based on the first input, initializes any required
+        storage clients, and processes the input(s) to extract text and related metadata. For multiple image
+        inputs, extraction is parallelized and results are aggregated in the order of `input_list`.
 
-            Returns:
-                dict: A dictionary containing the aggregated extracted data. The structure is as follows:
-              - **"text"** (str): All extracted text content, concatenated with a newline for each new source
-                                  when processing multiple URLs (only for images).
-              - **"completion_tokens"** (int): The sum of completion tokens across all processed sources.
-              - **"prompt_tokens"** (int): The sum of prompt tokens across all processed sources.
-              - **"completion_model"** (str): The name of the completion model used, derived from the first
-                                          processed source. Defaults to "not provided" if unavailable.
-              - **"completion_model_provider"** (str): The provider of the completion model, derived from the first
-                                                   processed source. Defaults to "not provided" if unavailable.
-              - **"text_chunks"** (list): The list of individual chunks if chunking has been applied.
-              - **"type"** (str): The type of the single source (ocr, video, audio, text, ...).
+        Args:
+            input_list (list[str]): List of one or more input strings (URLs or file paths) to process.
 
-            Raises:
-                TypeError: If the 'input' parameter is not a list of strings.
+        Keyword Args:
+            page_range (optional): Page range to extract (if supported by the loader).
+            Additional keyword arguments are passed to the loader class.
+
+        Returns:
+            dict: Aggregated extraction results with the following keys:
+                - `text` (str): Concatenated extracted text from all sources, separated by newlines.
+                - `completion_tokens` (int): Total completion tokens across all sources.
+                - `prompt_tokens` (int): Total prompt tokens across all sources.
+                - `output_list` (list): List of individual extraction results (one per input):
+                        - `text` (str): Concatenated extracted text.
+                        - `completion_tokens` (int): Total completion tokens.
+                        - `prompt_tokens` (int): Total prompt tokens.
+                        - `completion_model` (str): Model name used.
+                        - `completion_model_provider` (str): Provider of the model.
+                        - `text_chunks` (list): List of text chunks, if chunking was applied.
+                        - `type` (str): Type of the processed source (e.g., ocr, video, audio, text).
+                        - `input` (str): The input path or URL.
+
+        Raises:
+            TypeError: If `input_list` is not a list of strings.
+            ValueError: If `input_list` is empty or contains unsupported input types.
         """
 
         if not isinstance(input_list, list) or not all(isinstance(item, str) for item in input_list):
