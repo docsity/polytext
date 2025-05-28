@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Local imports
-from ..loader import TextLoader, VideoLoader, AudioLoader, YoutubeTranscriptLoader, HtmlLoader
+from ..loader import OCRLoader, DocumentLoader, VideoLoader, AudioLoader, YoutubeTranscriptLoader, HtmlLoader
 
 # External imports
 import boto3
@@ -23,7 +23,7 @@ class BaseLoader:
     def __init__(self, markdown_output=True, s3_client=None, document_aws_bucket=None, gcs_client=None,
                  document_gcs_bucket=None, llm_api_key=None, provider: str ="google", temp_dir: str ="temp", **kwargs):
         """
-        Initialize the OCRLoader with cloud storage and LLM configurations.
+        Initialize the BaseLoader with cloud storage and LLM configurations.
 
         Handles document loading and storage operations across AWS S3 and Google Cloud Storage.
         Sets up temporary directory for processing files.
@@ -67,7 +67,7 @@ class BaseLoader:
         self.bitrate_quality = kwargs.get("bitrate_quality", 9)
 
 
-    def get_text(self, input_list: list[str]):
+    def get_text(self, input_list: list[str], **kwargs):
         """
             Extracts text content from one or more specified URLs (only for images), with optional formatting and OCR fallback.
 
@@ -95,9 +95,12 @@ class BaseLoader:
             raise TypeError("Parameter 'input' must be a list of strings.")
 
         first_file_url = input_list[0]
+        kwargs = {**self.kwargs, **kwargs}
+        page_range = kwargs.get('page_range', None)
+        kwargs['page_range'] = page_range
 
         storage_client = self.initiate_storage(input=first_file_url)
-        loader_class = self.init_loader_class(input=first_file_url, storage_client=storage_client, llm_api_key=self.llm_api_key, **self.kwargs)
+        loader_class = self.init_loader_class(input=first_file_url, storage_client=storage_client, llm_api_key=self.llm_api_key, **kwargs)
 
         return self.run_loader_class(loader_class=loader_class, input_list=input_list)
 
@@ -177,79 +180,72 @@ class BaseLoader:
                           These will be merged with the `storage_client` dictionary.
 
             Returns:
-                AbstractLoaderBase: An instance of a concrete loader class (e.g., YoutubeTranscriptLoader,
-                                    HtmlLoader, TextLoader, AudioLoader, VideoLoader) that inherits from
-                                    AbstractLoaderBase, configured for the given input.
+                An instance of a concrete loader class (e.g., YoutubeTranscriptLoader,
+                HtmlLoader, TextLoader, AudioLoader, VideoLoader).
 
             Raises:
                 ValueError: If a recognized MIME type is encountered but is not supported by any specific loader.
                 FileNotFoundError: If the input URL format is not recognized, or if it's a file path
                                    for which no suitable loader can be determined.
         """
-        parsed = urlparse(input)
+        parsed_url = urlparse(input)
         mime_type, _ = mimetypes.guess_type(input)
         kwargs = {**kwargs, **storage_client}
+        file_extension = None
 
-        # 1. URL - YouTube o Web
-        if parsed.scheme in ["http", "https"]:
-            if "youtube.com" in parsed.netloc or "youtu.be" in parsed.netloc:
+        # Try extracting the extension from the URL or local path
+        if parsed_url.scheme:  # If is URL (http, https, gs, s3, etc.)
+            path_without_query = parsed_url.path
+            if path_without_query:
+                _, file_extension = os.path.splitext(path_without_query)
+        else:  # If is local file path (without schema)
+            if os.path.exists(input):
+                _, file_extension = os.path.splitext(input)
+
+        if file_extension:
+            file_extension = file_extension.lower()
+
+        if parsed_url.scheme in ["http", "https"]:
+            if "youtube.com" in parsed_url.netloc or "youtu.be" in parsed_url.netloc:
                 return YoutubeTranscriptLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, **kwargs)
             else:
                 return HtmlLoader(markdown_output=self.markdown_output)
-        # 2. Path file
         elif mime_type:
-            if mime_type.startswith("text"):
-                return TextLoader(**kwargs)
-            elif mime_type.startswith("audio"):
+            if file_extension in [".pdf", ".xlsx", ".docx", ".txt"]:
+                return DocumentLoader(temp_dir=self.temp_dir, **kwargs)
+            elif mime_type.startswith("audio/"):
                 return AudioLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, **kwargs)
-            elif mime_type.startswith("video"):
+            elif mime_type.startswith("video/"):
                 return VideoLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, **kwargs)
-            # elif mime_type.startswith("image"):
-            #     return OCRLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, **kwargs)
+            elif mime_type.startswith("image/"):
+                return OCRLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, **kwargs)
             else:
                 raise ValueError(f"Unsupported MIME type: {mime_type}")
 
         raise FileNotFoundError(f"Input not found or format not recognized: {input}")
 
     @staticmethod
-    def parse_input(input_list: list[str]):
-        if not input_list:
-            raise ValueError("The input list cannot be empty")
+    def parse_input(input_string: str):
+        if not input_string:
+            raise ValueError("The input string cannot be empty")
 
-        if input_list[0].startswith("s3://"):
+        if input_string.startswith("s3://"):
             prefix = "s3://"
-        elif input_list[0].startswith("gcs://"):
+        elif input_string.startswith("gcs://"):
             prefix = "gcs://"
         else:
-            return {"file_path": input_list[0]}
+            return {"file_path": input_string}
 
-        path = input_list[0].replace(prefix, "")
+        path = input_string.replace(prefix, "")
         parts = path.split("/", 1)
         bucket = parts[0]
 
-        # Single element case
-        if len(input_list) == 1:
-            file_path = parts[1] if len(parts) > 1 else ""
-            return {
-                "file_url": input_list[0],
-                "bucket": bucket,
-                "file_path": file_path
-            }
-        else:
-            # Case with multiple elements
-            file_paths = []
-
-            for path in input_list:
-                path_clean = path.replace(prefix, "")
-                path_parts = path_clean.split("/", 1)
-                file_path = path_parts[1] if len(path_parts) > 1 else ""
-                file_paths.append(file_path)
-
-            return {
-                "file_url": input_list[0],
-                "bucket": bucket,
-                "file_path": file_paths
-            }
+        file_path = parts[1] if len(parts) > 1 else ""
+        return {
+            "file_url": input_string,
+            "bucket": bucket,
+            "file_path": file_path
+        }
 
     def run_loader_class(self, loader_class: any, input_list: list[str]) -> dict:
         """
@@ -293,7 +289,7 @@ class BaseLoader:
         if is_multi_input and is_image_type:
             with ThreadPoolExecutor() as executor:
                 # Map each URL to a future call of the load method
-                futures = {executor.submit(loader_class.load, input_path=self.parse_input(input_list=[s])["file_path"]): s for s in input_list}
+                futures = {executor.submit(loader_class.load, input_path=self.parse_input(input_string=s)["file_path"]): s for s in input_list}
 
                 is_first_iteration = True
                 for future in as_completed(futures):
@@ -319,7 +315,6 @@ class BaseLoader:
             raise ValueError(error_msg)
 
         else:
-            print(self.parse_input(input_list))
-            result_dict = loader_class.load(input_path=self.parse_input(input_list)["file_path"])
+            result_dict = loader_class.load(input_path=self.parse_input(input_string=input_list[0])["file_path"])
 
         return result_dict

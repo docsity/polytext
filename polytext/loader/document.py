@@ -505,16 +505,7 @@ class DocumentLoader:
             except Exception as e:
                 logger.warning(f"Failed to remove temporary file {temp_pdf_path}: {str(e)}")
 
-        result_dict = {
-            "text": text,
-            "completion_tokens": 0,
-            "prompt_tokens": 0,
-            "completion_model": "not provided",
-            "completion_model_provider": "not provided",
-            "type": self.type,
-        }
-
-        return result_dict
+        return text
 
     # Helper methods
 

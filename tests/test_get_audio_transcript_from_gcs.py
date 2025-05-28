@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from dotenv import load_dotenv
 load_dotenv(".env")
 
-from polytext.loader import BaseLoader
+from polytext.loader.base import BaseLoader
 
 # Set up logging
 logging.basicConfig(level=logging.INFO,
@@ -31,7 +31,7 @@ def main():
     # Define document data
     file_path = "learning_resources/course_id=406/module_id=2658/id=31427/8434.mp4"
 
-    local_file_path = "/Users/andreasolfanelli/Projects/polytext/lunedì alle 16-25.aac"
+    local_file_path = "/Users/andreasolfanelli/Projects/polytext/martedì alle 15-46.aac"
 
     # Call get_text method
     result_dict = loader.get_text(

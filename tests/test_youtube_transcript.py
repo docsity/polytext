@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from dotenv import load_dotenv
 load_dotenv('..env')
 
-from polytext.loader import BaseLoader
+from polytext.loader.base import BaseLoader
 
 url = 'https://www.youtube.com/watch?v=Md4Fs-Zc3tg&t=173s'
 # 'https://www.youtube.com/watch?v=xY5x0q5JoPI'

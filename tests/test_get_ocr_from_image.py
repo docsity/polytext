@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from dotenv import load_dotenv
 load_dotenv(".env")
 
-from polytext.loader import BaseLoader
+from polytext.loader.base import BaseLoader
 
 # Set up logging
 logging.basicConfig(level=logging.INFO,
@@ -33,12 +33,13 @@ def main():
     # Define document data
     file_url = ""
 
-    local_file_path = "/Users/marcodelgiudice/Projects/polytext/IMG_9695.tiff"
+    local_file_path = "/Users/andreasolfanelli/Projects/polytext/6a2e2886-1e4e-4bfe-8673-debfff5b0d2b.webp"
+    local_file_path_1 = "/Users/andreasolfanelli/Projects/polytext/Quaderno_Libri_17.jpg"
 
     try:
         # Call get_text method
         result_dict = ocr_loader.get_text(
-            input_list=[local_file_path],
+            input_list=[local_file_path, local_file_path_1],
         )
 
         import ipdb; ipdb.set_trace()

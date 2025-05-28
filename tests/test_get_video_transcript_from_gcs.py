@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from dotenv import load_dotenv
 load_dotenv(".env")
 
-from polytext.loader import BaseLoader
+from polytext.loader.base import BaseLoader
 
 # Set up logging
 logging.basicConfig(level=logging.INFO,
@@ -18,7 +18,7 @@ logging.basicConfig(level=logging.INFO,
 def main():
     markdown_output = True
     save_transcript_chunks = True
-    source = "local"
+    source = "cloud"
     bitrate_quality = 8
 
     # Initialize VideoLoader with GCS client and bucket
@@ -32,12 +32,12 @@ def main():
     # Define document data
     # file_path = "learning_resources/course_id=132/module_id=312/id=4020/2333.mp4"
     # learning_resources/course_id=406/module_id=2658/id=31427/8434.mp4
-    file_url = "gcs://opit-da-test-ml-ai-store-bucket/learning_resources/course_id=132/module_id=312/id=4020/2333.mp4"
+    file_url = "gcs://opit-da-test-ml-ai-store-bucket/learning_resources/course_id=406/module_id=2658/id=31427/8434.mp4"
 
     local_file_path = "/Users/andreasolfanelli/Projects/polytext/tmp1mq7s7nt_video.mp4"
 
     # Call get_document_text method
-    result_dict = loader.get_text(input_list=[local_file_path])
+    result_dict = loader.get_text(input_list=[file_url])
 
     import ipdb; ipdb.set_trace()
 
