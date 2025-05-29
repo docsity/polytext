@@ -1,17 +1,17 @@
-# ocr.py
+# document_ocr.py
 # Standard library imports
 import os
 import tempfile
 import logging
 
 # Local imports
-from ..converter.ocr_to_text import get_ocr
+from ..converter.document_ocr_to_text import get_document_ocr
 from ..loader.downloader.downloader import Downloader
 
 logger = logging.getLogger(__name__)
 
 
-class OCRLoader:
+class DocumentOCRLoader:
 
     def __init__(self,
                  source: str,
@@ -26,7 +26,7 @@ class OCRLoader:
                  **kwargs
                  ):
         """
-        Initialize the OCRLoader with cloud storage and LLM configurations.
+        Initialize the DocumentOCRLoader with cloud storage and LLM configurations.
 
         Handles document loading and storage operations across AWS S3 and Google Cloud Storage.
         Sets up temporary directory for processing files.
@@ -56,7 +56,7 @@ class OCRLoader:
         self.document_gcs_bucket = document_gcs_bucket
         self.llm_api_key = llm_api_key
         self.target_size = target_size
-        self.type = "ocr"
+        self.type = "document_ocr"
 
         # Set up custom temp directory
         self.temp_dir = os.path.abspath(temp_dir)
@@ -88,16 +88,16 @@ class OCRLoader:
             logger.info(f'Downloaded {file_path} to {temp_file_path}')
             return temp_file_path
 
-    def get_text_from_ocr(self, file_path):
+    def get_text_from_document_ocr(self, file_path):
         """
-        Extract text from an image using OCR.
+        Extract text from a document using OCR.
 
-        This method handles loading the image from either a cloud storage
+        This method handles loading the document from either a cloud storage
         service (S3 or GCS) or a local path, and then performs OCR to extract
         text content using the `get_ocr` function.
 
         Args:
-            file_path (str): Path to the image. This can be a cloud storage path or a local file path.
+            file_path (str): Path to the document. This can be a cloud storage path or a local file path.
 
         Returns:
             dict: Dictionary containing the OCR results and metadata.
@@ -122,10 +122,11 @@ class OCRLoader:
         else:
             raise ValueError("Invalid OCR source. Choose 'cloud' or 'local'.")
 
-        result_dict = get_ocr(file_for_ocr=temp_file_path,
-                                markdown_output=self.markdown_output,
-                                llm_api_key=self.llm_api_key,
-                                target_size=self.target_size)
+        # TODO: implementare l'estrazione del testo via OCR per ogni pagina del documento ed unirle
+        result_dict = get_document_ocr(file_for_ocr=temp_file_path,
+                                       markdown_output=self.markdown_output,
+                                       llm_api_key=self.llm_api_key,
+                                       target_size=self.target_size)
 
         result_dict["type"] = self.type
         result_dict["input"] = file_path
