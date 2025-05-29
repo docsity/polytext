@@ -13,8 +13,18 @@ logger = logging.getLogger(__name__)
 
 class OCRLoader:
 
-    def __init__(self, source, markdown_output=True, s3_client=None, document_aws_bucket=None, gcs_client=None,
-                 document_gcs_bucket=None, llm_api_key=None, temp_dir="temp", target_size=1, **kwargs):
+    def __init__(self,
+                 source: str,
+                 s3_client: object = None,
+                 document_aws_bucket: str = None,
+                 gcs_client: object = None,
+                 document_gcs_bucket: str = None,
+                 llm_api_key: str = None,
+                 temp_dir: str = 'temp',
+                 markdown_output: bool = True,
+                 target_size: int = 1,
+                 **kwargs
+                 ):
         """
         Initialize the OCRLoader with cloud storage and LLM configurations.
 

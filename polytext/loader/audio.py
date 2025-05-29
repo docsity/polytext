@@ -12,9 +12,20 @@ logger = logging.getLogger(__name__)
 
 class AudioLoader:
 
-    def __init__(self, source, markdown_output=True, s3_client=None, document_aws_bucket=None, gcs_client=None,
-                 document_gcs_bucket=None, llm_api_key=None, save_transcript_chunks=False, temp_dir="temp",
-                 bitrate_quality=9, **kwargs,):
+    def __init__(
+            self,
+            source: str,
+            s3_client: object = None,
+            document_aws_bucket: str = None,
+            gcs_client: object = None,
+            document_gcs_bucket: str = None,
+            llm_api_key: str = None,
+            save_transcript_chunks: bool = False,
+            temp_dir: str = 'temp',
+            markdown_output: bool = True,
+            bitrate_quality: int = 9,
+            **kwargs
+    ):
         """
         Initialize the AudioLoader with cloud storage and LLM configurations.
 

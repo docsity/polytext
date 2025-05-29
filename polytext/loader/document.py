@@ -40,7 +40,8 @@ class DocumentLoader:
 
     def __init__(self, source: str, markdown_output: bool = True, s3_client: object = None,
                  document_aws_bucket: str = None, gcs_client: object = None,
-                 document_gcs_bucket: str = None, temp_dir: str = 'temp', **kwargs) -> None:
+                 document_gcs_bucket: str = None, temp_dir: str = 'temp',
+                 page_range: tuple[int, int] = None, **kwargs) -> None:
         """
         Initialize DocumentLoader with optional cloud storage configuration.
 
@@ -52,8 +53,7 @@ class DocumentLoader:
             gcs_client (object): Google Cloud Storage client instance (optional)
             document_gcs_bucket (str): Default GCS bucket name for storage (optional)
             temp_dir (str): Directory for temporary files (default: 'temp')
-            **kwargs: Additional arguments including:
-                page_range (tuple): Optional page range to extract (start, end)
+            page_range (tuple): Optional page range to extract (start, end)
 
         Raises:
             ValueError: If source is not "cloud" or "local"
@@ -66,7 +66,7 @@ class DocumentLoader:
         self.gcs_client = gcs_client
         self.document_gcs_bucket = document_gcs_bucket
         self.type = "document"
-        self.page_range = kwargs.get("page_range")
+        self.page_range = page_range
 
         # Set up custom temp directory
         self.temp_dir = os.path.abspath(temp_dir)
