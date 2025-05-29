@@ -142,7 +142,7 @@ class BaseLoader:
         if input.startswith("s3://"):
             # Initialize S3 client
             s3_client = boto3.client("s3")
-            s3_path = input[0].replace("s3://", "")
+            s3_path = input.replace("s3://", "")
             parts = s3_path.split("/", 1)  # divide solo al primo "/"
 
             bucket = parts[0]
