@@ -6,5 +6,15 @@ from .youtube import YoutubeTranscriptLoader
 from .html import HtmlLoader
 from .ocr import OCRLoader
 from .markdown import MarkdownLoader
+from .plain_text import PlainTextLoader
 
-__all__ = ['DocumentLoader', 'VideoLoader', 'AudioLoader', 'HtmlLoader', 'YoutubeTranscriptLoader', 'OCRLoader', 'MarkdownLoader']
+__all__ = [
+    "DocumentLoader",
+    "VideoLoader",
+    "AudioLoader",
+    "HtmlLoader",
+    "YoutubeTranscriptLoader",
+    "OCRLoader",
+    "MarkdownLoader",
+    "PlainTextLoader",
+]

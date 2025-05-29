@@ -7,7 +7,15 @@ from urllib.parse import urlparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Local imports
-from ..loader import OCRLoader, DocumentLoader, VideoLoader, AudioLoader, YoutubeTranscriptLoader, HtmlLoader
+from ..loader import (
+    OCRLoader,
+    DocumentLoader,
+    VideoLoader,
+    AudioLoader,
+    YoutubeTranscriptLoader,
+    HtmlLoader,
+    PlainTextLoader,
+)
 
 # External imports
 import boto3
@@ -66,7 +74,6 @@ class BaseLoader:
         self.save_transcript_chunks = kwargs.get("save_transcript_chunks", False)
         self.bitrate_quality = kwargs.get("bitrate_quality", 9)
 
-
     def get_text(self, input_list: list[str], **kwargs):
         """
             Extracts text content from one or more specified URLs (only for images), with optional formatting and OCR fallback.
@@ -96,37 +103,43 @@ class BaseLoader:
 
         first_file_url = input_list[0]
         kwargs = {**self.kwargs, **kwargs}
-        page_range = kwargs.get('page_range', None)
-        kwargs['page_range'] = page_range
+        page_range = kwargs.get("page_range", None)
+        kwargs["page_range"] = page_range
 
         storage_client = self.initiate_storage(input=first_file_url)
-        loader_class = self.init_loader_class(input=first_file_url, storage_client=storage_client, llm_api_key=self.llm_api_key, **kwargs)
+        loader_class = self.init_loader_class(
+            input=first_file_url,
+            storage_client=storage_client,
+            llm_api_key=self.llm_api_key,
+            **kwargs,
+        )
 
         return self.run_loader_class(loader_class=loader_class, input_list=input_list)
 
     def initiate_storage(self, input: str) -> dict:
         """
-            Initializes and returns a client and relevant details for various cloud storage services or web URLs.
+        Initializes and returns a client and relevant details for various cloud storage services or web URLs.
 
-            This method detects the type of input URL (S3, GCS, HTTP/S) and
-            sets up the appropriate client for accessing the resource.
+        This method detects the type of input URL (S3, GCS, HTTP/S) and
+        sets up the appropriate client for accessing the resource.
 
-            Args:
-                input (str): The URL string representing the file's location.
-                             Supported schemes: "s3://", "gcs://", "http://", "https://", "www.", "www.youtube".
+        Args:
+            input (str): The URL string representing the file's location.
+                         Supported schemes: "s3://", "gcs://", "http://", "https://", "www.", "www.youtube".
 
-            Returns:
-                dict: A dictionary containing the initialized storage client and parsed path details.
-                      - For S3: keys include 's3_client' (boto3 client), 'document_aws_bucket' (bucket name),
-                        and 'file_path' (path within the bucket).
-                      - For GCS: keys include 'gcs_client' (google.cloud.storage.Client), 'document_gcs_bucket' (bucket name),
-                        and 'file_path' (path within the bucket).
-                      - For HTTP/HTTPS/WWW: an empty dictionary is returned, as no specific client initialization
-                        is needed for direct web access at this stage.
+        Returns:
+            dict: A dictionary containing the initialized storage client and parsed path details.
+                  - For S3: keys include 's3_client' (boto3 client), 'document_aws_bucket' (bucket name),
+                    and 'file_path' (path within the bucket).
+                  - For GCS: keys include 'gcs_client' (google.cloud.storage.Client), 'document_gcs_bucket' (bucket name),
+                    and 'file_path' (path within the bucket).
+                  - For HTTP/HTTPS/WWW: an empty dictionary is returned, as no specific client initialization
+                    is needed for direct web access at this stage.
 
-            Raises:
-                NotImplementedError: If the input URL scheme is not recognized or supported.
+        Raises:
+            NotImplementedError: If the input URL scheme is not recognized or supported.
         """
+        mime_type, _ = mimetypes.guess_type(input)
 
         if input.startswith("s3://"):
             # Initialize S3 client
@@ -156,37 +169,46 @@ class BaseLoader:
                 "document_gcs_bucket": bucket,
                 "file_path": file_path,
             }
-        elif input.startswith("http://") or input.startswith("https://") or input.startswith("www.") or input.startswith("www.youtube") or self.source == "local":
+        elif (
+            input.startswith("http://")
+            or input.startswith("https://")
+            or input.startswith("www.")
+            or input.startswith("www.youtube")
+            or self.source == "local"
+            or self.validate_user_text(input)
+        ):
             return dict()
         else:
             raise NotImplementedError
 
-    def init_loader_class(self, input: str, storage_client: dict, llm_api_key: str, **kwargs) -> any:
+    def init_loader_class(
+        self, input: str, storage_client: dict, llm_api_key: str, **kwargs
+    ) -> any:
         """
-            Initializes and returns the appropriate content loader class based on the input URL's type.
+        Initializes and returns the appropriate content loader class based on the input URL's type.
 
-            This method acts as a factory, inspecting the input URL's scheme and MIME type
-            to determine which specific loader (e.g., YouTube transcript, HTML, Text, Audio, Video)
-            is best suited to handle the content. It also merges storage client details into kwargs
-            for loaders that might need them.
+        This method acts as a factory, inspecting the input URL's scheme and MIME type
+        to determine which specific loader (e.g., YouTube transcript, HTML, Text, Audio, Video)
+        is best suited to handle the content. It also merges storage client details into kwargs
+        for loaders that might need them.
 
-            Args:
-                input (str): The URL string of the content to be loaded.
-                storage_client (dict): A dictionary containing details and clients for cloud storage
-                                        (e.g., S3 client, GCS client, bucket names) as returned by initiate_storage.
-                llm_api_key (str): The API key for the LLM provider, necessary for loaders that
-                                   interact with language models.
-                **kwargs: Additional keyword arguments to pass to the initialized loader class.
-                          These will be merged with the `storage_client` dictionary.
+        Args:
+            input (str): The URL string of the content to be loaded.
+            storage_client (dict): A dictionary containing details and clients for cloud storage
+                                    (e.g., S3 client, GCS client, bucket names) as returned by initiate_storage.
+            llm_api_key (str): The API key for the LLM provider, necessary for loaders that
+                               interact with language models.
+            **kwargs: Additional keyword arguments to pass to the initialized loader class.
+                      These will be merged with the `storage_client` dictionary.
 
-            Returns:
-                An instance of a concrete loader class (e.g., YoutubeTranscriptLoader,
-                HtmlLoader, TextLoader, AudioLoader, VideoLoader).
+        Returns:
+            An instance of a concrete loader class (e.g., YoutubeTranscriptLoader,
+            HtmlLoader, TextLoader, AudioLoader, VideoLoader).
 
-            Raises:
-                ValueError: If a recognized MIME type is encountered but is not supported by any specific loader.
-                FileNotFoundError: If the input URL format is not recognized, or if it's a file path
-                                   for which no suitable loader can be determined.
+        Raises:
+            ValueError: If a recognized MIME type is encountered but is not supported by any specific loader.
+            FileNotFoundError: If the input URL format is not recognized, or if it's a file path
+                               for which no suitable loader can be determined.
         """
         parsed_url = urlparse(input)
         mime_type, _ = mimetypes.guess_type(input)
@@ -205,22 +227,57 @@ class BaseLoader:
         if file_extension:
             file_extension = file_extension.lower()
 
-        if parsed_url.scheme in ["http", "https"]:
+        if parsed_url.scheme in ["http", "https"] or input.startswith("www."):
             if "youtube.com" in parsed_url.netloc or "youtu.be" in parsed_url.netloc:
-                return YoutubeTranscriptLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, **kwargs)
+                return YoutubeTranscriptLoader(
+                    llm_api_key=llm_api_key,
+                    markdown_output=self.markdown_output,
+                    temp_dir=self.temp_dir,
+                    **kwargs,
+                )
             else:
                 return HtmlLoader(markdown_output=self.markdown_output)
         elif mime_type:
             if file_extension in [".pdf", ".xlsx", ".docx", ".txt"]:
                 return DocumentLoader(temp_dir=self.temp_dir, **kwargs)
             elif mime_type.startswith("audio/"):
-                return AudioLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, **kwargs)
+                return AudioLoader(
+                    llm_api_key=llm_api_key,
+                    markdown_output=self.markdown_output,
+                    temp_dir=self.temp_dir,
+                    **kwargs,
+                )
             elif mime_type.startswith("video/"):
-                return VideoLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, **kwargs)
+                return VideoLoader(
+                    llm_api_key=llm_api_key,
+                    markdown_output=self.markdown_output,
+                    temp_dir=self.temp_dir,
+                    **kwargs,
+                )
             elif mime_type.startswith("image/"):
-                return OCRLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, **kwargs)
+                return OCRLoader(
+                    llm_api_key=llm_api_key,
+                    markdown_output=self.markdown_output,
+                    temp_dir=self.temp_dir,
+                    **kwargs,
+                )
+            elif mime_type == "text/plain":
+                return PlainTextLoader(
+                    llm_api_key=llm_api_key,
+                    markdown_output=self.markdown_output,
+                    temp_dir=self.temp_dir,
+                    **kwargs,
+                )
             else:
                 raise ValueError(f"Unsupported MIME type: {mime_type}")
+
+        elif self.validate_user_text(input):
+            return PlainTextLoader(
+                llm_api_key=llm_api_key,
+                markdown_output=self.markdown_output,
+                temp_dir=self.temp_dir,
+                **kwargs,
+            )
 
         raise FileNotFoundError(f"Input not found or format not recognized: {input}")
 
@@ -241,39 +298,33 @@ class BaseLoader:
         bucket = parts[0]
 
         file_path = parts[1] if len(parts) > 1 else ""
-        return {
-            "file_url": input_string,
-            "bucket": bucket,
-            "file_path": file_path
-        }
+        return {"file_url": input_string, "bucket": bucket, "file_path": file_path}
 
     def run_loader_class(self, loader_class: any, input_list: list[str]) -> dict:
         """
-             Executes the appropriate loader class to extract content from input URLs,
-             handling single or multiple image inputs with aggregation.
+        Executes the provided loader class to extract and aggregate content from one or more input sources.
 
-             This static method acts as a central execution point for content loaders.
-             It intelligently handles cases where multiple image URLs are provided,
-             aggregating their extracted text and token counts, while retaining model
-             information from the first processed source.
+        Handles both single and multiple input cases. For multiple image inputs, extraction is parallelized and results are aggregated in order. For other types, only single input is supported. Aggregates text, token counts, and model metadata from the processed sources.
 
-             Args:
-                 self:
-                 loader_class (object): An instance of a content loader class
-                                                    (e.g., HtmlLoader, ImageLoader) that
-                                                    knows how to load the specific content type.
-                 input_list (list[str]): A list of one or more URLs (strings) to process.
+        Args:
+            loader_class (object): An instance of a content loader class (e.g., HtmlLoader, OCRLoader, AudioLoader) capable of processing the input type.
+            input_list (list[str]): List of one or more input strings (URLs or file paths) to process.
 
-             Returns:
-                 dict: A dictionary containing the extracted content and metadata.
-                       The structure is:
-                       - **"text"** (str): Aggregated text from all processed inputs,
-                                           with each new source separated by a newline.
-                       - **"completion_tokens"** (int): Sum of completion tokens.
-                       - **"prompt_tokens"** (int): Sum of prompt tokens.
-                       - **"completion_model"** (str): Model name from the first processed source.
-                       - **"completion_model_provider"** (str): Model provider from the first processed source.
-         """
+        Returns:
+            dict: Aggregated extraction results with the following keys:
+                - text (str): Concatenated extracted text from all sources, separated by newlines.
+                - completion_tokens (int): Total completion tokens across all sources.
+                - prompt_tokens (int): Total prompt tokens across all sources.
+                - completion_model (str): Model name used, from the first processed source.
+                - completion_model_provider (str): Provider of the model, from the first processed source.
+                - text_chunks (list, optional): List of text chunks, if chunking was applied.
+                - type (str): Type of the processed source (e.g., ocr, video, audio, text).
+                - input (str): The input path or URL of the first processed source.
+                - output_list (list): List of individual extraction results (one per input).
+
+        Raises:
+            ValueError: If input_list is empty or contains unsupported input types for multi-input processing.
+        """
 
         result_dict = {}
 
@@ -288,19 +339,22 @@ class BaseLoader:
         # More images inputs (parallelization)
         if is_multi_input and is_image_type:
             with ThreadPoolExecutor() as executor:
-                # Associa ogni future al suo indice originale
+                # Associate each future with its original index
                 future_to_index = {
-                    executor.submit(loader_class.load, input_path=self.parse_input(input_string=s)["file_path"]): idx
+                    executor.submit(
+                        loader_class.load,
+                        input_path=self.parse_input(input_string=s)["file_path"],
+                    ): idx
                     for idx, s in enumerate(input_list)
                 }
 
-                # Prepara una lista per i risultati, ordinata per indice
+                # Prepare a list for the results, sorted by index
                 results = [None] * len(input_list)
                 for future in as_completed(future_to_index):
                     idx = future_to_index[future]
                     results[idx] = future.result()
 
-                # Ricostruisci result_dict mantenendo l'ordine
+                # Rebuild result_dict keeping the order
                 result_dict["text"] = "\n".join(r.get("text", "") for r in results)
                 result_dict["completion_tokens"] = sum(r.get("completion_tokens", 0) for r in results)
                 result_dict["prompt_tokens"] = sum(r.get("prompt_tokens", 0) for r in results)
@@ -319,10 +373,23 @@ class BaseLoader:
             result_dict = loader_class.load(input_path=self.parse_input(input_string=input_list[0])["file_path"])
 
         result_dict = {
-                "text": result_dict['text'],
-                "completion_tokens": result_dict['completion_tokens'],
-                "prompt_tokens": result_dict['prompt_tokens'],
-                "output_list": [result_dict]
+            "text": result_dict["text"],
+            "completion_tokens": result_dict["completion_tokens"],
+            "prompt_tokens": result_dict["prompt_tokens"],
+            "output_list": [result_dict],
         }
 
         return result_dict
+
+# Helper methods
+    @staticmethod
+    def validate_user_text(text: str) -> bool:
+        """
+        Validates a text string, raising exceptions if input is invalid.
+        """
+        cleaned_text = text.strip()
+
+        if not bool(cleaned_text):
+            raise ValueError("The text cannot be empty or contain only spaces.")
+
+        return True
