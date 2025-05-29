@@ -5,6 +5,7 @@ import re
 import tempfile
 import logging
 from collections import Counter
+from pymupdf4llm import to_markdown
 
 # Third-party imports
 from pypdf import PdfReader
@@ -191,7 +192,6 @@ class DocumentLoader:
         """
         logger.debug("Using PyMuPDF")
 
-        # Initial file path setup
         if self.source == "cloud":
             fd, temp_file_path = tempfile.mkstemp()
             try:
@@ -221,47 +221,58 @@ class DocumentLoader:
                 temp_file_path = self.convert_doc_to_pdf(file_prefix=file_prefix, input_file=temp_file_path)
                 pdf_document = fitz.open(temp_file_path)
 
-        text = ""
-        last_pages_text = ""
-        last_page_index_to_start = 10
         total_pages = pdf_document.page_count
         logger.info(f"Total pages: {total_pages}")
 
         # Validate and adjust page range
         start_page, end_page = self.validate_page_range(total_pages)
 
-        for page_number in range(start_page, end_page):
-            page = pdf_document.load_page(page_number)
-            page_text = page.get_text("text", flags=16)
-            page_text = self.clean_text(page_text)
-            text += page_text
-            if page_number >= (pdf_document.page_count - last_page_index_to_start):
-                last_pages_text += page_text
+        if self.markdown_output:
+            # Use pymupdf4llm for markdown conversion
+            logger.info("Converting file to Markdown")
+            text = to_markdown(
+                pdf_document,
+                pages=list(range(self.page_range[0] - 1, self.page_range[1]))
+            )
+        else:
+            # Original plain text extraction
+            logger.info("Not converting file to Markdown")
+            text = ""
+            last_pages_text = ""
+            last_page_index_to_start = 10
 
-            # Early termination checks
-            if len(text) == 0 and page_number == 10:
-                message = "First 10 pages of the document are empty"
-                logger.info(message)
-                raise EmptyDocument(message=message, code=998)
+            for page_number in range(start_page, end_page):
+                page = pdf_document.load_page(page_number)
+                page_text = page.get_text("text", flags=16)
+                page_text = self.clean_text(page_text)
+                text += page_text
+                if page_number >= (pdf_document.page_count - last_page_index_to_start):
+                    last_pages_text += page_text
 
-            if len(text) < 800 and page_number == 20:
-                message = "First 20 pages of the document have less than 800 chars"
-                logger.info(message)
-                raise EmptyDocument(message=message, code=998)
+                # Early termination checks
+                if len(text) == 0 and page_number == 10:
+                    message = "First 10 pages of the document are empty"
+                    logger.info(message)
+                    raise EmptyDocument(message=message, code=998)
 
-            if (total_pages >= 500 and
-                    page_number == 10 and
-                    self.has_repeated_rows(text=text, threshold=100)):
-                message = "First 10 pages of the document have 100 repeated rows"
-                logger.info(message)
-                raise EmptyDocument(message=message, code=998)
+                if len(text) < 800 and page_number == 20:
+                    message = "First 20 pages of the document have less than 800 chars"
+                    logger.info(message)
+                    raise EmptyDocument(message=message, code=998)
 
-            if (total_pages >= 500 and
-                    (page_number == total_pages - 1) and
-                    self.has_repeated_rows(text=last_pages_text, threshold=100)):
-                message = "Last 10 pages of the document have 100 repeated rows"
-                logger.info(message)
-                raise EmptyDocument(message=message, code=998)
+                if (total_pages >= 500 and
+                        page_number == 10 and
+                        self.has_repeated_rows(text=text, threshold=100)):
+                    message = "First 10 pages of the document have 100 repeated rows"
+                    logger.info(message)
+                    raise EmptyDocument(message=message, code=998)
+
+                if (total_pages >= 500 and
+                        (page_number == total_pages - 1) and
+                        self.has_repeated_rows(text=last_pages_text, threshold=100)):
+                    message = "Last 10 pages of the document have 100 repeated rows"
+                    logger.info(message)
+                    raise EmptyDocument(message=message, code=998)
 
         pdf_document.close()
         if self.source == "cloud":
@@ -271,9 +282,11 @@ class DocumentLoader:
             message = "No text detected"
             logger.info(message)
             raise EmptyDocument(message=message, code=998)
+
         if "������������������������������������������" in text:
             logger.info("Using pypdf being strange PDF")
             return self.get_document_text_pypdf(file_path=file_path)
+
         if len(text) < 800:
             message = "Document text with less than 800 characters"
             raise EmptyDocument(message=message, code=998)
@@ -321,8 +334,20 @@ class DocumentLoader:
         """
         logger.info("Using PyPDF")
 
-        fd, temp_file_path = tempfile.mkstemp()
+        if self.source == "cloud":
+            fd, temp_file_path = tempfile.mkstemp()
+            try:
+                temp_file_path = self.download_document(file_path, temp_file_path)
+                logger.info(f"Successfully loaded document from {file_path}")
+            finally:
+                os.close(fd)
+        elif self.source == "local":
+            temp_file_path = file_path
+            logger.info(f"Successfully loaded document from local path {file_path}")
+        else:
+            raise ValueError("Invalid OCR source. Choose 'cloud' or 'local'.")
 
+        # Handle PDF conversion and opening
         if os.path.splitext(file_path)[1].lower() != ".pdf":
             logger.info("Converting file to PDF")
             file_prefix = file_path
@@ -331,8 +356,6 @@ class DocumentLoader:
             file = open(temp_file_path, "rb")
             pdf_reader = PdfReader(file)
         else:
-            temp_file_path = self.download_document(file_path, temp_file_path)
-            logger.debug(f"temp_file_path: {temp_file_path}")
             try:
                 file = open(temp_file_path, "rb")
                 pdf_reader = PdfReader(file)
@@ -345,52 +368,65 @@ class DocumentLoader:
                 file = open(temp_file_path, "rb")
                 pdf_reader = PdfReader(file)
 
-        text = ""
-        last_pages_text = ""
-        last_page_index_to_start = 10
         total_pages = len(pdf_reader.pages)
 
         # Validate and adjust page range
         start_page, end_page = self.validate_page_range(total_pages)
 
-        for page_number in range(start_page, end_page):
-            page = pdf_reader.pages[page_number]
-            page_text = page.extract_text()
-            page_text = self.clean_text(page_text)
-            text += page_text
+        if self.markdown_output:
+            # Use pymupdf4llm for markdown conversion
+            logger.info("Converting file to Markdown")
+            pdf_document = fitz.open(temp_file_path)
+            text = to_markdown(
+                pdf_document,
+                pages=list(range(self.page_range[0] - 1, self.page_range[1]))
+            )
+            pdf_document.close()
+        else:
+            # Original plain text extraction logic
+            logger.info("Not converting file to Markdown")
+            text = ""
+            last_pages_text = ""
+            last_page_index_to_start = 10
 
-            if page.page_number >= (total_pages - last_page_index_to_start):
-                last_pages_text += page_text
+            for page_number in range(start_page, end_page):
+                page = pdf_reader.pages[page_number]
+                page_text = page.extract_text()
+                page_text = self.clean_text(page_text)
+                text += page_text
 
-            # Early termination checks
-            if len(text) == 0 and page.page_number == 10:
-                message = "First 10 pages of the document are empty"
-                logger.info(message)
-                os.remove(temp_file_path)
-                raise EmptyDocument(message=message, code=998)
-            if len(text) < 800 and page.page_number == 20:
-                message = "First 20 pages of the document have less than 800 chars"
-                logger.info(message)
-                os.remove(temp_file_path)
-                raise EmptyDocument(message=message, code=998)
-            if (
-                    total_pages >= 500
-                    and page.page_number == 10
-                    and self.has_repeated_rows(text=text, threshold=100)
-            ):
-                message = "First 10 pages of the document have 100 repeated rows"
-                logger.info(message)
-                os.remove(temp_file_path)
-                raise EmptyDocument(message=message, code=998)
-            if (
-                    total_pages >= 500
-                    and (page.page_number == total_pages - 1)
-                    and self.has_repeated_rows(text=last_pages_text, threshold=100)
-            ):
-                message = "Last 10 pages of the document have 100 repeated rows"
-                logger.info(message)
-                os.remove(temp_file_path)
-                raise EmptyDocument(message=message, code=998)
+                if page.page_number >= (total_pages - last_page_index_to_start):
+                    last_pages_text += page_text
+
+                # Early termination checks
+                if len(text) == 0 and page.page_number == 10:
+                    message = "First 10 pages of the document are empty"
+                    logger.info(message)
+                    os.remove(temp_file_path)
+                    raise EmptyDocument(message=message, code=998)
+                if len(text) < 800 and page.page_number == 20:
+                    message = "First 20 pages of the document have less than 800 chars"
+                    logger.info(message)
+                    os.remove(temp_file_path)
+                    raise EmptyDocument(message=message, code=998)
+                if (
+                        total_pages >= 500
+                        and page.page_number == 10
+                        and self.has_repeated_rows(text=text, threshold=100)
+                ):
+                    message = "First 10 pages of the document have 100 repeated rows"
+                    logger.info(message)
+                    os.remove(temp_file_path)
+                    raise EmptyDocument(message=message, code=998)
+                if (
+                        total_pages >= 500
+                        and (page.page_number == total_pages - 1)
+                        and self.has_repeated_rows(text=last_pages_text, threshold=100)
+                ):
+                    message = "Last 10 pages of the document have 100 repeated rows"
+                    logger.info(message)
+                    os.remove(temp_file_path)
+                    raise EmptyDocument(message=message, code=998)
 
         if len(text) == 0:
             message = "No text detected"
