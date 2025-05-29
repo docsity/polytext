@@ -32,7 +32,7 @@ class Downloader:
             If set to "document", the method attempts to convert the file to PDF if direct download fails.
 
         Returns:
-            str: Path to the downloaded file (may be converted to PDF)
+            str: Path to the downloaded file (can be converted to PDF)
 
         Raises:
             ClientError: If S3 download operation fails

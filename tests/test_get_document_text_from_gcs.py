@@ -2,6 +2,7 @@ import os
 import sys
 from google.cloud import storage
 import logging
+import boto3
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
@@ -17,28 +18,36 @@ logging.basicConfig(level=logging.INFO,
 
 def main():
     # Initialize GCS client
-    gcs_client = storage.Client()
+    # gcs_client = storage.Client()
+    # s3_client = boto3.client('s3')
+
+    # Optional: specify page range (start_page, end_page) - pages are 1-indexed
+    page_range = (1,2)  # Extract text from pages 1 to 10
+    source = "cloud"
 
     # Initialize DocumentLoader with GCS client and bucket
     text_loader = BaseLoader(
-        gcs_client=gcs_client,
-        document_gcs_bucket=os.getenv("GCS_BUCKET")
+        # gcs_client=None,
+        # s3_client=s3_client,
+        source=source,
+        # document_gcs_bucket=None, #os.getenv("GCS_BUCKET"),
+        # document_aws_bucket=os.environ.get("AWS_BUCKET"),
+        page_range=page_range  # Optional
     )
 
     # Define document data
-    doc_data = {
-        "file_path": "gcs://opit-da-test-ml-ai-store-bucket/learning_resources/course_id=353/module_id=3056/id=31617/Supervisory+Agreement+Form+-+MSc.pdf",
-    }
+    # file_path = "gcs://opit-da-test-ml-ai-store-bucket/learning_resources/course_id=353/module_id=3056/id=31617/Supervisory+Agreement+Form+-+MSc.pdf"
+    file_path = "s3://docsity-data/documents/original/2025/02/01/iiakfmyied-756df65b-2b69-46e2-8916-ce8d394829de-8087.odt"
 
-    # Optional: specify page range (start_page, end_page) - pages are 1-indexed
-    page_range = (1, 1)  # Extract text from pages 1 to 10
+    local_file_path = "/Users/marcodelgiudice/Projects/polytext/test_custom_pdf_SUMMARY.pdf"
 
     try:
         # Call get_document_text method
         result_dict = text_loader.get_text(
-            input_list=[doc_data["file_path"]],
-            page_range=page_range  # Optional
+            input_list=[file_path],
         )
+
+        import ipdb; ipdb.set_trace()
 
         print(f"Successfully extracted text ({len(result_dict['text'])} characters)")
         #print("Sample of extracted text:")

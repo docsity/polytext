@@ -52,10 +52,6 @@ class BaseLoader:
             OSError: If temp directory creation fails
         """
         self.markdown_output = markdown_output
-        self.s3_client = s3_client
-        self.document_aws_bucket = document_aws_bucket
-        self.gcs_client = gcs_client
-        self.document_gcs_bucket = document_gcs_bucket
         self.llm_api_key = llm_api_key
         self.temp_dir = temp_dir
         self.provider = provider
@@ -79,7 +75,6 @@ class BaseLoader:
             input_list (list[str]): List of one or more input strings (URLs or file paths) to process.
 
         Keyword Args:
-            page_range (optional): Page range to extract (if supported by the loader).
             Additional keyword arguments are passed to the loader class.
 
         Returns:
@@ -107,8 +102,6 @@ class BaseLoader:
 
         first_file_url = input_list[0]
         kwargs = {**self.kwargs, **kwargs}
-        page_range = kwargs.get('page_range', None)
-        kwargs['page_range'] = page_range
 
         storage_client = self.initiate_storage(input=first_file_url)
         loader_class = self.init_loader_class(input=first_file_url, storage_client=storage_client, llm_api_key=self.llm_api_key, **kwargs)
@@ -142,7 +135,7 @@ class BaseLoader:
         if input.startswith("s3://"):
             # Initialize S3 client
             s3_client = boto3.client("s3")
-            s3_path = input[0].replace("s3://", "")
+            s3_path = input.replace("s3://", "")
             parts = s3_path.split("/", 1)  # divide solo al primo "/"
 
             bucket = parts[0]
@@ -222,8 +215,8 @@ class BaseLoader:
             else:
                 return HtmlLoader(markdown_output=self.markdown_output)
         elif mime_type:
-            if file_extension in [".pdf", ".xlsx", ".docx", ".txt"]:
-                return DocumentLoader(temp_dir=self.temp_dir, **kwargs)
+            if file_extension in [".pdf", ".xlsx", ".docx", ".txt", ".csv", ".odt", ".pptx", ".xls", ".doc", ".ppt", ".rtf"]:
+                return DocumentLoader(markdown_output=self.markdown_output, temp_dir=self.temp_dir, **kwargs)
             elif mime_type.startswith("audio/"):
                 return AudioLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, **kwargs)
             elif mime_type.startswith("video/"):
