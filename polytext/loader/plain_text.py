@@ -79,6 +79,9 @@ class PlainTextLoader:
         result_dict["type"] = self.type
         result_dict["input"] = "plain_text"
 
+        if not result_dict["text"].strip():
+            raise EmptyDocument(f"No text extracted from the provided plain text input.")
+
         return result_dict
 
     def load(self, input_path: str) -> dict:

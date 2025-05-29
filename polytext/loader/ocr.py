@@ -7,6 +7,7 @@ import logging
 # Local imports
 from ..converter.ocr_to_text import get_ocr
 from ..loader.downloader.downloader import Downloader
+from ..exceptions import EmptyDocument
 
 logger = logging.getLogger(__name__)
 
@@ -125,6 +126,9 @@ class OCRLoader:
             if os.path.exists(temp_file_path):
                 os.remove(temp_file_path)
                 logger.info(f"Removed temporary file {temp_file_path}")
+
+        if not result_dict["text"].strip():
+            raise EmptyDocument(f"No text extracted from {file_path}")
 
         return result_dict
 

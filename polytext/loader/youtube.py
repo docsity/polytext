@@ -11,6 +11,7 @@ from retry import retry
 
 # Local imports
 from ..converter.text_to_md import text_to_md
+from ..exceptions import EmptyDocument
 
 logger = logging.getLogger(__name__)
 
@@ -167,6 +168,9 @@ class YoutubeTranscriptLoader:
 
         result_dict["type"] = self.type
         result_dict["input"] = video_url
+
+        if not result_dict["text"].strip():
+            raise EmptyDocument(f"No text extracted from {video_url}")
 
         return result_dict
 

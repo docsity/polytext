@@ -7,6 +7,7 @@ import logging
 # Local imports
 from ..converter import md_to_text
 from ..loader.downloader.downloader import Downloader
+from ..exceptions import EmptyDocument
 
 logger = logging.getLogger(__name__)
 
@@ -166,6 +167,9 @@ class MarkdownLoader:
             "type": self.type,
             "input": file_path,
         }
+
+        if not result_dict["text"].strip():
+            raise EmptyDocument(f"No text extracted from {file_path}")
 
         return result_dict
 

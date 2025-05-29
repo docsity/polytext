@@ -4,6 +4,7 @@ import requests
 
 # Local imports
 from ..converter import md_to_text, html_to_md
+from ..exceptions import EmptyDocument
 
 # External imports
 from retry import retry
@@ -45,6 +46,9 @@ class HtmlLoader:
 
         if not self.markdown_output:
             result_dict["text"] = md_to_text(result_dict["text"])
+
+        if not result_dict["text"].strip():
+            raise EmptyDocument(f"No text extracted from {url}")
 
         return result_dict
 
