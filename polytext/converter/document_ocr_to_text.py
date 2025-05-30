@@ -294,11 +294,7 @@ class DocumentOCRToTextConverter:
 
     def get_document_ocr(self, document_for_ocr):
         """
-        Extract text from a document using OCR.
-
-        This method handles loading the document file and performing OCR to extract
-        text content using the `get_ocr` function. For PDF documents, it processes
-        each page separately and combines the results.
+        Extract text from a document using OCR with parallel processing.
 
         Args:
             document_for_ocr (str): Path to the document file for OCR processing.
@@ -307,47 +303,60 @@ class DocumentOCRToTextConverter:
             dict: Dictionary containing the OCR results and metadata.
         """
         import fitz
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        def process_page(page_tuple):
+            page_num, page = page_tuple
+            fd, temp_image_path = tempfile.mkstemp(suffix='.png')
+            os.close(fd)
+
+            try:
+                # Convert page to image
+                pix = page.get_pixmap()
+                pix.save(temp_image_path)
+
+                # Perform OCR on the page
+                ocr_result = self.get_ocr(temp_image_path)
+                return page_num, ocr_result
+
+            finally:
+                if os.path.exists(temp_image_path):
+                    os.remove(temp_image_path)
 
         try:
-            # Convert PDF pages to images
             pdf = fitz.open(document_for_ocr)
+            start_page, end_page = self.validate_page_range(len(pdf))
 
+            # Create list of (page_num, page) tuples to process
+            pages_to_process = [(i, pdf[i]) for i in range(start_page, end_page)]
+            results = []
+
+            # Process pages in parallel
+            with ThreadPoolExecutor() as executor:
+                future_to_page = {
+                    executor.submit(process_page, page_tuple): page_tuple[0]
+                    for page_tuple in pages_to_process
+                }
+
+                for future in as_completed(future_to_page):
+                    page_num, result = future.result()
+                    results.append((page_num, result))
+
+            # Sort results by page number
+            results.sort(key=lambda x: x[0])
+
+            # Combine results
             all_text = []
             total_completion_tokens = 0
             total_prompt_tokens = 0
 
-            start_page, end_page = self.validate_page_range(len(pdf))
-
-            # Process each page in range
-            for page_num in range(start_page, end_page):
-                page = pdf[page_num]
-
-                # Create temporary image file
-                fd, temp_image_path = tempfile.mkstemp(suffix='.png')
-                os.close(fd)
-
-                try:
-                    # Convert page to image
-                    pix = page.get_pixmap()
-                    pix.save(temp_image_path)
-
-                    # Perform OCR on the page
-                    ocr_result = self.get_ocr(temp_image_path)
-
-                    # Collect results
-                    page_text = f"{ocr_result['text']}\n"
-                    all_text.append(page_text)
-                    total_completion_tokens += ocr_result['completion_tokens']
-                    total_prompt_tokens += ocr_result['prompt_tokens']
-
-                finally:
-                    # Clean up temporary image
-                    if os.path.exists(temp_image_path):
-                        os.remove(temp_image_path)
+            for _, ocr_result in results:
+                all_text.append(f"{ocr_result['text']}\n")
+                total_completion_tokens += ocr_result['completion_tokens']
+                total_prompt_tokens += ocr_result['prompt_tokens']
 
             pdf.close()
 
-            # Combine results
             final_result_dict = {
                 "text": "\n".join(all_text),
                 "completion_tokens": total_completion_tokens,
