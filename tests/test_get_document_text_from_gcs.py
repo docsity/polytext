@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 load_dotenv(".env")
 
 from polytext.loader.base import BaseLoader
+from polytext.exceptions.base import EmptyDocument
 
 # Set up logging
 logging.basicConfig(level=logging.INFO,
@@ -59,6 +60,9 @@ def main():
         # Optionally save the extracted text to a file
         with open("extracted_text.txt", "w", encoding="utf-8") as f:
             f.write(result_dict['text'])
+
+    except EmptyDocument as e:
+        logging.error(f"Empty document error: {str(e)}")
 
     except Exception as e:
         logging.error(f"Error extracting text: {str(e)}")
