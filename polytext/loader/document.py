@@ -6,6 +6,7 @@ import tempfile
 import logging
 from collections import Counter
 from pymupdf4llm import to_markdown
+from markitdown import MarkItDown
 
 # Third-party imports
 from pypdf import PdfReader
@@ -229,7 +230,7 @@ class DocumentLoader:
             logger.info("Converting file to Markdown")
             text = to_markdown(
                 pdf_document,
-                pages=list(range(self.page_range[0] - 1, self.page_range[1]))
+                pages=list(range(start_page, end_page))
             )
         else:
             # Original plain text extraction
@@ -370,18 +371,21 @@ class DocumentLoader:
         # Validate and adjust page range
         start_page, end_page = self.validate_page_range(total_pages)
 
-        if self.markdown_output:
-            # Use pymupdf4llm for markdown conversion
-            logger.info("Converting file to Markdown")
-            pdf_document = fitz.open(temp_file_path)
-            text = to_markdown(
-                pdf_document,
-                pages=list(range(self.page_range[0] - 1, self.page_range[1]))
-            )
-            pdf_document.close()
-        else:
+        text = ""
+        try_not_markdown = True
+        if self.markdown_output and self.page_range is None: # and self.page_range is None:
+            # Use markitdown for markdown conversion
+            logger.info("Converting file to Markdown with Markitdown")
+
+            md = MarkItDown()
+            text = md.convert(temp_file_path).markdown
+
+            if len(text) >= 800:
+                try_not_markdown = False
+
+        if try_not_markdown:
             # Original plain text extraction logic
-            logger.info("Not converting file to Markdown")
+            logger.info("Fallback without Markdown conversion")
             text = ""
             last_pages_text = ""
             last_page_index_to_start = 10
@@ -428,6 +432,10 @@ class DocumentLoader:
         if len(text) == 0:
             message = "No text detected"
             logger.info(message)
+            raise EmptyDocument(message=message, code=998)
+
+        if len(text) < 800:
+            message = "Document text with less than 800 characters"
             raise EmptyDocument(message=message, code=998)
 
         if self.source == "cloud":
