@@ -20,6 +20,8 @@ from ..loader.downloader.downloader import Downloader
 
 logger = logging.getLogger(__name__)
 
+MIN_DOC_TEXT_LENGHT_ACCEPTED = int(os.getenv("MIN_DOC_TEXT_LENGHT_ACCEPTED", "400"))
+
 class DocumentLoader:
     """
     Loads and extracts text from documents with support for cloud storage (S3 or GCS).
@@ -253,8 +255,8 @@ class DocumentLoader:
                     logger.info(message)
                     raise EmptyDocument(message=message, code=998)
 
-                if len(text) < 800 and page_number == 20:
-                    message = "First 20 pages of the document have less than 800 chars"
+                if len(text) < MIN_DOC_TEXT_LENGHT_ACCEPTED and page_number == 20:
+                    message = f"First 20 pages of the document have less than {MIN_DOC_TEXT_LENGHT_ACCEPTED} chars"
                     logger.info(message)
                     raise EmptyDocument(message=message, code=998)
 
@@ -285,8 +287,8 @@ class DocumentLoader:
             logger.info("Using pypdf being strange PDF")
             return self.get_document_text_pypdf(file_path=file_path)
 
-        if len(text) < 800:
-            message = "Document text with less than 800 characters"
+        if len(text) < MIN_DOC_TEXT_LENGHT_ACCEPTED:
+            message = f"Document text with less than {MIN_DOC_TEXT_LENGHT_ACCEPTED} characters"
             raise EmptyDocument(message=message, code=998)
 
         result_dict = {
@@ -380,7 +382,7 @@ class DocumentLoader:
             md = MarkItDown()
             text = md.convert(temp_file_path).markdown
 
-            if len(text) >= 800:
+            if len(text) >= MIN_DOC_TEXT_LENGHT_ACCEPTED:
                 try_not_markdown = False
 
         if try_not_markdown:
@@ -405,8 +407,8 @@ class DocumentLoader:
                     logger.info(message)
                     os.remove(temp_file_path)
                     raise EmptyDocument(message=message, code=998)
-                if len(text) < 800 and page.page_number == 20:
-                    message = "First 20 pages of the document have less than 800 chars"
+                if len(text) < MIN_DOC_TEXT_LENGHT_ACCEPTED and page.page_number == 20:
+                    message = f"First 20 pages of the document have less than {MIN_DOC_TEXT_LENGHT_ACCEPTED} chars"
                     logger.info(message)
                     os.remove(temp_file_path)
                     raise EmptyDocument(message=message, code=998)
@@ -434,8 +436,8 @@ class DocumentLoader:
             logger.info(message)
             raise EmptyDocument(message=message, code=998)
 
-        if len(text) < 800:
-            message = "Document text with less than 800 characters"
+        if len(text) < MIN_DOC_TEXT_LENGHT_ACCEPTED:
+            message = f"Document text with less than {MIN_DOC_TEXT_LENGHT_ACCEPTED} characters"
             raise EmptyDocument(message=message, code=998)
 
         if self.source == "cloud":
