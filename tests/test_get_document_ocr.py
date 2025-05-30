@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from dotenv import load_dotenv
 load_dotenv(".env")
 
-from polytext.loader.base import BaseLoader
+from polytext.loader.document_ocr import DocumentOCRLoader
 
 # Set up logging
 logging.basicConfig(level=logging.INFO,
@@ -22,12 +22,12 @@ def main():
     # s3_client = boto3.client('s3')
 
     # Optional: specify page range (start_page, end_page) - pages are 1-indexed
-    page_range = (1,2)  # Extract text from pages 1 to 10
+    page_range = (3,5)  # Extract text from pages 1 to 10
     source = "local"
     markdown_output = True
 
     # Initialize DocumentLoader with GCS client and bucket
-    text_loader = BaseLoader(
+    text_loader = DocumentOCRLoader(
         # gcs_client=None,
         # s3_client=s3_client,
         source=source,
@@ -46,8 +46,9 @@ def main():
 
     try:
         # Call get_document_text method
-        result_dict = text_loader.get_text(
-            input_list=[local_file_path],
+        result_dict = text_loader.get_text_from_document_ocr(
+            # input_list=[local_file_path],
+            file_path=local_file_path,
         )
 
         import ipdb; ipdb.set_trace()

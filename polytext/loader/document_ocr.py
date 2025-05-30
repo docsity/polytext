@@ -7,6 +7,7 @@ import logging
 # Local imports
 from ..converter.document_ocr_to_text import get_document_ocr
 from ..loader.downloader.downloader import Downloader
+from ..converter.pdf import convert_to_pdf
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,7 @@ class DocumentOCRLoader:
                  temp_dir: str = 'temp',
                  markdown_output: bool = True,
                  target_size: int = 1,
+                 page_range: tuple[int, int] = None,
                  **kwargs
                  ):
         """
@@ -43,6 +45,7 @@ class DocumentOCRLoader:
             llm_api_key (str, optional): API key for language model service. Defaults to None.
             temp_dir (str, optional): Path for temporary file storage. Defaults to "temp".
             target_size (int, optional): Target file size in bytes. Defaults to 1MB
+            page_range (tuple): Optional page range to extract (start, end)
 
         Raises:
             ValueError: If cloud storage clients are provided without bucket names
@@ -56,6 +59,7 @@ class DocumentOCRLoader:
         self.document_gcs_bucket = document_gcs_bucket
         self.llm_api_key = llm_api_key
         self.target_size = target_size
+        self.page_range = page_range
         self.type = "document_ocr"
 
         # Set up custom temp directory
@@ -87,6 +91,40 @@ class DocumentOCRLoader:
             downloader.download_file_from_gcs(file_path, temp_file_path)
             logger.info(f'Downloaded {file_path} to {temp_file_path}')
             return temp_file_path
+
+    def convert_doc_to_pdf(self, file_prefix: str, input_file: str) -> str:
+        """
+        Convert any document format to PDF using cloud storage and LibreOffice.
+
+        Downloads the document from S3 or GCS using file_prefix to locate it,
+        saves it locally to input_file path, and converts to PDF using LibreOffice.
+        Handles cleanup of temporary files.
+
+        Args:
+            file_prefix (str): Full cloud storage path (s3:// or gcs:// URI)
+            input_file (str): Temporary local path to save downloaded file
+
+        Returns:
+            str: Path to the generated PDF file in temporary directory
+
+        Raises:
+            FileNotFoundError: If no matching document found in cloud storage
+            ConversionError: If LibreOffice conversion fails
+            AttributeError: If neither S3 nor GCS client is configured
+            ClientError: If cloud storage operations fail
+        """
+        logger.info(f"file_prefix: {file_prefix}")
+        logger.info(f"input_file: {input_file}")
+
+        # Create a temporary file for output
+        fd, output_file = tempfile.mkstemp(suffix=".pdf")
+        os.close(fd)  # Close file descriptor explicitly
+
+        logger.info("Using LibreOffice")
+        convert_to_pdf(input_file=input_file, output_file=output_file, original_file=file_prefix)
+        logger.info("Document converted to pdf")
+        os.remove(input_file)
+        return output_file
 
     def get_text_from_document_ocr(self, file_path):
         """
@@ -122,11 +160,18 @@ class DocumentOCRLoader:
         else:
             raise ValueError("Invalid OCR source. Choose 'cloud' or 'local'.")
 
+        # Handle PDF conversion and opening
+        if os.path.splitext(file_path)[1].lower() != ".pdf":
+            logger.info("Converting file to PDF")
+            file_prefix = file_path
+            temp_file_path = self.convert_doc_to_pdf(file_prefix=file_prefix, input_file=temp_file_path)
+
         # TODO: implementare l'estrazione del testo via OCR per ogni pagina del documento ed unirle
         result_dict = get_document_ocr(document_for_ocr=temp_file_path,
                                        markdown_output=self.markdown_output,
                                        llm_api_key=self.llm_api_key,
-                                       target_size=self.target_size)
+                                       target_size=self.target_size,
+                                       page_range=self.page_range)
 
         result_dict["type"] = self.type
         result_dict["input"] = file_path
@@ -149,4 +194,4 @@ class DocumentOCRLoader:
         Returns:
             dict: A dictionary containing the extracted text and related metadata.
         """
-        return self.get_text_from_ocr(file_path=input_path)
+        return self.get_text_from_document_ocr(file_path=input_path)

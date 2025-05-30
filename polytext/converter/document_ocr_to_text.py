@@ -11,6 +11,7 @@ from google.genai import types
 from google.api_core import exceptions as google_exceptions
 
 from ..prompts.ocr import OCR_TO_MARKDOWN_PROMPT, OCR_TO_PLAIN_TEXT_PROMPT
+from ..exceptions.base import EmptyDocument, ExceededMaxPages
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +82,7 @@ def compress_and_convert_image(input_path: str, target_size=1):
     except Exception as e:
         raise RuntimeError(f"FFmpeg error during image processing: {e}") from e
 
-def get_document_ocr(document_for_ocr, markdown_output=False, llm_api_key=None, target_size=1):
+def get_document_ocr(document_for_ocr, markdown_output=False, llm_api_key=None, target_size=1, page_range=None):
     """
     Convenience function to extract text from an image file using OCR, optionally formatted as Markdown.
 
@@ -96,18 +97,21 @@ def get_document_ocr(document_for_ocr, markdown_output=False, llm_api_key=None, 
         llm_api_key (str, optional): API key for the LLM service. If provided,
             it will override the default configuration.
         target_size (int, optional): Target file size in bytes. Defaults to 1MB
+        page_range (tuple): Optional page range to extract (start, end)
 
     Returns:
         dict: Dictionary containing the OCR results and metadata.
     """
-    converter = DocumentOCRToTextConverter(markdown_output=markdown_output, llm_api_key=llm_api_key, target_size=target_size)
+    converter = DocumentOCRToTextConverter(markdown_output=markdown_output, llm_api_key=llm_api_key,
+                                           target_size=target_size, page_range=page_range)
     return converter.get_document_ocr(document_for_ocr)
 
 class DocumentOCRToTextConverter:
     def __init__(self, ocr_model="gemini-2.0-flash", ocr_model_provider="google",
-                markdown_output=True, llm_api_key=None, target_size=1, temp_dir="temp"):
+                markdown_output=True, llm_api_key=None, target_size=1, temp_dir="temp",
+                 page_range=None):
         """
-        Initialize the OCRToTextConverter class with specified OCR model and formatting options.
+        Initialize the DocumentOCRToTextConverter class with specified OCR model and formatting options.
 
         This class handles OCR processing of images using Google's Gemini Vision API.
         It supports various image formats and can output either plain text or markdown.
@@ -119,6 +123,7 @@ class DocumentOCRToTextConverter:
             llm_api_key (str, optional): Override API key for language model. Defaults to None.
             target_size (int, optional): Target file size in bytes. Defaults to 1MB
             temp_dir (str): Directory for temporary files. Defaults to "temp".
+            page_range (tuple): Optional page range to extract (start, end)
 
         Raises:
             OSError: If temp directory creation fails
@@ -129,6 +134,7 @@ class DocumentOCRToTextConverter:
         self.markdown_output = markdown_output
         self.llm_api_key = llm_api_key
         self.target_size = target_size
+        self.page_range = page_range
 
         # Set up custom temp directory
         self.temp_dir = os.path.abspath(temp_dir)
@@ -286,23 +292,104 @@ class DocumentOCRToTextConverter:
             if temp_file_for_ocr and os.path.exists(temp_file_for_ocr):
                 os.remove(temp_file_for_ocr)
 
-
-    def get_document_ocr(self, file_for_ocr):
+    def get_document_ocr(self, document_for_ocr):
         """
         Extract text from a document using OCR.
 
         This method handles loading the document file and performing OCR to extract
-        text content using the `get_ocr` function.
+        text content using the `get_ocr` function. For PDF documents, it processes
+        each page separately and combines the results.
 
         Args:
-            file_for_ocr (str): Path to the document file for OCR processing.
+            document_for_ocr (str): Path to the document file for OCR processing.
 
         Returns:
             dict: Dictionary containing the OCR results and metadata.
         """
+        import fitz
 
-        # TODO: implementare trasformazione in immagine di ogni pagina del documento e per ciascuna chiamare il metodo get_ocr
+        try:
+            # Convert PDF pages to images
+            pdf = fitz.open(document_for_ocr)
 
+            all_text = []
+            total_completion_tokens = 0
+            total_prompt_tokens = 0
 
-        return final_result_dict
+            start_page, end_page = self.validate_page_range(len(pdf))
 
+            # Process each page in range
+            for page_num in range(start_page, end_page):
+                page = pdf[page_num]
+
+                # Create temporary image file
+                fd, temp_image_path = tempfile.mkstemp(suffix='.png')
+                os.close(fd)
+
+                try:
+                    # Convert page to image
+                    pix = page.get_pixmap()
+                    pix.save(temp_image_path)
+
+                    # Perform OCR on the page
+                    ocr_result = self.get_ocr(temp_image_path)
+
+                    # Collect results
+                    page_text = f"{ocr_result['text']}\n"
+                    all_text.append(page_text)
+                    total_completion_tokens += ocr_result['completion_tokens']
+                    total_prompt_tokens += ocr_result['prompt_tokens']
+
+                finally:
+                    # Clean up temporary image
+                    if os.path.exists(temp_image_path):
+                        os.remove(temp_image_path)
+
+            pdf.close()
+
+            # Combine results
+            final_result_dict = {
+                "text": "\n".join(all_text),
+                "completion_tokens": total_completion_tokens,
+                "prompt_tokens": total_prompt_tokens,
+                "completion_model": self.ocr_model,
+                "completion_model_provider": self.ocr_model_provider,
+                "text_chunks": all_text
+            }
+
+            return final_result_dict
+
+        except Exception as e:
+            logger.error(f"Error processing document: {e}")
+            raise
+
+    def validate_page_range(self, total_pages: int) -> tuple[int, int]:
+        """
+        Validate and normalize page range for text extraction.
+
+        Converts 1-indexed page numbers (user input) to 0-indexed (internal)
+        and validates against document bounds.
+
+        Args:
+            total_pages: Total number of pages in document
+
+        Returns:
+            Tuple of (start_page, end_page) normalized to 0-indexed values
+
+        Raises:
+            ExceededMaxPages: If page range exceeds document length or starts at 0
+        """
+        if self.page_range:
+            logger.info(f"Using page range: {self.page_range[0]} - {self.page_range[1]}")
+            if self.page_range[1] > total_pages or self.page_range[0] < 1:
+                raise ExceededMaxPages(
+                    message=f"Requested page range {self.page_range} exceeds document length ({total_pages})",
+                    code=998
+                )
+            start_page = max(0, self.page_range[0] - 1)  # Convert to 0-indexed
+            end_page = min(self.page_range[1], total_pages)
+        else:
+            start_page = 0
+            end_page = total_pages
+
+        return start_page, end_page
