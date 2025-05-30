@@ -8,7 +8,6 @@ import logging
 from ..loader.downloader.downloader import Downloader
 from ..converter.video_to_audio import convert_video_to_audio
 from ..converter.audio_to_text import transcribe_full_audio
-from ..exceptions import EmptyDocument
 
 logger = logging.getLogger(__name__)
 
@@ -181,8 +180,8 @@ class VideoLoader:
             os.remove(audio_path)
             logger.info(f"Removed temporary file {audio_path}")
 
-        if not result_dict["text"].strip():
-            raise EmptyDocument(f"No text extracted from {file_path}")
+        if result_dict["text"].strip().lower() == "no human speech detected":
+            result_dict["text"] = ""
 
         return result_dict
 

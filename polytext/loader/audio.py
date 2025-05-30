@@ -7,7 +7,6 @@ import logging
 # Local imports
 from ..converter.audio_to_text import transcribe_full_audio
 from ..loader.downloader.downloader import Downloader
-from ..exceptions import EmptyDocument
 
 logger = logging.getLogger(__name__)
 
@@ -131,8 +130,8 @@ class AudioLoader:
             os.remove(temp_file_path)
             logger.info(f"Removed temporary file {temp_file_path}")
 
-        if not result_dict["text"].strip():
-            raise EmptyDocument(f"No text extracted from {file_path}")
+        if result_dict["text"].strip().lower() == "no human speech detected":
+            result_dict["text"] = ""
 
         return result_dict
 
