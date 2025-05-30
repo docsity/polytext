@@ -123,7 +123,7 @@ class DocumentOCRLoader:
             raise ValueError("Invalid OCR source. Choose 'cloud' or 'local'.")
 
         # TODO: implementare l'estrazione del testo via OCR per ogni pagina del documento ed unirle
-        result_dict = get_document_ocr(file_for_ocr=temp_file_path,
+        result_dict = get_document_ocr(document_for_ocr=temp_file_path,
                                        markdown_output=self.markdown_output,
                                        llm_api_key=self.llm_api_key,
                                        target_size=self.target_size)

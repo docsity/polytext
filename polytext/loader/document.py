@@ -152,13 +152,10 @@ class DocumentLoader:
         fd, output_file = tempfile.mkstemp(suffix=".pdf")
         os.close(fd)  # Close file descriptor explicitly
 
-        # Download file using existing method that handles both S3 and GCS
-        temp_file_path = self.download_document(file_path=file_prefix, temp_file_path=input_file)
-
         logger.info("Using LibreOffice")
-        convert_to_pdf(input_file=temp_file_path, output_file=output_file, original_file=file_prefix)
+        convert_to_pdf(input_file=input_file, output_file=output_file, original_file=file_prefix)
         logger.info("Document converted to pdf")
-        os.remove(temp_file_path)
+        os.remove(input_file)
         return output_file
 
     # PDF text extraction methods
