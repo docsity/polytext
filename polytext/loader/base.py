@@ -5,6 +5,7 @@ import dotenv
 import mimetypes
 from urllib.parse import urlparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 
 # Local imports
 from ..loader import (
@@ -21,7 +22,6 @@ from ..exceptions import EmptyDocument
 # External imports
 import boto3
 from google.cloud import storage
-
 
 dotenv.load_dotenv()
 
@@ -176,7 +176,7 @@ class BaseLoader:
             or input.startswith("https://")
             or input.startswith("www.")
             or input.startswith("www.youtube")
-            or self.validate_user_text(text=input)
+            or self.is_local_path(input)
             or self.source == "local"
         ):
             return dict()
@@ -251,7 +251,7 @@ class BaseLoader:
             else:
                 raise ValueError(f"Unsupported MIME type: {mime_type}")
 
-        elif self.validate_user_text(input):
+        elif self.validate_user_text(text=input):
             return PlainTextLoader(
                 llm_api_key=llm_api_key,
                 markdown_output=self.markdown_output,
@@ -364,11 +364,20 @@ class BaseLoader:
 
 # Helper methods
     @staticmethod
-    def validate_user_text(text: str) -> bool:
+    def is_local_path(s: str) -> bool:
+        if not s or "\n" in s or len(s) > 255:
+            return False
+        p = Path(s)
+        if p.is_absolute() or (p.parts and p.parts[0] in (".", "..")) or "/" in s or "\\" in s:
+            return True
+        return False
+
+    def validate_user_text(self, text: str) -> bool:
         """
         Validate a text string. Raises EmptyDocument if the text is too short.
 
         Args:
+            self: The instance of the class.
             text (str): The text to validate.
 
         Returns:
@@ -378,7 +387,8 @@ class BaseLoader:
             EmptyDocument: If the text is shorter than the minimum accepted length.
         """
         cleaned_text = text.strip()
-        if len(cleaned_text) < MIN_DOC_TEXT_LENGTH_ACCEPTED:
+        is_local_path = self.is_local_path(cleaned_text)
+        if not is_local_path and len(cleaned_text) < MIN_DOC_TEXT_LENGTH_ACCEPTED:
             message = f"Document text with less than {MIN_DOC_TEXT_LENGTH_ACCEPTED} characters"
             raise EmptyDocument(message=message, code=998)
         return True
