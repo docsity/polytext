@@ -363,7 +363,7 @@ class DocumentOCRToTextConverter:
                 "prompt_tokens": total_prompt_tokens,
                 "completion_model": self.ocr_model,
                 "completion_model_provider": self.ocr_model_provider,
-                "text_chunks": all_text
+                "text_chunks": "not provided",
             }
 
             return final_result_dict

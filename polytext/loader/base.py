@@ -16,12 +16,14 @@ from ..loader import (
     YoutubeTranscriptLoader,
     HtmlLoader,
     PlainTextLoader,
+    DocumentOCRLoader
 )
 from ..exceptions import EmptyDocument
 
 # External imports
 import boto3
 from google.cloud import storage
+
 
 dotenv.load_dotenv()
 
@@ -31,8 +33,7 @@ MIN_DOC_TEXT_LENGTH_ACCEPTED = int(os.getenv("MIN_DOC_TEXT_LENGTH_ACCEPTED", "40
 
 
 class BaseLoader:
-    def __init__(self, markdown_output=True, s3_client=None, document_aws_bucket=None, gcs_client=None,
-                 document_gcs_bucket=None, llm_api_key=None, provider: str ="google", temp_dir: str ="temp", **kwargs):
+    def __init__(self, markdown_output=True, llm_api_key=None, provider: str ="google", temp_dir: str ="temp", **kwargs):
         """
         Initialize the BaseLoader with cloud storage and LLM configurations.
 
@@ -42,11 +43,6 @@ class BaseLoader:
         Args:.
             markdown_output (bool, optional): If True, the extracted text will be formatted as Markdown.
                 Defaults to True.
-            s3_client (boto3.client, optional): AWS S3 client for S3 operations. Defaults to None.
-            document_aws_bucket (str, optional): S3 bucket name for document storage. Defaults to None.
-            gcs_client (google.cloud.storage.Client, optional): GCS client for Cloud Storage operations.
-                Defaults to None.
-            document_gcs_bucket (str, optional): GCS bucket name for document storage. Defaults to None.
             llm_api_key (str, optional): API key for language model service. Defaults to None.
             temp_dir (str, optional): Path for temporary file storage. Defaults to "temp".
             provider (str, optional): Provider of the model. Default to "google".
@@ -117,7 +113,21 @@ class BaseLoader:
         storage_client = self.initiate_storage(input=first_file_url)
         loader_class = self.init_loader_class(input=first_file_url, storage_client=storage_client, llm_api_key=self.llm_api_key, **kwargs)
 
-        return self.run_loader_class(loader_class=loader_class, input_list=input_list)
+        try:
+            response = self.run_loader_class(loader_class=loader_class, input_list=input_list)
+        except EmptyDocument as e:
+            logger.error(f"Empty document encountered: {e.message}")
+            if self.fallback_ocr:
+                loader_class = self.init_loader_class(input=first_file_url, storage_client=storage_client,
+                                                      llm_api_key=self.llm_api_key, is_document_fallback=True, **kwargs)
+                response = self.run_loader_class(loader_class=loader_class, input_list=input_list)
+            else:
+                response = {"text": "", "completion_tokens": 0, "prompt_tokens": 0, "output_list": [
+                    {"text": "", "completion_tokens": 0, "prompt_tokens": 0, "completion_model": "not provided",
+                     "completion_model_provider": "not provided", "text_chunks": "not provided", "type": "document",
+                     "input": first_file_url}]}
+
+        return response
 
     def initiate_storage(self, input: str) -> dict:
         """
@@ -183,7 +193,8 @@ class BaseLoader:
         else:
             raise NotImplementedError
 
-    def init_loader_class(self, input: str, storage_client: dict, llm_api_key: str, **kwargs) -> any:
+    def init_loader_class(self, input: str, storage_client: dict, llm_api_key: str, is_document_fallback: bool = False,
+                          **kwargs) -> any:
         """
             Initializes and returns the appropriate content loader class based on the input URL's type.
 
@@ -198,6 +209,7 @@ class BaseLoader:
                                         (e.g., S3 client, GCS client, bucket names) as returned by initiate_storage.
                 llm_api_key (str): The API key for the LLM provider, necessary for loaders that
                                    interact with language models.
+                is_document_fallback (bool): If True, the DocumentOCRLoader will be used as a fallback
                 **kwargs: Additional keyword arguments to pass to the initialized loader class.
                           These will be merged with the `storage_client` dictionary.
 
@@ -226,6 +238,9 @@ class BaseLoader:
 
         if file_extension:
             file_extension = file_extension.lower()
+
+        if is_document_fallback:
+            return DocumentOCRLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, **kwargs)
 
         if parsed_url.scheme in ["http", "https"] or input.startswith("www."):
             if "youtube.com" in parsed_url.netloc or "youtu.be" in parsed_url.netloc:

@@ -166,7 +166,6 @@ class DocumentOCRLoader:
             file_prefix = file_path
             temp_file_path = self.convert_doc_to_pdf(file_prefix=file_prefix, input_file=temp_file_path)
 
-        # TODO: implementare l'estrazione del testo via OCR per ogni pagina del documento ed unirle
         result_dict = get_document_ocr(document_for_ocr=temp_file_path,
                                        markdown_output=self.markdown_output,
                                        llm_api_key=self.llm_api_key,

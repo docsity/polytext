@@ -49,25 +49,30 @@ def get_requirements(*requirements_file):
     return dependencies
 
 
-setup(name='polytext',
-      version='0.1.2',
-      url='https://github.com/docsity/polytext',
-      # download_url='https://github.com/pualien/py-polytext/archive/0.1.23.tar.gz',
-      license='MIT',
-      author='Matteo Senardi',
-      author_email='matteo.s@docsity.com',
-      description='Python utilities to simplify document files management',
-      packages=find_packages(exclude=['tests']),
-      install_requires=get_requirements('default.txt') + get_requirements('constraint.txt'),
-      long_description=open('README.md').read(),
-      long_description_content_type='text/markdown',
-      python_requires='>=3.12',
-      classifiers=[
-          "License :: OSI Approved :: MIT License",
-          "Operating System :: OS Independent",
-          "Programming Language :: Python :: 3.12",
-          "Programming Language :: Python :: 3.13",
-          "Topic :: Software Development :: Libraries :: Application Frameworks",
-          "Topic :: Software Development :: Libraries :: Python Modules",
-      ],
-      zip_safe=False)
+setup(
+    name='polytext',
+    version='0.1.2',
+    url='https://github.com/docsity/polytext',
+    # download_url='https://github.com/pualien/py-polytext/archive/0.1.23.tar.gz',
+    license='MIT',
+    author='Matteo Senardi',
+    author_email='matteo.s@docsity.com',
+    description='Python utilities to simplify document files management',
+    packages=find_packages(exclude=['tests']),
+    install_requires=get_requirements('default.txt') + get_requirements('constraint.txt'),
+    extras_require={
+        'sentry': get_requirements('sentry.txt')
+    },
+    long_description=open('README.md').read(),
+    long_description_content_type='text/markdown',
+    python_requires='>=3.12',
+    classifiers=[
+        "License :: OSI Approved :: MIT License",
+        "Operating System :: OS Independent",
+        "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
+        "Topic :: Software Development :: Libraries :: Application Frameworks",
+        "Topic :: Software Development :: Libraries :: Python Modules",
+    ],
+    zip_safe=False
+)
