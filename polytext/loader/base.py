@@ -22,8 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 class BaseLoader:
-    def __init__(self, markdown_output=True, s3_client=None, document_aws_bucket=None, gcs_client=None,
-                 document_gcs_bucket=None, llm_api_key=None, provider: str ="google", temp_dir: str ="temp", **kwargs):
+    def __init__(self, markdown_output=True, llm_api_key=None, provider: str ="google", temp_dir: str ="temp", **kwargs):
         """
         Initialize the BaseLoader with cloud storage and LLM configurations.
 
@@ -33,11 +32,6 @@ class BaseLoader:
         Args:.
             markdown_output (bool, optional): If True, the extracted text will be formatted as Markdown.
                 Defaults to True.
-            s3_client (boto3.client, optional): AWS S3 client for S3 operations. Defaults to None.
-            document_aws_bucket (str, optional): S3 bucket name for document storage. Defaults to None.
-            gcs_client (google.cloud.storage.Client, optional): GCS client for Cloud Storage operations.
-                Defaults to None.
-            document_gcs_bucket (str, optional): GCS bucket name for document storage. Defaults to None.
             llm_api_key (str, optional): API key for language model service. Defaults to None.
             temp_dir (str, optional): Path for temporary file storage. Defaults to "temp".
             provider (str, optional): Provider of the model. Default to "google".
