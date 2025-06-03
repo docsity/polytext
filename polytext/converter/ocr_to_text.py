@@ -270,7 +270,7 @@ class OCRToTextConverter:
             logger.info(f"Prompt tokens: {response.usage_metadata.prompt_token_count}")
 
             final_ocr_dict = {
-                "text": response.text,
+                "text": response.text if "no readable text present" not in response.text.lower() else "",
                 "completion_tokens": response.usage_metadata.candidates_token_count,
                 "prompt_tokens": response.usage_metadata.prompt_token_count,
                 "completion_model": self.ocr_model,
