@@ -16,6 +16,7 @@ from ..loader import (
     HtmlLoader,
     PlainTextLoader,
 )
+from ..exceptions import EmptyDocument
 
 # External imports
 import boto3
@@ -25,6 +26,8 @@ from google.cloud import storage
 dotenv.load_dotenv()
 
 logger = logging.getLogger(__name__)
+
+MIN_DOC_TEXT_LENGTH_ACCEPTED = int(os.getenv("MIN_DOC_TEXT_LENGTH_ACCEPTED", "400"))
 
 
 class BaseLoader:
@@ -144,7 +147,7 @@ class BaseLoader:
             # Initialize S3 client
             s3_client = boto3.client("s3")
             s3_path = input.replace("s3://", "")
-            parts = s3_path.split("/", 1)  # divide solo al primo "/"
+            parts = s3_path.split("/", 1)
 
             bucket = parts[0]
             file_path = parts[1] if len(parts) > 1 else ""
@@ -158,7 +161,7 @@ class BaseLoader:
             # Initialize GCS client
             gcs_client = storage.Client()
             gcs_path = input.replace("gcs://", "")
-            parts = gcs_path.split("/", 1)  # divide solo al primo "/"
+            parts = gcs_path.split("/", 1)
 
             bucket = parts[0]
             file_path = parts[1] if len(parts) > 1 else ""
@@ -173,8 +176,8 @@ class BaseLoader:
             or input.startswith("https://")
             or input.startswith("www.")
             or input.startswith("www.youtube")
+            or self.validate_user_text(text=input)
             or self.source == "local"
-            or self.validate_user_text(input)
         ):
             return dict()
         else:
@@ -363,11 +366,19 @@ class BaseLoader:
     @staticmethod
     def validate_user_text(text: str) -> bool:
         """
-        Validates a text string, raising exceptions if input is invalid.
+        Validate a text string. Raises EmptyDocument if the text is too short.
+
+        Args:
+            text (str): The text to validate.
+
+        Returns:
+            bool: True if the text is valid.
+
+        Raises:
+            EmptyDocument: If the text is shorter than the minimum accepted length.
         """
         cleaned_text = text.strip()
-
-        if not bool(cleaned_text):
-            raise ValueError("The text cannot be empty or contain only spaces.")
-
+        if len(cleaned_text) < MIN_DOC_TEXT_LENGTH_ACCEPTED:
+            message = f"Document text with less than {MIN_DOC_TEXT_LENGTH_ACCEPTED} characters"
+            raise EmptyDocument(message=message, code=998)
         return True

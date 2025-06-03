@@ -137,8 +137,8 @@ class OCRLoader:
                 os.remove(temp_file_path)
                 logger.info(f"Removed temporary file {temp_file_path}")
 
-        if not result_dict["text"].strip():
-            raise EmptyDocument(f"No text extracted from {file_path}")
+        if len(result_dict["text"].strip()) == 0:
+            raise EmptyDocument(f"No text extracted from {file_path}. The file may be empty or not contain any transcribable content.")
 
         return result_dict
 

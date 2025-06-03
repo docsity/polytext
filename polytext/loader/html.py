@@ -47,8 +47,8 @@ class HtmlLoader:
         if not self.markdown_output:
             result_dict["text"] = md_to_text(result_dict["text"])
 
-        if not result_dict["text"].strip():
-            raise EmptyDocument(f"No text extracted from {url}")
+        if len(result_dict["text"].strip()) == 0:
+            raise EmptyDocument(f"No text extracted from {url}. The page may be empty or not contain any transcribable content.")
 
         return result_dict
 
