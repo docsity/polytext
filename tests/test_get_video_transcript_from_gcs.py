@@ -18,7 +18,7 @@ logging.basicConfig(level=logging.INFO,
 def main():
     markdown_output = True
     save_transcript_chunks = True
-    source = "cloud"
+    source = "local"
     bitrate_quality = 8
 
     # Initialize VideoLoader with GCS client and bucket
@@ -37,7 +37,7 @@ def main():
     local_file_path = "/Users/andreasolfanelli/Projects/polytext/tmp1mq7s7nt_video.mp4"
 
     # Call get_document_text method
-    result_dict = loader.get_text(input_list=[file_url])
+    result_dict = loader.get_text(input_list=[local_file_path])
 
     import ipdb; ipdb.set_trace()
 
