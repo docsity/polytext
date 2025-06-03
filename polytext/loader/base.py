@@ -60,10 +60,6 @@ class BaseLoader:
             OSError: If temp directory creation fails
         """
         self.markdown_output = markdown_output
-        self.s3_client = s3_client
-        self.document_aws_bucket = document_aws_bucket
-        self.gcs_client = gcs_client
-        self.document_gcs_bucket = document_gcs_bucket
         self.llm_api_key = llm_api_key
         self.temp_dir = temp_dir
         self.provider = provider
@@ -73,6 +69,7 @@ class BaseLoader:
         self.fallback_ocr = kwargs.get("fallback_ocr", True)
         self.save_transcript_chunks = kwargs.get("save_transcript_chunks", False)
         self.bitrate_quality = kwargs.get("bitrate_quality", 9)
+
 
     def get_text(self, input_list: list[str], **kwargs):
         """
@@ -86,7 +83,6 @@ class BaseLoader:
             input_list (list[str]): List of one or more input strings (URLs or file paths) to process.
 
         Keyword Args:
-            page_range (optional): Page range to extract (if supported by the loader).
             Additional keyword arguments are passed to the loader class.
 
         Returns:
@@ -114,43 +110,35 @@ class BaseLoader:
 
         first_file_url = input_list[0]
         kwargs = {**self.kwargs, **kwargs}
-        page_range = kwargs.get("page_range", None)
-        kwargs["page_range"] = page_range
 
         storage_client = self.initiate_storage(input=first_file_url)
-        loader_class = self.init_loader_class(
-            input=first_file_url,
-            storage_client=storage_client,
-            llm_api_key=self.llm_api_key,
-            **kwargs,
-        )
+        loader_class = self.init_loader_class(input=first_file_url, storage_client=storage_client, llm_api_key=self.llm_api_key, **kwargs)
 
         return self.run_loader_class(loader_class=loader_class, input_list=input_list)
 
     def initiate_storage(self, input: str) -> dict:
         """
-        Initializes and returns a client and relevant details for various cloud storage services or web URLs.
+            Initializes and returns a client and relevant details for various cloud storage services or web URLs.
 
-        This method detects the type of input URL (S3, GCS, HTTP/S) and
-        sets up the appropriate client for accessing the resource.
+            This method detects the type of input URL (S3, GCS, HTTP/S) and
+            sets up the appropriate client for accessing the resource.
 
-        Args:
-            input (str): The URL string representing the file's location.
-                         Supported schemes: "s3://", "gcs://", "http://", "https://", "www.", "www.youtube".
+            Args:
+                input (str): The URL string representing the file's location.
+                             Supported schemes: "s3://", "gcs://", "http://", "https://", "www.", "www.youtube".
 
-        Returns:
-            dict: A dictionary containing the initialized storage client and parsed path details.
-                  - For S3: keys include 's3_client' (boto3 client), 'document_aws_bucket' (bucket name),
-                    and 'file_path' (path within the bucket).
-                  - For GCS: keys include 'gcs_client' (google.cloud.storage.Client), 'document_gcs_bucket' (bucket name),
-                    and 'file_path' (path within the bucket).
-                  - For HTTP/HTTPS/WWW: an empty dictionary is returned, as no specific client initialization
-                    is needed for direct web access at this stage.
+            Returns:
+                dict: A dictionary containing the initialized storage client and parsed path details.
+                      - For S3: keys include 's3_client' (boto3 client), 'document_aws_bucket' (bucket name),
+                        and 'file_path' (path within the bucket).
+                      - For GCS: keys include 'gcs_client' (google.cloud.storage.Client), 'document_gcs_bucket' (bucket name),
+                        and 'file_path' (path within the bucket).
+                      - For HTTP/HTTPS/WWW: an empty dictionary is returned, as no specific client initialization
+                        is needed for direct web access at this stage.
 
-        Raises:
-            NotImplementedError: If the input URL scheme is not recognized or supported.
+            Raises:
+                NotImplementedError: If the input URL scheme is not recognized or supported.
         """
-        mime_type, _ = mimetypes.guess_type(input)
 
         if input.startswith("s3://"):
             # Initialize S3 client
@@ -192,34 +180,32 @@ class BaseLoader:
         else:
             raise NotImplementedError
 
-    def init_loader_class(
-        self, input: str, storage_client: dict, llm_api_key: str, **kwargs
-    ) -> any:
+    def init_loader_class(self, input: str, storage_client: dict, llm_api_key: str, **kwargs) -> any:
         """
-        Initializes and returns the appropriate content loader class based on the input URL's type.
+            Initializes and returns the appropriate content loader class based on the input URL's type.
 
-        This method acts as a factory, inspecting the input URL's scheme and MIME type
-        to determine which specific loader (e.g., YouTube transcript, HTML, Text, Audio, Video)
-        is best suited to handle the content. It also merges storage client details into kwargs
-        for loaders that might need them.
+            This method acts as a factory, inspecting the input URL's scheme and MIME type
+            to determine which specific loader (e.g., YouTube transcript, HTML, Text, Audio, Video)
+            is best suited to handle the content. It also merges storage client details into kwargs
+            for loaders that might need them.
 
-        Args:
-            input (str): The URL string of the content to be loaded.
-            storage_client (dict): A dictionary containing details and clients for cloud storage
-                                    (e.g., S3 client, GCS client, bucket names) as returned by initiate_storage.
-            llm_api_key (str): The API key for the LLM provider, necessary for loaders that
-                               interact with language models.
-            **kwargs: Additional keyword arguments to pass to the initialized loader class.
-                      These will be merged with the `storage_client` dictionary.
+            Args:
+                input (str): The URL string of the content to be loaded.
+                storage_client (dict): A dictionary containing details and clients for cloud storage
+                                        (e.g., S3 client, GCS client, bucket names) as returned by initiate_storage.
+                llm_api_key (str): The API key for the LLM provider, necessary for loaders that
+                                   interact with language models.
+                **kwargs: Additional keyword arguments to pass to the initialized loader class.
+                          These will be merged with the `storage_client` dictionary.
 
-        Returns:
-            An instance of a concrete loader class (e.g., YoutubeTranscriptLoader,
-            HtmlLoader, TextLoader, AudioLoader, VideoLoader).
+            Returns:
+                An instance of a concrete loader class (e.g., YoutubeTranscriptLoader,
+                HtmlLoader, TextLoader, AudioLoader, VideoLoader).
 
-        Raises:
-            ValueError: If a recognized MIME type is encountered but is not supported by any specific loader.
-            FileNotFoundError: If the input URL format is not recognized, or if it's a file path
-                               for which no suitable loader can be determined.
+            Raises:
+                ValueError: If a recognized MIME type is encountered but is not supported by any specific loader.
+                FileNotFoundError: If the input URL format is not recognized, or if it's a file path
+                                   for which no suitable loader can be determined.
         """
         parsed_url = urlparse(input)
         mime_type, _ = mimetypes.guess_type(input)
@@ -240,38 +226,18 @@ class BaseLoader:
 
         if parsed_url.scheme in ["http", "https"] or input.startswith("www."):
             if "youtube.com" in parsed_url.netloc or "youtu.be" in parsed_url.netloc:
-                return YoutubeTranscriptLoader(
-                    llm_api_key=llm_api_key,
-                    markdown_output=self.markdown_output,
-                    temp_dir=self.temp_dir,
-                    **kwargs,
-                )
+                return YoutubeTranscriptLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, **kwargs)
             else:
                 return HtmlLoader(markdown_output=self.markdown_output)
         elif mime_type:
-            if file_extension in [".pdf", ".xlsx", ".docx", ".txt"]:
-                return DocumentLoader(temp_dir=self.temp_dir, **kwargs)
+            if file_extension in [".pdf", ".xlsx", ".docx", ".txt", ".csv", ".odt", ".pptx", ".xls", ".doc", ".ppt", ".rtf"]:
+                return DocumentLoader(markdown_output=self.markdown_output, temp_dir=self.temp_dir, **kwargs)
             elif mime_type.startswith("audio/"):
-                return AudioLoader(
-                    llm_api_key=llm_api_key,
-                    markdown_output=self.markdown_output,
-                    temp_dir=self.temp_dir,
-                    **kwargs,
-                )
+                return AudioLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, **kwargs)
             elif mime_type.startswith("video/"):
-                return VideoLoader(
-                    llm_api_key=llm_api_key,
-                    markdown_output=self.markdown_output,
-                    temp_dir=self.temp_dir,
-                    **kwargs,
-                )
+                return VideoLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, **kwargs)
             elif mime_type.startswith("image/"):
-                return OCRLoader(
-                    llm_api_key=llm_api_key,
-                    markdown_output=self.markdown_output,
-                    temp_dir=self.temp_dir,
-                    **kwargs,
-                )
+                return OCRLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, **kwargs)
             elif mime_type == "text/plain":
                 return PlainTextLoader(
                     llm_api_key=llm_api_key,
@@ -309,7 +275,11 @@ class BaseLoader:
         bucket = parts[0]
 
         file_path = parts[1] if len(parts) > 1 else ""
-        return {"file_url": input_string, "bucket": bucket, "file_path": file_path}
+        return {
+            "file_url": input_string,
+            "bucket": bucket,
+            "file_path": file_path
+        }
 
     def run_loader_class(self, loader_class: any, input_list: list[str]) -> dict:
         """
@@ -352,10 +322,7 @@ class BaseLoader:
             with ThreadPoolExecutor() as executor:
                 # Associate each future with its original index
                 future_to_index = {
-                    executor.submit(
-                        loader_class.load,
-                        input_path=self.parse_input(input_string=s)["file_path"],
-                    ): idx
+                    executor.submit(loader_class.load, input_path=self.parse_input(input_string=s)["file_path"]): idx
                     for idx, s in enumerate(input_list)
                 }
 

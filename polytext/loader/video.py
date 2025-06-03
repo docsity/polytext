@@ -15,6 +15,7 @@ class VideoLoader:
 
     def __init__(
             self,
+            source: str,
             s3_client: object = None,
             document_aws_bucket: str = None,
             gcs_client: object = None,
@@ -24,7 +25,7 @@ class VideoLoader:
             temp_dir: str = 'temp',
             markdown_output: bool =True,
             bitrate_quality: int =9,
-            **kwargs,
+            **kwargs
     ) -> None:
         """
         Initialize VideoLoader class with optional configurations for S3, GCS, and LLM API.
@@ -45,7 +46,7 @@ class VideoLoader:
             ValueError: If cloud storage clients are provided without bucket names
             OSError: If temp directory creation fails
         """
-        self.source = kwargs.get('source', 'cloud')
+        self.source = source
         self.markdown_output = markdown_output
         self.s3_client = s3_client
         self.document_aws_bucket = document_aws_bucket

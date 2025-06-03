@@ -21,7 +21,8 @@ class YoutubeTranscriptLoader:
     Class to download, and process transcripts from YouTube videos.
     """
 
-    def __init__(self, llm_api_key: str = None, markdown_output: bool = True, temp_dir: str = 'temp', **kwargs) -> None:
+    def __init__(self, llm_api_key: str = None, markdown_output: bool = True, temp_dir: str = 'temp',
+                 save_transcript_chunks: bool = False, **kwargs) -> None:
         """
         Initialize YoutubeTranscriptLoader class with API key and configuration.
 
@@ -32,7 +33,7 @@ class YoutubeTranscriptLoader:
             temp_dir (str, optional): Temporary directory to store intermediate transcript files.
         """
         self.llm_api_key = llm_api_key
-        self.save_transcript_chunks = kwargs.get("save_transcript_chunks", False)
+        self.save_transcript_chunks = save_transcript_chunks
         self.temp_dir = temp_dir
         self.markdown_output = markdown_output
         self.type = "youtube"
