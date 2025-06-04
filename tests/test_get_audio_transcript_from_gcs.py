@@ -17,7 +17,7 @@ logging.basicConfig(level=logging.INFO,
 def main():
     markdown_output = True
     save_transcript_chunks = True
-    source = "local"
+    source = "cloud"
     bitrate_quality = 8
 
     # Initialize BaseLoader
@@ -29,13 +29,13 @@ def main():
     )
 
     # Define document data
-    file_path = "learning_resources/course_id=406/module_id=2658/id=31427/8434.mp4"
+    file_path = "gcs://opit-da-test-ml-ai-store-bucket/learning_resources/course_id=406/module_id=2658/id=31427/8434.mp4"
 
     local_file_path = "/Users/andreasolfanelli/Projects/polytext/tmp929e_7lh.mp3"
 
     # Call get_text method
     result_dict = loader.get_text(
-        input_list=[local_file_path],
+        input_list=[file_path],
     )
 
     import ipdb; ipdb.set_trace()

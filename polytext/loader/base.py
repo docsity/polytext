@@ -16,7 +16,8 @@ from ..loader import (
     YoutubeTranscriptLoader,
     HtmlLoader,
     PlainTextLoader,
-    DocumentOCRLoader
+    DocumentOCRLoader,
+    MarkdownLoader,
 )
 from ..exceptions import EmptyDocument
 
@@ -154,6 +155,7 @@ class BaseLoader:
         """
 
         if input.startswith("s3://"):
+            logger.info(f"Initiating S3 initialization for {input}")
             # Initialize S3 client
             s3_client = boto3.client("s3")
             s3_path = input.replace("s3://", "")
@@ -168,6 +170,7 @@ class BaseLoader:
                 "file_path": file_path,
             }
         elif input.startswith("gcs://"):
+            logger.info(f"Initializing GCS client for input: {input}")
             # Initialize GCS client
             gcs_client = storage.Client()
             gcs_path = input.replace("gcs://", "")
@@ -256,6 +259,8 @@ class BaseLoader:
                 return VideoLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, **kwargs)
             elif mime_type.startswith("image/"):
                 return OCRLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, **kwargs)
+            elif mime_type.startswith("text/markdown"):
+                return MarkdownLoader(markdown_output=self.markdown_output, temp_dir=self.temp_dir, **kwargs)
             elif mime_type == "text/plain":
                 return PlainTextLoader(
                     llm_api_key=llm_api_key,
