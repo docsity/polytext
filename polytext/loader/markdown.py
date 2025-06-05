@@ -108,10 +108,10 @@ class MarkdownLoader:
             return markdown_content
 
         except FileNotFoundError:
-            logger.error(f"File not found: {file_path}")
+            logger.info(f"File not found: {file_path}")
             raise
         except IOError as e:
-            logger.error(f"Error reading file {file_path}: {e}")
+            logger.info(f"Error reading file {file_path}: {e}")
             raise
 
     def get_text_from_markdown(self, file_path):

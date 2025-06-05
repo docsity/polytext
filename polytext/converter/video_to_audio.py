@@ -52,12 +52,12 @@ def convert_video_to_audio(video_file: str , bitrate_quality: int =9) -> str:
         return temp_audio_path
 
     except ffmpeg.Error as e:
-        logger.error(f"FFmpeg conversion failed: {e.stderr.decode()}")
+        logger.info(f"FFmpeg conversion failed: {e.stderr.decode()}")
         if os.path.exists(temp_audio_path):
             os.unlink(temp_audio_path)
         raise
     except Exception as e:
-        logger.error(f"Failed to convert video to audio: {str(e)}")
+        logger.info(f"Failed to convert video to audio: {str(e)}")
         if os.path.exists(temp_audio_path):
             os.unlink(temp_audio_path)
         raise

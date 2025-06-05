@@ -272,7 +272,7 @@ class TextMerger:
             return response_dict
 
         except Exception as e:
-            logger.error(f"Error during text merging: {str(e)}")
+            logger.info(f"Error during text merging: {str(e)}")
             raise
 
 

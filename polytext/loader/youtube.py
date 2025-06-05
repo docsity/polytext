@@ -202,7 +202,7 @@ class YoutubeTranscriptLoader:
                     raise FileNotFoundError(f"Audio file not found: {audio_path}")
 
             except Exception as e:
-                logger.error(f"Failed to download audio: {e}")
+                logger.info(f"Failed to download audio: {e}")
                 raise EmptyDocument(f"Could not download audio for this video: {video_url}")
 
             result_dict = transcribe_full_audio(

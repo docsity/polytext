@@ -117,7 +117,7 @@ class BaseLoader:
         try:
             response = self.run_loader_class(loader_class=loader_class, input_list=input_list)
         except EmptyDocument as e:
-            logger.error(f"Empty document encountered: {e.message}")
+            logger.info(f"Empty document encountered: {e.message}")
             if self.fallback_ocr:
                 loader_class = self.init_loader_class(input=first_file_url, storage_client=storage_client,
                                                       llm_api_key=self.llm_api_key, is_document_fallback=True, **kwargs)
@@ -367,7 +367,7 @@ class BaseLoader:
 
         elif is_multi_input and not is_image_type:
             error_msg = f"Unsupported input: multiple inputs ({len(input_list)} provided) are not all image types (first type: {first_mime_type}). Multi-threading is only supported for multiple images."
-            logger.error(error_msg)
+            logger.info(error_msg)
             raise ValueError(error_msg)
 
         else:

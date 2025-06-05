@@ -86,7 +86,8 @@ class PDFGenerator:
                 """
                 logger.info("Font-face CSS created")
             except Exception as e:
-                logger.error(f"Error loading font: {e}")
+                logger.info(f"Error loading font: {e}")
+                raise e
 
         page_numbers_css = f"""
         @page {{
@@ -258,5 +259,5 @@ class PDFGenerator:
 
             return pdf_value
         except Exception as e:
-            logger.error(f"Error generating PDF: {e}")
+            logger.info(f"Error generating PDF: {e}")
             raise

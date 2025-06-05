@@ -132,7 +132,7 @@ class DocumentConverter:
             logger.info(f"Conversion successful: '{output_file}'")
         except subprocess.CalledProcessError as e:
             error_msg = f"Error during conversion: {e}"
-            logger.error(error_msg)
+            logger.info(error_msg)
             raise ConversionError(error_msg, e)
 
         # After conversion, ensure the output file is correctly named
