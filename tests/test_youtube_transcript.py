@@ -9,13 +9,14 @@ load_dotenv('..env')
 
 from polytext.loader.base import BaseLoader
 
-url = 'https://www.youtube.com/watch?v=xY5x0q5JoPI'
+url = 'https://www.youtube.com/watch?v=l_pmZOlJUu4'
+# private 'https://www.youtube.com/watch?v=y0JSaif7DRU'
 # 'https://www.youtube.com/watch?v=xY5x0q5JoPI'
 # 'https://www.youtube.com/watch?v=6Ql5mQdxeWk'
 # 'https://www.youtube.com/watch?v=Md4Fs-Zc3tg&t=173s'
 # 'https://www.youtube.com/watch?v=xY5x0q5JoPI'
-# no parole
-# https://www.youtube.com/watch?v=SGT1mvdfLeU
+# no parole https://www.youtube.com/watch?v=SGT1mvdfLeU
+# age restricted https://www.youtube.com/watch?v=l_pmZOlJUu4
 
 def main():
     markdown_output = True
@@ -23,7 +24,7 @@ def main():
 
     loader = BaseLoader(
         markdown_output=markdown_output,
-        save_transcript_chunks=save_transcript_chunks
+        save_transcript_chunks=save_transcript_chunks,
     )
 
     result_dict = loader.get_text(

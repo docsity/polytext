@@ -5,7 +5,7 @@ import logging
 
 # External library imports
 from youtube_transcript_api import YouTubeTranscriptApi
-from youtube_transcript_api._errors import TranscriptsDisabled
+from youtube_transcript_api._errors import TranscriptsDisabled, InvalidVideoId, VideoUnavailable, TranslationLanguageNotAvailable, NoTranscriptFound, NotTranslatable, YouTubeRequestFailed, RequestBlocked, AgeRestricted
 from xml.etree.ElementTree import ParseError
 from requests.exceptions import ConnectionError
 from retry import retry
@@ -18,6 +18,7 @@ from ..exceptions import EmptyDocument
 
 logger = logging.getLogger(__name__)
 
+MIN_YOUTUBE_TEXT_LENGTH_ACCEPTED = int(os.getenv("MIN_YOUTUBE_TEXT_LENGTH_ACCEPTED", "200"))
 
 class YoutubeTranscriptLoader:
     """
@@ -72,7 +73,6 @@ class YoutubeTranscriptLoader:
             EmptyDocument: If subtitles are disabled or not found.
             Exception: For other errors.
         """
-
         ytt_api = YouTubeTranscriptApi()
         video_id = self.extract_video_id(video_url)
 
@@ -82,8 +82,8 @@ class YoutubeTranscriptLoader:
         logging.info("****Fetching transcript from YouTube****")
         transcript_data = ytt_api.fetch(video_id, languages)
 
-        if not transcript_data:
-            raise EmptyDocument(f"No text found in the transcript fot this video: {video_url}")
+        if not transcript_data or len(transcript_data) < MIN_YOUTUBE_TEXT_LENGTH_ACCEPTED:
+            raise EmptyDocument(f"No text found or text length is minor to {MIN_YOUTUBE_TEXT_LENGTH_ACCEPTED} in the transcript fot this video: {video_url}")
 
         # Extract plain text
         plain_text = "\n".join(line.text for line in transcript_data)
@@ -175,51 +175,57 @@ class YoutubeTranscriptLoader:
 
             result_dict["type"] = self.type
 
-        except TranscriptsDisabled:
-            logging.warning(
-                f"Subtitles are disabled for this video: {video_url}. Falling back to YT-DLP.")
+        except (EmptyDocument, TranscriptsDisabled, TranslationLanguageNotAvailable, NoTranscriptFound, NotTranslatable, YouTubeRequestFailed, RequestBlocked) as e:
+            logging.info(
+                f"Subtitles are disabled for this video: {video_url}. Falling back to YT-DLP.", e)
+
+            output_dir = self.temp_dir
+            video_id = self.extract_video_id(video_url)
+            os.makedirs(output_dir, exist_ok=True)
+            output_template = os.path.join(output_dir, f"{video_id}")
+            ydl_opts = {
+                'format': 'bestaudio/best',
+                'outtmpl': output_template,
+                'postprocessors': [{
+                    'key': 'FFmpegExtractAudio',
+                    'preferredcodec': 'mp3',
+                    'preferredquality': '192',
+                }],
+            }
 
             try:
-                output_dir = self.temp_dir
-                os.makedirs(output_dir, exist_ok=True)
-                output_template = os.path.join(output_dir, "%(id)s.%(ext)s")
-                ydl_opts = {
-                    'format': 'm4a/bestaudio/best',
-                    'outtmpl': output_template,
-                    'postprocessors': [{
-                        'key': 'FFmpegExtractAudio',
-                        'preferredcodec': 'm4a',
-                    }]
-                }
-
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     ydl.download([video_url])
 
                 # Find the downloaded audio file
-                video_id = self.extract_video_id(video_url)
-                audio_path = os.path.join(output_dir, f"{video_id}.m4a")
-                if not os.path.exists(audio_path):
-                    raise FileNotFoundError(f"Audio file not found: {audio_path}")
+                audio_path = os.path.join(output_dir, f"{video_id}.mp3")
 
-            except Exception as e:
-                logger.error(f"Failed to download audio: {e}")
+                result_dict = transcribe_full_audio(
+                    audio_file=audio_path,
+                    markdown_output=self.markdown_output,
+                    llm_api_key=self.llm_api_key,
+                    save_transcript_chunks=self.save_transcript_chunks,
+                )
+
+                result_dict["type"] = "youtube_audio"
+
+                if os.path.exists(audio_path):
+                    os.remove(audio_path)
+                    logger.info(f"Deleted temporary audio file: {audio_path}")
+
+            except yt_dlp.utils.DownloadError as e:
+                logger.error(f"Failed to download audio with yt-dlp: {e}", exc_info=True)
                 raise EmptyDocument(f"Could not download audio for this video: {video_url}")
 
-            result_dict = transcribe_full_audio(
-                audio_file=audio_path,
-                markdown_output=self.markdown_output,
-                llm_api_key=self.llm_api_key,
-                save_transcript_chunks=self.save_transcript_chunks,
-            )
+            except Exception as e:
+                logger.error(f"Unexpected error during audio download: {e}", exc_info=True)
+                raise e
 
-            result_dict["type"] = "youtube_transcript_disabled"
-
-            if os.path.exists(audio_path):
-                os.remove(audio_path)
-                logger.info(f"Deleted temporary audio file: {audio_path}")
+        except (InvalidVideoId, VideoUnavailable, AgeRestricted) as e:
+            logger.error(f"Invalid, unavailable, age restricted video: {video_url}", exc_info=True)
+            raise e
 
         result_dict["input"] = video_url
-
         return result_dict
 
     def load(self, input_path: str) -> dict:

@@ -14,7 +14,6 @@ from google.api_core import exceptions as google_exceptions
 from ..prompts.transcription import AUDIO_TO_MARKDOWN_PROMPT, AUDIO_TO_PLAIN_TEXT_PROMPT
 from ..processor.audio_chunker import AudioChunker
 from ..processor.text_merger import TextMerger
-from ..converter import BaseConverter
 
 logger = logging.getLogger(__name__)
 
@@ -243,7 +242,7 @@ class AudioToTextConverter:
         logger.info(f"Completion tokens: {response.usage_metadata.candidates_token_count}")
         logger.info(f"Prompt tokens: {response.usage_metadata.prompt_token_count}")
 
-        response_dict = {"transcript": response.text,
+        response_dict = {"transcript": response.text if "no human speech detected" not in response.text.lower() else "",
                          "completion_tokens": response.usage_metadata.candidates_token_count,
                          "prompt_tokens": response.usage_metadata.prompt_token_count}
 

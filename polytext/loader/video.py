@@ -181,9 +181,6 @@ class VideoLoader:
             os.remove(audio_path)
             logger.info(f"Removed temporary file {audio_path}")
 
-        if result_dict["text"].strip().lower() == "no human speech detected":
-            result_dict["text"] = ""
-
         return result_dict
 
     @staticmethod

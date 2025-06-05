@@ -29,10 +29,11 @@ class EmptyDocument(Exception):
         message (str): Description of why the document is considered empty
         code (int): Error code for categorizing the type of emptiness (default: None)
     """
-    def __init__(self, message: str, code: int = None) -> None:
+    def __init__(self, message: str, code: int = None, result_dict = None) -> None:
         super().__init__(message)
         self.message = message
         self.code = code
+        self.result_dict = result_dict
 
 
 class ExceededMaxPages(Exception):

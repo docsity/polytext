@@ -141,9 +141,6 @@ class AudioLoader:
             os.remove(temp_file_path)
             logger.info(f"Removed temporary file {temp_file_path}")
 
-        if result_dict["text"].strip().lower() == "no human speech detected":
-            result_dict["text"] = ""
-
         return result_dict
 
     def load(self, input_path: str) -> dict:

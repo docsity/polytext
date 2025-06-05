@@ -13,10 +13,10 @@ from ..loader import (
     DocumentLoader,
     VideoLoader,
     AudioLoader,
-    YoutubeTranscriptLoader,
     HtmlLoader,
     PlainTextLoader,
-    DocumentOCRLoader
+    DocumentOCRLoader,
+    YoutubeTranscriptLoaderWithLlm
 )
 from ..exceptions import EmptyDocument
 
@@ -244,7 +244,7 @@ class BaseLoader:
 
         if parsed_url.scheme in ["http", "https"] or input.startswith("www."):
             if "youtube.com" in parsed_url.netloc or "youtu.be" in parsed_url.netloc:
-                return YoutubeTranscriptLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, **kwargs)
+                return YoutubeTranscriptLoaderWithLlm(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, **kwargs)
             else:
                 return HtmlLoader(markdown_output=self.markdown_output)
         elif mime_type:
