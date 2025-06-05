@@ -227,6 +227,7 @@ class DocumentLoader:
         # Validate and adjust page range
         start_page, end_page = self.validate_page_range(total_pages)
 
+        try_not_markdown = True
         if self.markdown_output:
             # Use pymupdf4llm for markdown conversion
             logger.info("Converting file to Markdown")
@@ -234,7 +235,11 @@ class DocumentLoader:
                 pdf_document,
                 pages=list(range(start_page, end_page))
             )
-        else:
+
+            if len(text) >= MIN_DOC_TEXT_LENGHT_ACCEPTED:
+                try_not_markdown = False
+
+        if try_not_markdown:
             # Original plain text extraction
             logger.info("Not converting file to Markdown")
             text = ""
@@ -288,6 +293,7 @@ class DocumentLoader:
             return self.get_document_text_pypdf(file_path=file_path)
 
         if len(text) < MIN_DOC_TEXT_LENGHT_ACCEPTED:
+            logger.info(f"TEXT: {text}")
             message = f"Document text with less than {MIN_DOC_TEXT_LENGHT_ACCEPTED} characters"
             raise EmptyDocument(message=message, code=998)
 
