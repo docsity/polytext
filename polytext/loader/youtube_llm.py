@@ -63,9 +63,7 @@ class YoutubeTranscriptLoaderWithLlm:
                 google_exceptions.DeadlineExceeded,
                 google_exceptions.ResourceExhausted,
                 google_exceptions.ServiceUnavailable,
-                google_exceptions.InternalServerError,
-                errors.ServerError,
-                errors.ClientError
+                google_exceptions.InternalServerError
         ),
         tries=8,
         delay=1,
@@ -175,20 +173,8 @@ class YoutubeTranscriptLoaderWithLlm:
         except errors.ClientError as e:
             if e.status == 'INVALID_ARGUMENT':
                 raise Exception(f"Invalid argument: {e.message}")
-            elif e.status == 'PERMISSION_DENIED':
-                raise Exception(f"Permission denied: {e.message}")
-            elif e.status == 'RESOURCE_EXHAUSTED':
-                raise Exception(f"Resource exhausted: {e.message}")
-            elif e.status == 'NOT_FOUND':
-                raise Exception(f"Resource not found: {e.message}")
             else:
-                raise Exception(f"GenAI Client error: {e.message}")
-        except errors.ServerError as e:
-            raise Exception(f"GenAI Server error: {e.message}")
-        except (errors.UnknownFunctionCallArgumentError,
-                errors.UnsupportedFunctionError,
-                errors.FunctionInvocationError) as e:
-            raise Exception(f"GenAI Function error: {e}")
+                raise e
 
     def load(self, input_path: str) -> dict:
         """
