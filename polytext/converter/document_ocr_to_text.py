@@ -369,7 +369,7 @@ class DocumentOCRToTextConverter:
             return final_result_dict
 
         except Exception as e:
-            logger.error(f"Error processing document: {e}")
+            logger.info(f"Error processing document: {e}")
             raise
 
     def validate_page_range(self, total_pages: int) -> tuple[int, int]:

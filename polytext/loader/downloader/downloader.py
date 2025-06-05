@@ -72,5 +72,5 @@ class Downloader:
             return temp_file_path
 
         except Exception as e:
-            logger.error(f"Failed to download file from GCS: {str(e)}")
+            logger.info(f"Failed to download file from GCS: {str(e)}")
             raise

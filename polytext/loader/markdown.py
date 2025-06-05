@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 class MarkdownLoader:
 
     def __init__(self, source, markdown_output=True, s3_client=None, document_aws_bucket=None, gcs_client=None,
-                 document_gcs_bucket=None, temp_dir="temp"):
+                 document_gcs_bucket=None, temp_dir="temp", **kwargs):
         """
         Initialize the MarkdownLoader with cloud storage configurations.
 
@@ -74,6 +74,8 @@ class MarkdownLoader:
             downloader.download_file_from_gcs(file_path, temp_file_path)
             logger.info(f'Downloaded {file_path} to {temp_file_path}')
             return temp_file_path
+        else:
+            raise ValueError("No cloud storage client provided. Please provide either an S3 or GCS client.")
 
     def get_text_from_file(self, file_path: str) -> str:
         """
@@ -106,10 +108,10 @@ class MarkdownLoader:
             return markdown_content
 
         except FileNotFoundError:
-            logger.error(f"File not found: {file_path}")
+            logger.info(f"File not found: {file_path}")
             raise
         except IOError as e:
-            logger.error(f"Error reading file {file_path}: {e}")
+            logger.info(f"Error reading file {file_path}: {e}")
             raise
 
     def get_text_from_markdown(self, file_path):
@@ -167,9 +169,6 @@ class MarkdownLoader:
             "type": self.type,
             "input": file_path,
         }
-
-        if len(result_dict["text"].strip()) == 0:
-            raise EmptyDocument(f"No text extracted from {file_path}. The file may be empty or not contain any transcribable content.")
 
         return result_dict
 
