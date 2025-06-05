@@ -38,7 +38,6 @@ def main():
 
     # Call get_document_text method
     result_dict = loader.get_text(input_list=[local_file_path])
-    print(result_dict)
 
     import ipdb; ipdb.set_trace()
 
