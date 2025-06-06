@@ -16,8 +16,8 @@ from ..loader import (
     HtmlLoader,
     PlainTextLoader,
     DocumentOCRLoader,
-    YoutubeTranscriptLoaderWithLlm,
     MarkdownLoader,
+    YoutubeTranscriptLoaderWithLlm
 )
 from ..exceptions import EmptyDocument
 
@@ -66,7 +66,7 @@ class BaseLoader:
         self.kwargs = kwargs
         self.target_size = kwargs.get("target_size", 1)
         self.source = kwargs.get("source", "cloud")
-        self.fallback_ocr = kwargs.get("fallback_ocr", True)
+        self.fallback_ocr = kwargs.get("fallback_ocr", False)
         self.save_transcript_chunks = kwargs.get("save_transcript_chunks", False)
         self.bitrate_quality = kwargs.get("bitrate_quality", 9)
 
@@ -189,7 +189,7 @@ class BaseLoader:
             or input.startswith("https://")
             or input.startswith("www.")
             or input.startswith("www.youtube")
-            or self.is_local_path(input)
+            or not  self.is_local_path(input)
             or self.source == "local"
         ):
             return dict()
