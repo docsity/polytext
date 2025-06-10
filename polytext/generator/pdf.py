@@ -168,9 +168,21 @@ class PDFGenerator:
         }}
 
         ul li {{
-            list-style-type: disc; /* Standard bullet point */
-            margin-left: 1em;
-            line-height: 0.2;
+        margin-top: 6px;
+        margin-bottom: 2px;
+        list-style: none;              /* Remove default bullet */
+        margin-left: 1em;
+        line-height: 1.2;
+        position: relative;
+        }}
+    
+    ul li::before {{
+        content: "•";                  /* Custom bullet */
+        position: absolute;
+        left: -1em;
+        top: 1px;                        /* Aligns with first line */
+        font-weight: bold;
+        color: #000;
         }}
 
         a {{

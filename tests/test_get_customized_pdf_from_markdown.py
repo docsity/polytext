@@ -16,11 +16,12 @@ logging.basicConfig(level=logging.INFO,
 
 def main():
     # Initialize PDFGenerator
-    generator = PDFGenerator(font_family="'Arial', sans-serif", title_color="#000", title_text_align="center",
-                             body_color="white",
-                             text_color="#000", h2_color="#000", h3_color="#000", blockquote_border="#3498db",
-                             table_header_bg="#2e86c1", page_margin="0.7in", image_max_width="80%",
-                             add_page_numbers=True, font_path=None)
+    generator = PDFGenerator()
+        # font_family="'Arial', sans-serif", title_color="#000", title_text_align="center",
+        #                      body_color="white",
+        #                      text_color="#000", h2_color="#000", h3_color="#000", blockquote_border="#3498db",
+        #                      table_header_bg="#2e86c1", page_margin="0.7in", image_max_width="80%",
+        #                      add_page_numbers=True, font_path=None)
 
     # Define Markdown content
 #     markdown_text = """# Riassunto di Metodologia della ricerca sociale (Document Title)
@@ -69,6 +70,8 @@ Il principio del duplice effetto si applica quando un'azione ha sia un effetto p
 L'etica critica si distingue per la sua capacità di sviluppare un pensiero autonomo, basato su principi razionali interiorizzati, permettendo di giustificare la propria posizione etica. Questo approccio si confronta con il diritto, la deontologia e l'etica personale, cercando un equilibrio tra norme, doveri professionali e valori individuali. L'etica critica si distingue per la sua capacità di sviluppare un pensiero autonomo, basato su principi razionali interiorizzati, permettendo di giustificare la propria posizione etica. Questo approccio si confronta con il diritto, la deontologia e l'etica personale, cercando un equilibrio tra norme, doveri professionali e valori individuali.\n
 """
 
+    markdown_text = """### Fattori che Influenzano il Numero di Cellule Somatiche (SCC)\nDiversi fattori possono aumentare l'SCC:\n\n *   Età: l'SCC aumenta con l'età, soprattutto dopo la quarta lattazione.\n*   Stadio di lattazione: l'SCC aumenta nell'ultima fase della lattazione (15-30 giorni).\n*   Stress: stress ambientali, alimentari o di gestione possono aumentare l'SCC.\n*   Stagione: alte temperature e umidità aumentano l'SCC.\n*   Ferite alla mammella: danni al tessuto mammario possono causare un aumento temporaneo dell'SCC.\n*   Cause indirette: mungitura inadeguata o manutenzione insufficiente dell'impianto di mungitura.\n\nIl normale livello di cellule somatiche dalla seconda lattazione in poi è minore o uguale a 200 mila \ncellule/ml di latte, nelle manze di primo parto è invece minore o uguale a 100 mila. Un innalzamento del livello di SCC è gravissimo soprattutto per il latte da caseificare, in quanto \ndetermina un aumento degli enzimi proteo e lipolitici, contenuti nei leucociti.\n\n### Linear Score (LS)\nIl Linear Score (LS) è un sistema di valutazione lineare da 1 a 9 per conteggi cellulari e implica il \nraddoppiamento del numero di cellule somatiche per ogni aumento di un punto nel LS. I vantaggi \nrispetto allo SCC sono:  \nminor variabilità di mese a mese nell'arco di una lattazione; \nereditabilità maggiore (il 25%) rispetto alla conta delle \ncellule somatiche; \nconsente di comparare vari allevamenti riguardo alla sanità \ndella mammella.\n\nScreening di massa considerano un problema bovine con LS ≥ 5, mentre \nmanze di prima lattazione dovrebbero presentare LS ≤ 3. L’obiettivo in un allevamento è avere il 90% delle bovine con un LS inferiore a 5.\n\n"""
+
     with open('test_quiz.md', 'r', encoding='utf-8') as f:
         markdown_text = f.read()
 
@@ -76,7 +79,8 @@ L'etica critica si distingue per la sua capacità di sviluppare un pensiero auto
         # Call get_customized_pdf_from_markdown method
         pdf_value = generator.get_customized_pdf_from_markdown(
             input_markdown=markdown_text,
-            output_file="test_custom_pdf.pdf"
+            output_file="test_custom_pdf.pdf",
+            use_custom_css=True
         )
 
         print(f"Successfully generated custom pdf from markdown")
