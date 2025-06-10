@@ -1,15 +1,18 @@
 # pdf.py
 import os
+import re
 import logging
 import markdown
 from weasyprint import HTML, CSS
+import html as htmllib
 from io import BytesIO
 from weasyprint.text.fonts import FontConfiguration
 
 logger = logging.getLogger(__name__)
 
 
-def get_customized_pdf_from_markdown(input_markdown: str, output_file: str = None, use_custom_css: bool = True) -> bytes:
+def get_customized_pdf_from_markdown(input_markdown: str, output_file: str = None,
+                                     use_custom_css: bool = True) -> bytes:
     """
     Convenience function to convert Markdown content to a PDF with custom styling.
 
@@ -30,8 +33,10 @@ class PDFGenerator:
     A class to generate PDFs from Markdown content with custom CSS styling.
     """
 
-    def __init__(self, font_family: str = "Georgia, serif", title_color: str = "#1a5276", title_text_align: str = "center",
-                 body_color: str = "white", text_color: str = "#333", h2_color: str = "#d35400", h3_color: str = "#2e86c1",
+    def __init__(self, font_family: str = "Georgia, serif", title_color: str = "#1a5276",
+                 title_text_align: str = "center",
+                 body_color: str = "white", text_color: str = "#333", h2_color: str = "#d35400",
+                 h3_color: str = "#2e86c1",
                  blockquote_border: str = "#3498db", table_header_bg: str = "#2e86c1", page_margin: str = "0.8in",
                  image_max_width: str = "80%", add_page_numbers: bool = True, font_path: str = None) -> None:
         """
@@ -149,25 +154,25 @@ class PDFGenerator:
             font-size: 16px;
             margin: 20px 0;
         }}
-        
+
         /* Bullet Lists */
         ul {{
             margin-top: 30px; /* Space before the paragraph */
             margin-bottom: 25px;
             padding-left: 1em;
         }}
-        
+
         ul li::marker {{
             font-size: 1.5em; /* Increase bullet size */
             color: #000; /* Ensuring high contrast */
         }}
-        
+
         ul li {{
             list-style-type: disc; /* Standard bullet point */
             margin-left: 1em;
             line-height: 0.2;
         }}
-        
+
         a {{
             color: #0066cc;
             text-decoration: underline;
@@ -219,7 +224,13 @@ class PDFGenerator:
         """
         return css_template
 
-    def get_customized_pdf_from_markdown(self, input_markdown: str, output_file: str = None, use_custom_css: bool = True) -> bytes:
+    @staticmethod
+    def sanitize(html: str) -> str:
+        html = htmllib.unescape(html)  # turn entities into real chars
+        return re.sub(r'[\u2028\u2029\u200B-\u200F\uFEFF]', '\n', html)  # strip PS/LS
+
+    def get_customized_pdf_from_markdown(self, input_markdown: str, output_file: str = None,
+                                         use_custom_css: bool = True) -> bytes:
         """
         Convert Markdown content to a PDF with custom styling.
 
@@ -236,6 +247,7 @@ class PDFGenerator:
         """
         try:
             html_content = markdown.markdown(input_markdown, extensions=['extra', 'codehilite', 'toc', 'sane_lists'])
+            html_content = self.sanitize(html_content)
 
             # Generate PDF from HTML with Custom Styles
             pdf_buffer = BytesIO()
