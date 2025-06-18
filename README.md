@@ -1,4 +1,11 @@
+![polytext](https://github.com/docsity/polytext/tree/main/images/logo.jpeg)
+
 # polytext
+![PyPI - Version](https://img.shields.io/pypi/v/polytext)
+[![PyPI Build](https://github.com/docsity/polytext/actions/workflows/main.yml/badge.svg)](https://github.com/docsity/polytext/actions/workflows/main.yml)
+![PyPI - Downloads](https://img.shields.io/pypi/dm/polytext)
+[![PyPI Downloads](https://static.pepy.tech/badge/polytext)](https://pepy.tech/projects/polytext)
+![PyPI - Python Version](https://img.shields.io/pypi/pyversions/polytext)
 
 # Doc Utils
 
@@ -7,7 +14,7 @@ A Python package for document conversion and text extraction.
 ## Features
 
 - Convert various document formats (DOCX, ODT, PPT, etc.) to PDF
-- Extract text from PDF, Markdown, and audio files
+- Extract text from PDF, Markdown, IMAGE, and audio files
 - Support for both local files and S3/GCS cloud storage
 - Multiple PDF parsing backends (PyPDF, PyMuPDF)
 - Transcribe audio & video files (local or cloud) to text/markdown
@@ -48,6 +55,21 @@ except ConversionError as e:
     print(f"Conversion failed: {e}")
 ```
 
+Features that require the API key for Google Gemini are:
+- audio
+- video
+- image
+- youtube
+
+```python
+from polytext.loader.base import BaseLoader
+
+llm_api_key = "your_google_gemini_api_key"  # Set your Google Gemini API key here
+
+# Instantiate the loader 
+loader = BaseLoader(llm_api_key=llm_api_key)
+```
+
 Text or Markdown Extraction
 
 ```python
@@ -85,6 +107,13 @@ result = loader.get_text(input_list=["/path/to/video.mp4"])
 print(result["text"])
 # Extract text from cloud file
 result = loader.get_text(input_list=["s3://your-bucket/path/to/video.mp4"])
+print(result["text"])
+
+# Extract text from Image (local)
+result = loader.get_text(input_list=["/path/to/image.jpg"])
+print(result["text"])
+# Extract text from cloud file
+result = loader.get_text(input_list=["s3://your-bucket/path/to/image.jpg"])
 print(result["text"])
 
 # Extract transcript from a YouTube video
