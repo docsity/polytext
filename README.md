@@ -1,4 +1,4 @@
-![polytext](https://github.com/docsity/polytext/tree/main/images/logo.jpeg)
+![polytext](https://github.com/docsity/polytext/tree/update-readme/images/logo.jpeg)
 
 # polytext
 ![PyPI - Version](https://img.shields.io/pypi/v/polytext)
