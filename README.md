@@ -1,11 +1,11 @@
 ![polytext](https://github.com/docsity/polytext/blob/update-readme/images/logo.jpg)
 
 # polytext
-![PyPI - Version](https://img.shields.io/pypi/v/polytext)
-[![PyPI Build](https://github.com/docsity/polytext/actions/workflows/main.yml/badge.svg)](https://github.com/docsity/polytext/actions/workflows/main.yml)
-![PyPI - Downloads](https://img.shields.io/pypi/dm/polytext)
-[![PyPI Downloads](https://static.pepy.tech/badge/polytext)](https://pepy.tech/projects/polytext)
-![PyPI - Python Version](https://img.shields.io/pypi/pyversions/polytext)
+[![PyPI - Version](https://img.shields.io/pypi/v/polytext)](https://pypi.org/project/polytext/)
+[![PyPI Build](https://github.com/docsity/polytext/actions/workflows/main.yml/badge.svg)](https://github.com/docsity/polytext/actions)
+[![PyPI - Downloads](https://img.shields.io/pypi/dm/polytext)](https://pypi.org/project/polytext/)
+[![PyPI Downloads](https://static.pepy.tech/badge/polytext)](https://pypi.org/project/polytext/)
+[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/polytext)](https://pypi.org/project/polytext/)
 
 # Doc Utils
 
