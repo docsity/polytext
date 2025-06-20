@@ -16,12 +16,21 @@ logging.basicConfig(level=logging.INFO,
 
 def main():
     # Initialize PDFGenerator
-    generator = PDFGenerator()
-        # font_family="'Arial', sans-serif", title_color="#000", title_text_align="center",
-        #                      body_color="white",
-        #                      text_color="#000", h2_color="#000", h3_color="#000", blockquote_border="#3498db",
-        #                      table_header_bg="#2e86c1", page_margin="0.7in", image_max_width="80%",
-        #                      add_page_numbers=True, font_path=None)
+    generator = PDFGenerator(
+        font_family="'EasyReadingPRO', sans-serif", title_color="#000", title_text_align="center",
+        body_color="white",
+        text_color="#000", h2_color="#000", h3_color="#000", blockquote_border="#3498db",
+        table_header_bg="#2e86c1", page_margin="0.7in", image_max_width="80%",
+        add_page_numbers=True,
+        # font_path="/Users/marcodelgiudice/Projects/polytext/fonts/Lexend/Lexend-VariableFont_wght.ttf")
+        font_dir="/Users/marcodelgiudice/Projects/polytext/fonts/EasyReadingPRO",
+        font_variants=[
+            {'file': 'EasyReadingPRO.ttf', 'weight': 'normal', 'style': 'normal'},
+            {'file': 'EasyReadingPROBold.ttf', 'weight': 'bold', 'style': 'normal'},
+            {'file': 'EasyReadingPROItalic.ttf', 'weight': 'normal', 'style': 'italic'},
+            {'file': 'EasyReadingPROBoldItalic.ttf', 'weight': 'bold', 'style': 'italic'}
+        ]
+    )
 
     # Define Markdown content
 #     markdown_text = """# Riassunto di Metodologia della ricerca sociale (Document Title)
@@ -72,7 +81,7 @@ L'etica critica si distingue per la sua capacità di sviluppare un pensiero auto
 
     markdown_text = """### Fattori che Influenzano il Numero di Cellule Somatiche (SCC)\nDiversi fattori possono aumentare l'SCC:\n\n *   Età: l'SCC aumenta con l'età, soprattutto dopo la quarta lattazione.\n*   Stadio di lattazione: l'SCC aumenta nell'ultima fase della lattazione (15-30 giorni).\n*   Stress: stress ambientali, alimentari o di gestione possono aumentare l'SCC.\n*   Stagione: alte temperature e umidità aumentano l'SCC.\n*   Ferite alla mammella: danni al tessuto mammario possono causare un aumento temporaneo dell'SCC.\n*   Cause indirette: mungitura inadeguata o manutenzione insufficiente dell'impianto di mungitura.\n\nIl normale livello di cellule somatiche dalla seconda lattazione in poi è minore o uguale a 200 mila \ncellule/ml di latte, nelle manze di primo parto è invece minore o uguale a 100 mila. Un innalzamento del livello di SCC è gravissimo soprattutto per il latte da caseificare, in quanto \ndetermina un aumento degli enzimi proteo e lipolitici, contenuti nei leucociti.\n\n### Linear Score (LS)\nIl Linear Score (LS) è un sistema di valutazione lineare da 1 a 9 per conteggi cellulari e implica il \nraddoppiamento del numero di cellule somatiche per ogni aumento di un punto nel LS. I vantaggi \nrispetto allo SCC sono:  \nminor variabilità di mese a mese nell'arco di una lattazione; \nereditabilità maggiore (il 25%) rispetto alla conta delle \ncellule somatiche; \nconsente di comparare vari allevamenti riguardo alla sanità \ndella mammella.\n\nScreening di massa considerano un problema bovine con LS ≥ 5, mentre \nmanze di prima lattazione dovrebbero presentare LS ≤ 3. L’obiettivo in un allevamento è avere il 90% delle bovine con un LS inferiore a 5.\n\n"""
 
-    with open('test_quiz.md', 'r', encoding='utf-8') as f:
+    with open('test_summary.md', 'r', encoding='utf-8') as f:
         markdown_text = f.read()
 
     try:
