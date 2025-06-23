@@ -35,7 +35,9 @@ requests==2.32.3
 markitdown==0.1.1
 pymupdf4llm==0.0.24
 
-# pathlib
-pathlib==1.0.1
-
 retry==0.9.2
+
+# cli commands
+typer[all]==0.16.0
+numpy==2.2.6
+pandas==2.3.0
