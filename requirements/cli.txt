@@ -1,0 +1,5 @@
+-r default.txt
+
+# cli commands
+typer==0.16.0
+rich==14.0.0

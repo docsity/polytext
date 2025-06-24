@@ -23,24 +23,16 @@ echo -e "${GREEN}Starting build process for version ${VERSION}${NC}"
 
 # Build Docker image
 echo -e "\n${GREEN}Building Docker image...${NC}"
-docker build -t polytext-builder -f "$SCRIPT_DIR/Dockerfile" "$PROJECT_ROOT"
+docker build -t polytext-builder -f "$PROJECT_ROOT/Dockerfile" "$PROJECT_ROOT"
 
 # Create temporary container
 echo -e "\n${GREEN}Creating and starting Docker container...${NC}"
 CONTAINER_ID=$(docker create --name polytext-build-temp polytext-builder)
 docker start polytext-build-temp
 
-# Install the package in development mode in the container
-echo -e "\n${GREEN}Installing polytext package in development mode...${NC}"
-docker exec polytext-build-temp bash -c "cd /app && pip install -e ."
-
-# Verify the installation
-echo -e "\n${GREEN}Verifying polytext installation...${NC}"
-docker exec polytext-build-temp bash -c "python -c 'import polytext; print(\"Polytext successfully imported\")'"
-
 # Build Python executable with additional configuration
 echo -e "\n${GREEN}Building Python executable...${NC}"
-docker exec polytext-build-temp bash -c "cd /app/cli && python -m PyInstaller --clean --onefile --name polytext-temp --paths /app --hidden-import=polytext --hidden-import=polytext.loader --hidden-import=polytext.loader.html __main__.py"
+docker exec polytext-build-temp bash -c "cd /app/cli && python -m PyInstaller --clean --onefile --name polytext-temp --paths /app __main__.py"
 
 # Create output directory if it doesn't exist
 mkdir -p "$SCRIPT_DIR/dist"
