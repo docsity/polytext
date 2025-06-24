@@ -28,8 +28,8 @@ where `<VERSION>` is the value from the `VERSION` file in the cli directory.
 ## Deployment
 
 After building, the new executable needs to be uploaded to the following S3 locations:
-- `s3://docsity-data-develop/config/`
-- `s3://docsity-data/config/`
+- `s3://docsity-data-develop/library/`
+- `s3://docsity-data/library/`
 
 ### Prerequisites
 
