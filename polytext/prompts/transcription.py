@@ -27,7 +27,7 @@ You must follow these instructions exactly:
 VIDEO_TO_MARKDOWN_PROMPT = """I need you to transcribe only the human speech of the youtube video into Markdown.
 You must follow these instructions exactly:
 1. **Video Transcription only if human speech is detected**:
-    - Accurately transcribe the spoken human content of the video file into text.
+    - Accurately transcribe the spoken human content of the video file into text, maintaining the original language.
 2. **Text Structuring**:
     - You must group related phrases and concepts into paragraphs.
     - You must apply a hierarchy of subheadings (using only ##, ###) based on the flow of the speech and the importance of the topics.
@@ -44,7 +44,7 @@ You must follow these instructions exactly:
 VIDEO_TO_TEXT_PROMPT = """Transcribe the following human speech of this youtube video into plain text.
 You must follow these instructions exactly:
 1. **Audio Transcription** (only if human speech is detected):
-    - Accurately transcribe the spoken content of the audio file into text.
+    - Accurately transcribe the spoken content of the audio file into text, maintaining the original language.
 **Important rules**:
 - Do not include any additional explanations or comments outside of the transcription."
 - If **no human voice detected** or you cannot get the video transcript, return `no human voice detected` as a string.
