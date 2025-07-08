@@ -13,7 +13,7 @@ load_dotenv(".env")
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
-url = 'https://it.wikipedia.org/wiki/Diritto_privato'
+url = 'https://medium.com/@gzozulin/deep-research-agent-in-langgraph-with-semantic-memory-via-mcp-f690c4f9fc24'
     # 'https://www.youmath.it/domande-a-risposte/view/5393-integrale-cos2x.html'
 
 def main():
@@ -23,6 +23,10 @@ def main():
 
     try:
         result_dict = loader.get_text(input_list=[url])
+
+        with open("md_2_medium.md", "w", encoding="utf-8") as f:
+            f.write(result_dict['text'])
+
         return result_dict
 
     except Exception as e:

@@ -1,4 +1,3 @@
-# pdf.py
 import os
 import re
 import logging
@@ -6,6 +5,7 @@ import markdown
 from weasyprint import HTML, CSS
 import html as htmllib
 from io import BytesIO
+from typing import List, Dict
 from weasyprint.text.fonts import FontConfiguration
 
 logger = logging.getLogger(__name__)
@@ -38,7 +38,8 @@ class PDFGenerator:
                  body_color: str = "white", text_color: str = "#333", h2_color: str = "#d35400",
                  h3_color: str = "#2e86c1",
                  blockquote_border: str = "#3498db", table_header_bg: str = "#2e86c1", page_margin: str = "0.8in",
-                 image_max_width: str = "80%", add_page_numbers: bool = True, font_path: str = None) -> None:
+                 image_max_width: str = "80%", add_page_numbers: bool = True,
+                 font_path: str = None, font_dir: str = None, font_variants: List[Dict] = None) -> None:
         """
         Initialize the PDFGenerator with custom styling options.
 
@@ -54,7 +55,9 @@ class PDFGenerator:
             page_margin: Margin for the page.
             image_max_width: Maximum width for images.
             add_page_numbers: Whether to add page numbers.
-            font_path: Path to a custom font file.
+            font_path: Path to a custom font file (for backward compatibility).
+            font_dir: Path to directory containing all font variants.
+            font_variants: List of font variants to include (if font_dir is specified).
         """
         self.font_family = font_family
         self.title_color = title_color
@@ -69,6 +72,52 @@ class PDFGenerator:
         self.image_max_width = image_max_width
         self.add_page_numbers = add_page_numbers
         self.font_path = font_path
+        self.font_dir = font_dir
+        self.font_variants = font_variants
+
+    def generate_font_face_css(self) -> str:
+        """
+        Generate @font-face CSS declarations for all available font variants.
+
+        Returns:
+            A string containing the @font-face CSS declarations.
+        """
+        if not self.font_dir and not self.font_path:
+            return ""
+
+        font_face_css = ""
+        font_name = self.font_family.split(",")[0].strip().strip('"').strip("'")
+
+        # If font_dir is provided, look for all variants
+        if self.font_dir and os.path.exists(self.font_dir):
+            logger.info(f"Using font directory: {self.font_dir}")
+
+            for variant in self.font_variants:
+                font_file_path = os.path.join(self.font_dir, variant['file'])
+                if os.path.exists(font_file_path):
+                    logger.info(f"Found font variant: {variant['file']}")
+                    font_face_css += f"""
+                    @font-face {{
+                        font-family: '{font_name}';
+                        src: url('file://{font_file_path}') format('truetype');
+                        font-weight: {variant['weight']};
+                        font-style: {variant['style']};
+                    }}
+                    """
+
+        # Fallback to single font file (backward compatibility)
+        elif self.font_path and os.path.exists(self.font_path):
+            logger.info(f"Using single font file: {self.font_path}")
+            font_face_css = f"""
+            @font-face {{
+                font-family: '{font_name}';
+                src: url('file://{self.font_path}') format('truetype');
+                font-weight: normal;
+                font-style: normal;
+            }}
+            """
+
+        return font_face_css
 
     def generate_custom_css(self) -> str:
         """
@@ -77,22 +126,13 @@ class PDFGenerator:
         Returns:
             A string containing the custom CSS.
         """
-        font_face_css = ""
-        if self.font_path and os.path.exists(self.font_path):
-            logger.info(f"Using custom font: {self.font_path}")
-            try:
-                font_face_css = f"""
-                    @font-face {{
-                        font-family: {self.font_family.split(",")[0]};
-                        src: url('file://{self.font_path}') format('truetype');
-                        font-weight: normal;
-                        font-style: normal;
-                    }}
-                """
-                logger.info("Font-face CSS created")
-            except Exception as e:
-                logger.info(f"Error loading font: {e}")
-                raise e
+        try:
+            font_face_css = self.generate_font_face_css()
+            if font_face_css:
+                logger.info("Font-face CSS created successfully")
+        except Exception as e:
+            logger.info(f"Error loading fonts: {e}")
+            font_face_css = ""
 
         page_numbers_css = f"""
         @page {{
@@ -113,10 +153,10 @@ class PDFGenerator:
         css_template = f"""
         {page_numbers_css}
 
-        {font_face_css} /* Include font-face only if custom font is provided */
+        {font_face_css}
 
         * {{
-            font-family: {self.font_family} !important;  /* Force the font family on all elements */
+            font-family: {self.font_family} !important;
         }}
 
         body {{
@@ -133,6 +173,7 @@ class PDFGenerator:
             text-align: {self.title_text_align};
             margin-bottom: 45px;
             line-height: 1.4;
+            font-weight: bold;
         }}
 
         h2 {{
@@ -140,6 +181,7 @@ class PDFGenerator:
             font-size: 25px;
             margin-top: 10px;
             margin-bottom: 20px;
+            font-weight: bold;
         }}
 
         h3 {{
@@ -147,7 +189,8 @@ class PDFGenerator:
             font-size: 21px;
             margin-top: 25px;
             line-height: 1.2;
-            text-align: left
+            text-align: left;
+            font-weight: bold;
         }}
 
         p {{
@@ -155,40 +198,49 @@ class PDFGenerator:
             margin: 20px 0;
         }}
 
+        strong, b {{
+            font-weight: bold;
+        }}
+
+        em, i {{
+            font-style: italic;
+        }}
+
         /* Bullet Lists */
         ul {{
-            margin-top: 30px; /* Space before the paragraph */
+            margin-top: 30px;
             margin-bottom: 25px;
             padding-left: 1em;
         }}
 
         ul li::marker {{
-            font-size: 1.5em; /* Increase bullet size */
-            color: #000; /* Ensuring high contrast */
+            font-size: 1.5em;
+            color: #000;
         }}
 
         ul li {{
-        margin-top: 6px;
-        margin-bottom: 2px;
-        list-style: none;              /* Remove default bullet */
-        margin-left: 1em;
-        line-height: 1.2;
-        position: relative;
+            margin-top: 6px;
+            margin-bottom: 2px;
+            list-style: none;
+            margin-left: 1em;
+            line-height: 1.2;
+            position: relative;
         }}
-    
-    ul li::before {{
-        content: "•";                  /* Custom bullet */
-        position: absolute;
-        left: -1em;
-        top: 1px;                        /* Aligns with first line */
-        font-weight: bold;
-        color: #000;
+
+        ul li::before {{
+            content: "•";
+            position: absolute;
+            left: -1em;
+            top: 1px;
+            font-weight: bold;
+            color: #000;
         }}
 
         a {{
             color: #0066cc;
             text-decoration: underline;
         }}
+
         a:hover {{
             text-decoration: underline;
         }}
@@ -216,6 +268,7 @@ class PDFGenerator:
         th {{
             background-color: {self.table_header_bg};
             color: white;
+            font-weight: bold;
         }}
 
         img {{
@@ -238,8 +291,8 @@ class PDFGenerator:
 
     @staticmethod
     def sanitize(html: str) -> str:
-        html = htmllib.unescape(html)  # turn entities into real chars
-        return re.sub(r'[\u2028\u2029\u200B-\u200F\uFEFF]', '\n', html)  # strip PS/LS
+        html = htmllib.unescape(html)
+        return re.sub(r'[\u2028\u2029\u200B-\u200F\uFEFF]', '\n', html)
 
     def get_customized_pdf_from_markdown(self, input_markdown: str, output_file: str = None,
                                          use_custom_css: bool = True) -> bytes:

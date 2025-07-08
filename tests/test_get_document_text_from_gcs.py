@@ -44,10 +44,10 @@ def main():
     # file_path = "gcs://opit-da-test-ml-ai-store-bucket/learning_resources/course_id=353/module_id=3056/id=31617/Supervisory+Agreement+Form+-+MSc.pdf"
     file_path = "s3://docsity-data/documents/original/2025/02/01/iiakfmyied-756df65b-2b69-46e2-8916-ce8d394829de-8087.odt"
     file_path = "s3://docsity-data/documents/original/2025/05/25/arb45ujrrv-4d6ef3d3-e4c4-4f3d-95b3-01d476c81ab3-9198.doc"
-    file_path = "s3://docsity-data/documents/original/2025/05/25/mzatlcs8ja-5ccf33be-9fd5-4b77-933b-67f95fb73ca3-4858.pdf"
-    file_path = "s3://docsity-ai/documents/uploads/2025/06/07/mbme4vnj-fa0a1418910209fb3cfb802fac25539913b2bae9.pdf"
-    #file_path = "s3://docsity-ai/documents/uploads/2025/06/05/mbixox3p-65ffea88dad50a6ed0ca428a38ebe77ca651b0ed.pdf"
-    local_file_path = "/Users/marcodelgiudice/Projects/polytext/test_load.pdf"
+    # file_path = "s3://docsity-data/documents/original/2025/05/25/mzatlcs8ja-5ccf33be-9fd5-4b77-933b-67f95fb73ca3-4858.pdf"
+    # file_path = "s3://docsity-ai/documents/uploads/2025/06/07/mbme4vnj-fa0a1418910209fb3cfb802fac25539913b2bae9.pdf"
+    # file_path = "s3://docsity-ai/documents/uploads/2025/06/05/mbixox3p-65ffea88dad50a6ed0ca428a38ebe77ca651b0ed.pdf"
+    local_file_path = "/Users/marcodelgiudice/Projects/polytext/prova_formato.pdf"
 
     try:
         # Call get_document_text method
@@ -62,7 +62,7 @@ def main():
         #print(document_text[:500] + "...")  # Print first 500 chars
 
         # Optionally save the extracted text to a file
-        with open("extracted_text.txt", "w", encoding="utf-8") as f:
+        with open("md_4_doc.md", "w", encoding="utf-8") as f:
             f.write(result_dict['text'])
 
     except EmptyDocument as e:
