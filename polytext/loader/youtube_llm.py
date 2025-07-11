@@ -154,12 +154,12 @@ class YoutubeTranscriptLoaderWithLlm:
                 print(f"Token total: {response.usage_metadata.total_token_count}")
 
             # Text below minimum threshold or not found
-            if "no human speech detected" not in response.text.lower() and len(response.text) < MIN_YOUTUBE_TEXT_LENGTH_ACCEPTED:
+            if response.text and "no human speech detected" not in response.text.lower() and len(response.text) < MIN_YOUTUBE_TEXT_LENGTH_ACCEPTED:
                 message = f"No text found or text length is minor to {MIN_YOUTUBE_TEXT_LENGTH_ACCEPTED} in the transcript fot this video: {video_url}"
                 logger.info(message)
                 raise EmptyDocument(message=message, code=998)
 
-            result_dict = {"text": response.text if "no human speech detected" not in response.text.lower() else "",
+            result_dict = {"text": response.text if response.text and "no human speech detected" not in response.text.lower() else "",
                            "completion_tokens": response.usage_metadata.candidates_token_count,
                            "prompt_tokens": response.usage_metadata.prompt_token_count,
                            "completion_model": self.model,
