@@ -32,8 +32,15 @@ docker start polytext-build-temp
 
 # Build Python executable with additional configuration
 echo -e "\n${GREEN}Building Python executable...${NC}"
-docker exec polytext-build-temp bash -c "cd /app/cli && python -m PyInstaller --clean --onefile --name polytext-temp --paths /app __main__.py"
-
+docker exec polytext-build-temp bash -c \
+"cd /app/cli && \
+python -m PyInstaller \
+	--clean \
+	--onefile \
+	--name polytext-temp \
+	--paths /app \
+	--add-data /usr/local/lib/python3.12/site-packages/magika:magika \
+	__main__.py"
 # Create output directory if it doesn't exist
 mkdir -p "$SCRIPT_DIR/dist"
 

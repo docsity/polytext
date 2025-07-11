@@ -1,5 +1,5 @@
-# Use an official Python image as a base
-FROM python:3.12-slim
+# Usa un'immagine basata su Debian 11 (Bullseye) per massima compatibilità
+FROM python:3.12-slim-bullseye
 
 # Set the working directory inside the container
 WORKDIR /app
