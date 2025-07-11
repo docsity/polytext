@@ -2,9 +2,11 @@
 import os
 import tempfile
 import logging
+import mimetypes
 
 # Local imports
 from ..converter.text_to_md import text_to_md
+from ..converter.html_to_md import html_to_md
 from ..exceptions import EmptyDocument
 
 logger = logging.getLogger(__name__)
@@ -86,12 +88,31 @@ class PlainTextLoader:
 
     def load(self, input_path: str) -> dict:
         """
-        Load and process plain text from the given input.
+        Loads and processes text from the specified input file.
+
+        The method detects the MIME type of the input file:
+          - If the file is HTML (`text/html`), it reads the file and converts its content to Markdown using `html_to_md`.
+          - If the file is plain text, it processes the content directly using `get_plain_text`.
 
         Args:
-            input_path (str): The plain text input to process.
+            input_path (str): The path to the input file (plain text or HTML).
 
         Returns:
-            dict: Dictionary containing the processed text and associated metadata.
+            dict: A dictionary containing the processed text and metadata:
+                - text (str): The extracted and optionally formatted text.
+                - completion_tokens (int, optional): Number of completion tokens (if available).
+                - prompt_tokens (int, optional): Number of prompt tokens (if available).
+                - completion_model (str, optional): Name of the model used (if available).
+                - completion_model_provider (str, optional): Provider of the model (if available).
+                - text_chunks (list, optional): List of processed text chunks (if enabled).
+                - type (str): Type of the processed source ("plain_text").
+                - input (str): The input file path.
         """
-        return self.get_plain_text(plain_text=input_path)
+        mime_type, _ = mimetypes.guess_type(input_path)
+        if mime_type == "text/html":
+            result_dict = html_to_md(input_path)
+            result_dict["type"] = "plain_text"
+            result_dict["input"] = input_path
+            return result_dict
+        else:
+            return self.get_plain_text(plain_text=input_path)
