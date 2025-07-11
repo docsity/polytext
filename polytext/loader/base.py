@@ -261,7 +261,7 @@ class BaseLoader:
                 return OCRLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, **kwargs)
             elif mime_type.startswith("text/markdown"):
                 return MarkdownLoader(markdown_output=self.markdown_output, temp_dir=self.temp_dir, **kwargs)
-            elif mime_type == "text/plain":
+            elif mime_type == "text/html":
                 return PlainTextLoader(
                     llm_api_key=llm_api_key,
                     markdown_output=self.markdown_output,
