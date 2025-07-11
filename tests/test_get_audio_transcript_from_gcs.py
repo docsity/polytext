@@ -31,13 +31,12 @@ def main():
     # Define document data
     file_path = "gcs://opit-da-test-ml-ai-store-bucket/learning_resources/course_id=406/module_id=2658/id=31427/8434.mp4"
 
-    local_file_path = "/Users/andreasolfanelli/Projects/polytext/martedì alle 15-46(1).aac"
+    local_file_path = "/Users/andreasolfanelli/Projects/polytext/tmp929e_7lh.mp3"
 
     # Call get_text method
     result_dict = loader.get_text(
         input_list=[local_file_path],
     )
-    print(result_dict)
 
     import ipdb; ipdb.set_trace()
 
