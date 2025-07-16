@@ -1,4 +1,5 @@
 -r default.txt
+-r sentry.txt
 
 # cli commands
 typer==0.16.0
