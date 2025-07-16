@@ -5,6 +5,16 @@ import json # For JSON output
 import os
 import sys
 
+# --- PyInstaller: START ---
+# This block handles path adjustments when running as a bundled executable.
+# It ensures that external binaries (like ffmpeg) included with --add-binary
+# are found at runtime.
+if getattr(sys, 'frozen', False):
+    bundle_dir = sys._MEIPASS
+    # Add the bundled ffmpeg directory to the system's PATH
+    os.environ['PATH'] += os.pathsep + os.path.join(bundle_dir, 'ffmpeg')
+# --- PyInstaller: END ---
+
 # Aggiungi la directory principale del progetto al sys.path
 project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root))

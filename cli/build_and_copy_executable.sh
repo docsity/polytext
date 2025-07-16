@@ -40,6 +40,8 @@ python -m PyInstaller \
 	--name polytext-temp \
 	--paths /app \
 	--add-data /usr/local/lib/python3.12/site-packages/magika:magika \
+	--add-binary /usr/bin/ffmpeg:ffmpeg \
+	--add-binary /usr/bin/ffprobe:ffmpeg \
 	__main__.py"
 # Create output directory if it doesn't exist
 mkdir -p "$SCRIPT_DIR/dist"

@@ -1,5 +1,5 @@
 # Usa un'immagine basata su Debian 11 (Bullseye) per massima compatibilità
-FROM python:3.12-slim-bullseye
+FROM python:3.12.10-slim-bullseye
 
 # Set the working directory inside the container
 WORKDIR /app
@@ -8,16 +8,12 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     # Essential dependencies for builds and some libraries
     build-essential \
+    # Multimedia framework required by ffmpeg-python and pydub
+    ffmpeg \
     # Dependencies for WeasyPrint and other GUI/graphic libraries
-    # GObject and GLib are fundamental for many of these
-    libglib2.0-0 \
     libpango-1.0-0 \
-    libharfbuzz0b \
-    libffi-dev \
-    libcairo2 \
-    libpangocairo-1.0-0 \
-    libgdk-pixbuf2.0-0 \
-    shared-mime-info \
+    libpangoft2-1.0-0 \
+    weasyprint \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy your local 'requirements' folder
