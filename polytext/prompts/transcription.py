@@ -1,7 +1,7 @@
 AUDIO_TO_MARKDOWN_PROMPT = """I need you to transcribe and format the content of this audio file into Markdown.
 You must follow these instructions exactly:
 1. **Audio Transcription** (only if human speech is detected):
-    - Accurately transcribe the spoken content of the audio file into text.
+    - Accurately transcribe the spoken content of the audio file into text, maintaining the original language.
 2. **Text Structuring**:
     - You must group related phrases and concepts into paragraphs.
     - You must apply a hierarchy of subheadings (using only ##, ###) based on the flow of the speech and the importance of the topics.
@@ -18,7 +18,7 @@ You must follow these instructions exactly:
 AUDIO_TO_PLAIN_TEXT_PROMPT = """Transcribe the following audio to plain text format.
 You must follow these instructions exactly:
 1. **Audio Transcription** (only if human speech is detected):
-    - Accurately transcribe the spoken content of the audio file into text.
+    - Accurately transcribe the spoken content of the audio file into text, maintaining the original language.
 **Important rules**:
 - Do not include any additional explanations or comments outside of the transcription."
 - If **no human speech is detected**, return `no human speech detected` as a string
