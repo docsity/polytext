@@ -32,17 +32,8 @@ docker start polytext-build-temp
 
 # Build Python executable with additional configuration
 echo -e "\n${GREEN}Building Python executable...${NC}"
-docker exec polytext-build-temp bash -c \
-"cd /app/cli && \
-python -m PyInstaller \
-	--clean \
-	--onefile \
-	--name polytext-temp \
-	--paths /app \
-	--add-data /usr/local/lib/python3.12/site-packages/magika:magika \
-	--add-binary /usr/bin/ffmpeg:ffmpeg \
-	--add-binary /usr/bin/ffprobe:ffmpeg \
-	__main__.py"
+docker exec polytext-build-temp bash -c "cd /app/cli && python3.12 -m PyInstaller --clean --noconfirm polytext-cli.spec"
+
 # Create output directory if it doesn't exist
 mkdir -p "$SCRIPT_DIR/dist"
 

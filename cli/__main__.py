@@ -20,7 +20,8 @@ project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root))
 
 # Import BaseLoader instead of specific loaders for the main command logic
-from polytext.loader.base import BaseLoader
+from polytext.loader import BaseLoader
+from polytext.exceptions import EmptyDocument, ConversionError
 
 # Create an instance of the Typer application
 app = typer.Typer()
@@ -77,12 +78,18 @@ def process(
 
         typer.echo("Processing completed.")
 
-    except FileNotFoundError as e:
-        # This can be raised by BaseLoader if the input is not found or not recognized.
-        typer.secho(f"Error: Input file/resource not found, not accessible, or type not supported by BaseLoader: '{input_source}'. Details: {e}", fg=typer.colors.RED, err=True)
+    except EmptyDocument as e:
+        typer.secho(f"Processing Warning: The document appears to be empty or lacks extractable content. Reason: {e.message}", fg=typer.colors.YELLOW, err=True)
+        sys.exit(1)
+    except ConversionError as e:
+        typer.secho(f"File Conversion Error: Could not convert the input file. This may require system dependencies like LibreOffice. Details: {e.message}", fg=typer.colors.RED, err=True)
+        sys.exit(1)
+    except FileNotFoundError:
+        # This can be raised if a local file path is incorrect.
+        typer.secho(f"Error: Input file not found at '{input_source}'. Please check the path.", fg=typer.colors.RED, err=True)
         sys.exit(1)
     except PermissionError:
-         typer.secho(f"Error: Permission denied while accessing a file or directory.", fg=typer.colors.RED, err=True)
+         typer.secho(f"Error: Permission denied. Could not read '{input_source}' or write to '{output_path}'.", fg=typer.colors.RED, err=True)
          sys.exit(1)
     except Exception as e: # Catch-all for other errors from BaseLoader or its sub-loaders
         typer.secho(f"An unexpected error occurred during processing: {e}", fg=typer.colors.RED, err=True)
