@@ -55,7 +55,7 @@ class YoutubeTranscriptLoaderWithLlm:
         self.save_transcript_chunks = save_transcript_chunks
         self.temp_dir = temp_dir
         self.markdown_output = markdown_output
-        self.type = "youtube"
+        self.type = "youtube_url"
         self.temp_dir = os.path.abspath(temp_dir)
 
     @retry(

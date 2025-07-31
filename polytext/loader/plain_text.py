@@ -40,7 +40,7 @@ class PlainTextLoader:
         self.save_transcript_chunks = kwargs.get("save_transcript_chunks", False)
         self.temp_dir = temp_dir
         self.markdown_output = markdown_output
-        self.type = "plain_text"
+        self.type = "text"
 
         self.temp_dir = os.path.abspath(temp_dir)
         os.makedirs(self.temp_dir, exist_ok=True)
@@ -111,7 +111,7 @@ class PlainTextLoader:
         mime_type, _ = mimetypes.guess_type(input_path)
         if mime_type == "text/html":
             result_dict = html_to_md(input_path)
-            result_dict["type"] = "plain_text"
+            result_dict["type"] = "text"
             result_dict["input"] = input_path
             return result_dict
         else:
