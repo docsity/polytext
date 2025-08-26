@@ -23,9 +23,9 @@ class HtmlLoader:
             markdown_output (bool): Whether to convert the text to Markdown format. Defaults to True.
         """
         self.markdown_output = markdown_output
-        self.type = "link"
+        self.type = "url"
 
-    @retry(requests.exceptions.RequestException, tries=3, delay=2)
+    @retry(requests.exceptions.RequestException, tries=5, delay=2, backoff=2)
     def get_text_from_url(self, url: str) -> dict:
         """
         Retrieves the HTML content, converts it to Markdown, and optionally to plain text.

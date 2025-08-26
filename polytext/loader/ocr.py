@@ -57,7 +57,7 @@ class OCRLoader:
         self.document_gcs_bucket = document_gcs_bucket
         self.llm_api_key = llm_api_key
         self.target_size = target_size
-        self.type = "ocr"
+        self.type = "image"
 
         # Set up custom temp directory
         self.temp_dir = os.path.abspath(temp_dir)
