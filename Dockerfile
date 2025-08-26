@@ -1,4 +1,3 @@
-# Usa un'immagine basata su Debian 11 (Bullseye) per massima compatibilità
 FROM ubuntu:24.04
 
 # Set the working directory inside the container
