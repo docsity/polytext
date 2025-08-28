@@ -59,10 +59,7 @@ class OCRLoader:
         self.target_size = target_size
         self.type = "image"
 
-        # Set up custom temp directory
-        self.temp_dir = os.path.abspath(temp_dir)
-        os.makedirs(self.temp_dir, exist_ok=True)
-        tempfile.tempdir = self.temp_dir
+        self.temp_dir = temp_dir
 
     def download_document(self, file_path, temp_file_path):
         """
@@ -110,13 +107,9 @@ class OCRLoader:
 
         # Load or download the document file
         if self.source == "cloud":
-            fd, temp_file_path = tempfile.mkstemp()
-            try:
-                fd, temp_file = tempfile.mkstemp()
-                temp_file_path = self.download_document(file_path, temp_file)
-                logger.info(f"Successfully loaded document from {file_path}")
-            finally:
-                os.close(fd)  # Close the file descriptor
+            temp_file_path = os.path.join(self.temp_dir, os.path.basename(file_path))
+            self.download_document(file_path, temp_file_path)
+            logger.info(f"Successfully loaded document from {file_path}")
         elif self.source == "local":
             temp_file_path = file_path  # For local files, use the path directly
             logger.info(f"Successfully loaded document from local path {file_path}")
@@ -130,12 +123,6 @@ class OCRLoader:
 
         result_dict["type"] = self.type
         result_dict["input"] = file_path
-
-        # Clean up temporary file if it was downloaded
-        if self.source == "cloud":
-            if os.path.exists(temp_file_path):
-                os.remove(temp_file_path)
-                logger.info(f"Removed temporary file {temp_file_path}")
 
         if len(result_dict["text"].strip()) == 0:
             raise EmptyDocument(f"No text extracted from {file_path}. The file may be empty or not contain any transcribable content.")

@@ -72,10 +72,7 @@ class DocumentLoader:
         self.type = "document"
         self.page_range = page_range
 
-        # Set up custom temp directory
-        self.temp_dir = os.path.abspath(temp_dir)
-        os.makedirs(self.temp_dir, exist_ok=True)
-        tempfile.tempdir = self.temp_dir
+        self.temp_dir = temp_dir
 
     def download_document(self, file_path: str, temp_file_path: str) -> str:
         """
@@ -152,13 +149,11 @@ class DocumentLoader:
         logger.info(f"input_file: {input_file}")
 
         # Create a temporary file for output
-        fd, output_file = tempfile.mkstemp(suffix=".pdf")
-        os.close(fd)  # Close file descriptor explicitly
+        output_file = os.path.join(self.temp_dir, os.path.basename(file_prefix) + ".pdf")
 
         logger.info("Using LibreOffice")
         convert_to_pdf(input_file=input_file, output_file=output_file, original_file=file_prefix)
         logger.info("Document converted to pdf")
-        os.remove(input_file)
         return output_file
 
     # PDF text extraction methods
@@ -193,12 +188,9 @@ class DocumentLoader:
         logger.debug("Using PyMuPDF")
 
         if self.source == "cloud":
-            fd, temp_file_path = tempfile.mkstemp()
-            try:
-                temp_file_path = self.download_document(file_path, temp_file_path)
-                logger.info(f"Successfully loaded document from {file_path}")
-            finally:
-                os.close(fd)
+            temp_file_path = os.path.join(self.temp_dir, os.path.basename(file_path))
+            self.download_document(file_path, temp_file_path)
+            logger.info(f"Successfully loaded document from {file_path}")
         elif self.source == "local":
             temp_file_path = file_path
             logger.info(f"Successfully loaded document from local path {file_path}")
@@ -280,8 +272,6 @@ class DocumentLoader:
                     raise EmptyDocument(message=message, code=998)
 
         pdf_document.close()
-        if self.source == "cloud":
-            os.remove(temp_file_path)
 
         if len(text) == 0:
             message = "No text detected"
@@ -341,12 +331,9 @@ class DocumentLoader:
         logger.info("Using PyPDF")
 
         if self.source == "cloud":
-            fd, temp_file_path = tempfile.mkstemp()
-            try:
-                temp_file_path = self.download_document(file_path, temp_file_path)
-                logger.info(f"Successfully loaded document from {file_path}")
-            finally:
-                os.close(fd)
+            temp_file_path = os.path.join(self.temp_dir, os.path.basename(file_path))
+            self.download_document(file_path, temp_file_path)
+            logger.info(f"Successfully loaded document from {file_path}")
         elif self.source == "local":
             temp_file_path = file_path
             logger.info(f"Successfully loaded document from local path {file_path}")
@@ -411,12 +398,10 @@ class DocumentLoader:
                 if len(text) == 0 and page.page_number == 10:
                     message = "First 10 pages of the document are empty"
                     logger.info(message)
-                    os.remove(temp_file_path)
                     raise EmptyDocument(message=message, code=998)
                 if len(text) < MIN_DOC_TEXT_LENGHT_ACCEPTED and page.page_number == 20:
                     message = f"First 20 pages of the document have less than {MIN_DOC_TEXT_LENGHT_ACCEPTED} chars"
                     logger.info(message)
-                    os.remove(temp_file_path)
                     raise EmptyDocument(message=message, code=998)
                 if (
                         total_pages >= 500
@@ -425,7 +410,6 @@ class DocumentLoader:
                 ):
                     message = "First 10 pages of the document have 100 repeated rows"
                     logger.info(message)
-                    os.remove(temp_file_path)
                     raise EmptyDocument(message=message, code=998)
                 if (
                         total_pages >= 500
@@ -434,7 +418,6 @@ class DocumentLoader:
                 ):
                     message = "Last 10 pages of the document have 100 repeated rows"
                     logger.info(message)
-                    os.remove(temp_file_path)
                     raise EmptyDocument(message=message, code=998)
 
         if len(text) == 0:
@@ -445,9 +428,6 @@ class DocumentLoader:
         if len(text) < MIN_DOC_TEXT_LENGHT_ACCEPTED:
             message = f"Document text with less than {MIN_DOC_TEXT_LENGHT_ACCEPTED} characters"
             raise EmptyDocument(message=message, code=998)
-
-        if self.source == "cloud":
-            os.remove(temp_file_path)
 
         result_dict = {
             "text": text,

@@ -51,10 +51,9 @@ def process(
 
     try:
         # Instantiate BaseLoader.
-        # As requested, set source to "local".
+        # BaseLoader will determine the source (local/cloud) from the input string.
         # markdown_output=True is a common default from the original script.
-        # temp_dir defaults to "temp" in BaseLoader.
-        loader = BaseLoader(source="local", markdown_output=True)
+        loader = BaseLoader(markdown_output=True)
 
         typer.echo(f"Using BaseLoader to process: {input_source}")
 

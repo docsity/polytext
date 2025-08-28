@@ -60,10 +60,7 @@ class AudioLoader:
         self.type = "audio"
         self.bitrate_quality = bitrate_quality
 
-        # Set up custom temp directory
-        self.temp_dir = os.path.abspath(temp_dir)
-        os.makedirs(self.temp_dir, exist_ok=True)
-        tempfile.tempdir = self.temp_dir
+        self.temp_dir = temp_dir
 
     def download_audio(self, file_path: str, temp_file_path: str) -> str:
         """
@@ -113,13 +110,10 @@ class AudioLoader:
 
         # Load or download the video file
         if self.source == "cloud":
-            fd, temp_file_path = tempfile.mkstemp()
-            try:
-                temp_file_path = self.download_audio(file_path, temp_file_path)
-                logger.info(f"Successfully loaded audio file from {file_path}")
-                # saved_video_path = self.save_file_locally(temp_file_path, os.getcwd(), 'video')
-            finally:
-                os.close(fd)  # Close the file descriptor
+            # Create a temporary file inside the managed temp_dir
+            temp_file_path = os.path.join(self.temp_dir, os.path.basename(file_path))
+            self.download_audio(file_path, temp_file_path)
+            logger.info(f"Successfully loaded audio file from {file_path}")
         elif self.source == "local":
             temp_file_path = file_path
             logger.info(f"Successfully loaded audio file from local path {file_path}")
@@ -135,11 +129,6 @@ class AudioLoader:
 
         result_dict["type"] = self.type
         result_dict["input"] = file_path
-
-        # Clean up temporary file if it was downloaded
-        if self.source == "cloud" and os.path.exists(temp_file_path):
-            os.remove(temp_file_path)
-            logger.info(f"Removed temporary file {temp_file_path}")
 
         return result_dict
 
