@@ -36,7 +36,7 @@ MIN_DOC_TEXT_LENGTH_ACCEPTED = int(os.getenv("MIN_DOC_TEXT_LENGTH_ACCEPTED", "40
 
 
 class BaseLoader:
-    def __init__(self, markdown_output=True, llm_api_key=None, provider: str ="google", **kwargs):
+    def __init__(self, markdown_output=True, llm_api_key=None, provider: str = "google", **kwargs):
         """
         Initialize the BaseLoader with cloud storage and LLM configurations.
 
@@ -65,7 +65,7 @@ class BaseLoader:
         self.provider = provider
         self.kwargs = kwargs
         self.target_size = kwargs.get("target_size", 1)
-        self.source = kwargs.get("source", "cloud")
+        self.source = kwargs.get("source")  # Do not default, will be inferred in get_text
         self.fallback_ocr = kwargs.get("fallback_ocr", False)
         self.save_transcript_chunks = kwargs.get("save_transcript_chunks", False)
         self.bitrate_quality = kwargs.get("bitrate_quality", 9)
@@ -109,19 +109,26 @@ class BaseLoader:
             raise TypeError("Parameter 'input' must be a list of strings.")
 
         first_file_url = input_list[0]
-        kwargs = {**self.kwargs, **kwargs}
+        all_kwargs = {**self.kwargs, **kwargs}
+
+        # Infer source from input if not explicitly provided
+        if not all_kwargs.get('source'):
+            parsed_url = urlparse(first_file_url)
+            if parsed_url.scheme in ['s3', 'gcs']:
+                all_kwargs['source'] = 'cloud'
+            elif self.is_local_path(first_file_url):
+                all_kwargs['source'] = 'local'
 
         with tempfile.TemporaryDirectory() as temp_dir:
             storage_client = self.initiate_storage(input=first_file_url)
-            loader_class = self.init_loader_class(input=first_file_url, storage_client=storage_client, llm_api_key=self.llm_api_key, temp_dir=temp_dir, **kwargs)
+            loader_class = self.init_loader_class(input=first_file_url, storage_client=storage_client, llm_api_key=self.llm_api_key, temp_dir=temp_dir, **all_kwargs)
 
             try:
                 response = self.run_loader_class(loader_class=loader_class, input_list=input_list)
             except EmptyDocument as e:
                 logger.info(f"Empty document encountered: {e.message}")
                 if self.fallback_ocr:
-                    loader_class = self.init_loader_class(input=first_file_url, storage_client=storage_client,
-                                                          llm_api_key=self.llm_api_key, is_document_fallback=True, temp_dir=temp_dir, **kwargs)
+                    loader_class = self.init_loader_class(input=first_file_url, storage_client=storage_client, llm_api_key=self.llm_api_key, is_document_fallback=True, temp_dir=temp_dir, **all_kwargs)
                     response = self.run_loader_class(loader_class=loader_class, input_list=input_list)
                 else:
                     response = {"text": "", "completion_tokens": 0, "prompt_tokens": 0, "output_list": [
@@ -185,17 +192,9 @@ class BaseLoader:
                 "document_gcs_bucket": bucket,
                 "file_path": file_path,
             }
-        elif (
-            input.startswith("http://")
-            or input.startswith("https://")
-            or input.startswith("www.")
-            or input.startswith("www.youtube")
-            or not  self.is_local_path(input)
-            or self.source == "local"
-        ):
-            return dict()
         else:
-            raise NotImplementedError
+            # For local paths, web URLs, or plain text, no storage client is needed at this stage.
+            return dict()
 
     def init_loader_class(self, input: str, storage_client: dict, llm_api_key: str, temp_dir: str, is_document_fallback: bool = False,
                           **kwargs) -> any:

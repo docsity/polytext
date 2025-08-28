@@ -52,8 +52,8 @@ def process(
     try:
         # Instantiate BaseLoader.
         # BaseLoader will determine the source (local/cloud) from the input string.
-        # markdown_output=True is a common default from the original script.
-        loader = BaseLoader(markdown_output=True)
+        # As requested, we explicitly set the source to "local" for the CLI.
+        loader = BaseLoader(markdown_output=True, source="local")
 
         typer.echo(f"Using BaseLoader to process: {input_source}")
 
@@ -91,7 +91,7 @@ def process(
          typer.secho(f"Error: Permission denied. Could not read '{input_source}' or write to '{output_path}'.", fg=typer.colors.RED, err=True)
          sys.exit(1)
     except Exception as e: # Catch-all for other errors from BaseLoader or its sub-loaders
-        typer.secho(f"An unexpected error occurred during processing: {e}", fg=typer.colors.RED, err=True)
+        typer.secho(f"An unexpected error occurred during processing: {repr(e)}", fg=typer.colors.RED, err=True)
         # For debugging, you might want to print the full traceback:
         # import traceback
         # traceback.print_exc()
