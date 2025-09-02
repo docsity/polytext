@@ -24,7 +24,7 @@ def main():
     )
 
     result_dict = loader.get_text(
-        input_list=[html_string]
+        input_list=[plain_text]
     )
     return result_dict
 
