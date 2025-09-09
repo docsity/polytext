@@ -1,4 +1,5 @@
 from markitdown import MarkItDown
+import html2text
 import requests
 import io
 
@@ -14,12 +15,23 @@ def fetch_html(url: str) -> str:
     response.raise_for_status()
     return response.text
 
-def html_to_md(html: str) -> dict:
-    html_content = fetch_html(html)
+def html_to_md(path_or_url: str) -> dict:
+    if (
+            path_or_url.startswith("http://")
+            or path_or_url.startswith("https://")
+            or path_or_url.startswith("www.")
+    ):
+        md = MarkItDown()
+        html_content = fetch_html(path_or_url)
+        stream = io.BytesIO(html_content.encode("utf-8"))
+        md_text = md.convert(stream).markdown
+    else:
+        with open(path_or_url, "r", encoding="utf-8") as f:
+            html_content = f.read()
+            h = html2text.HTML2Text()
+            h.ignore_links = False
+            md_text = h.handle(html_content)
 
-    md = MarkItDown()
-    stream = io.BytesIO(html_content.encode("utf-8"))
-    md_text = md.convert(stream).markdown
     return {
         "text": md_text,
         "completion_tokens": 0,
