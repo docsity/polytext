@@ -20,7 +20,6 @@ dotenv.load_dotenv()
 def text_to_md(transcript_text: str,
     markdown_output: bool,
     llm_api_key: str,
-    output_path: str,
     save_transcript_chunks: bool) -> dict:
     """
     Transform raw transcript text into Markdown using a language model.
@@ -29,7 +28,6 @@ def text_to_md(transcript_text: str,
         transcript_text (str): The full input transcript text.
         markdown_output (bool): Whether the output should be in Markdown format.
         llm_api_key (str): API key for the LLM provider.
-        output_path (str): Path to the temporary output file to be deleted.
         save_transcript_chunks (bool): Whether to include processed chunk texts in the output.
 
     Returns:
@@ -41,7 +39,7 @@ def text_to_md(transcript_text: str,
             - completion_model_provider (str): Name of the model provider.
             - text_chunks (list, optional): List of intermediate chunks, if requested.
     """
-    yt_tr_conv = TextToMdConverter(markdown_output=markdown_output, llm_api_key=llm_api_key, output_path=output_path)
+    yt_tr_conv = TextToMdConverter(markdown_output=markdown_output, llm_api_key=llm_api_key)
     return yt_tr_conv.convert_text_to_md(transcript_text, save_transcript_chunks=save_transcript_chunks)
 
 
@@ -58,7 +56,6 @@ class TextToMdConverter:
             min_matches: int = 3,
             model: str = "gemini-2.0-flash",
             model_provider: str = "google",
-            output_path: str = None
     ) -> None:
         """
         Initialize the converter with configuration parameters.
@@ -74,7 +71,6 @@ class TextToMdConverter:
             min_matches (int): Reserved for future enhancements.
             model (str): Model name.
             model_provider (str): Provider of the model.
-            output_path (str): Path of the file to remove after processing.
         """
         self.markdown_output = markdown_output
         self.llm_api_key = llm_api_key
@@ -86,7 +82,6 @@ class TextToMdConverter:
         self.min_matches = min_matches
         self.model = model
         self.model_provider = model_provider
-        self.output_path = output_path
 
     def get_client(self) -> object:
         """
@@ -237,10 +232,6 @@ class TextToMdConverter:
 
         if save_transcript_chunks:
             result_dict["text_chunks"] = transcript_chunks
-
-        # Clean up the temporary file if it exists
-        if self.output_path and os.path.exists(self.output_path):
-            os.remove(self.output_path)
 
         logging.info(f"**** FINISH ****")
 
