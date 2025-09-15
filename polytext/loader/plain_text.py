@@ -46,8 +46,6 @@ class PlainTextLoader:
         os.makedirs(self.temp_dir, exist_ok=True)
         tempfile.tempdir = self.temp_dir
 
-        self.output_path = os.path.join(self.temp_dir, f"plain_text.txt")
-
     def get_plain_text(self, plain_text: str) -> dict:
         """
         Process and optionally format plain text, returning extracted content and metadata.
@@ -74,7 +72,6 @@ class PlainTextLoader:
             transcript_text=plain_text,
             markdown_output=self.markdown_output,
             llm_api_key=self.llm_api_key,
-            output_path=self.output_path,
             save_transcript_chunks=self.save_transcript_chunks,
         )
 
