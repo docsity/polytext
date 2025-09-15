@@ -24,6 +24,7 @@ class OCRLoader:
                  temp_dir: str = 'temp',
                  markdown_output: bool = True,
                  target_size: int = 1,
+                 timeout_minutes: int = None,
                  **kwargs
                  ):
         """
@@ -44,6 +45,7 @@ class OCRLoader:
             llm_api_key (str, optional): API key for language model service. Defaults to None.
             temp_dir (str, optional): Path for temporary file storage. Defaults to "temp".
             target_size (int, optional): Target file size in bytes. Defaults to 1MB
+            timeout_minutes (int, optional): Timeout in minutes. Defaults to None.
 
         Raises:
             ValueError: If cloud storage clients are provided without bucket names
@@ -58,6 +60,7 @@ class OCRLoader:
         self.llm_api_key = llm_api_key
         self.target_size = target_size
         self.type = "image"
+        self.timeout_minutes = timeout_minutes
 
         # Set up custom temp directory
         self.temp_dir = os.path.abspath(temp_dir)
@@ -124,9 +127,10 @@ class OCRLoader:
             raise ValueError("Invalid OCR source. Choose 'cloud' or 'local'.")
 
         result_dict = get_ocr(file_for_ocr=temp_file_path,
-                                markdown_output=self.markdown_output,
-                                llm_api_key=self.llm_api_key,
-                                target_size=self.target_size)
+                              markdown_output=self.markdown_output,
+                              llm_api_key=self.llm_api_key,
+                              target_size=self.target_size,
+                              timeout_minutes=self.timeout_minutes)
 
         result_dict["type"] = self.type
         result_dict["input"] = file_path

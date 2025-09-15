@@ -4,6 +4,7 @@ import os
 import re
 import tempfile
 import logging
+import concurrent.futures
 from collections import Counter
 from pymupdf4llm import to_markdown
 from markitdown import MarkItDown
@@ -45,7 +46,7 @@ class DocumentLoader:
     def __init__(self, source: str, markdown_output: bool = True, s3_client: object = None,
                  document_aws_bucket: str = None, gcs_client: object = None,
                  document_gcs_bucket: str = None, temp_dir: str = 'temp',
-                 page_range: tuple[int, int] = None, **kwargs) -> None:
+                 page_range: tuple[int, int] = None, timeout_minutes: int = None, **kwargs) -> None:
         """
         Initialize DocumentLoader with optional cloud storage configuration.
 
@@ -58,6 +59,7 @@ class DocumentLoader:
             document_gcs_bucket (str): Default GCS bucket name for storage (optional)
             temp_dir (str): Directory for temporary files (default: 'temp')
             page_range (tuple): Optional page range to extract (start, end)
+            timeout (int): Timeout for converting to markdown (default: None)
 
         Raises:
             ValueError: If source is not "cloud" or "local"
@@ -71,6 +73,7 @@ class DocumentLoader:
         self.document_gcs_bucket = document_gcs_bucket
         self.type = "document"
         self.page_range = page_range
+        self.timeout_minutes = timeout_minutes
 
         # Set up custom temp directory
         self.temp_dir = os.path.abspath(temp_dir)
@@ -104,14 +107,9 @@ class DocumentLoader:
                 logger.info(f'Downloaded {file_path} to {temp_file_path}')
             except ClientError as e:
                 logger.info(e)
-                try:
-                    self.s3_client.download_file(Bucket=self.document_aws_bucket,
-                                                 Key=file_path.replace(".pdf", ".PDF"),
-                                                 Filename=temp_file_path)
-                except Exception as e:
-                    file_prefix = file_path
-                    temp_file_path = self.convert_doc_to_pdf(file_prefix=file_prefix,
-                                                             input_file=temp_file_path)
+                self.s3_client.download_file(Bucket=self.document_aws_bucket,
+                                             Key=file_path.replace(".pdf", ".PDF"),
+                                             Filename=temp_file_path)
             return temp_file_path
         elif self.gcs_client is not None:
             try:
@@ -157,7 +155,7 @@ class DocumentLoader:
 
         logger.info("Using LibreOffice")
         convert_to_pdf(input_file=input_file, output_file=output_file, original_file=file_prefix)
-        logger.info("Document converted to pdf")
+        logger.info(f"Document converted to pdf and saved to {output_file}")
         os.remove(input_file)
         return output_file
 
@@ -231,13 +229,34 @@ class DocumentLoader:
         if self.markdown_output:
             # Use pymupdf4llm for markdown conversion
             logger.info("Converting file to Markdown")
-            text = to_markdown(
-                pdf_document,
-                pages=list(range(start_page, end_page))
-            )
 
-            if len(text) >= MIN_DOC_TEXT_LENGHT_ACCEPTED:
-                try_not_markdown = False
+            executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+            future = executor.submit(to_markdown, pdf_document, pages=list(range(start_page, end_page)))
+            try:
+                import time
+                logger.info(f"Timeout_minutes: {self.timeout_minutes}")
+                start = time.time()
+                text = future.result(timeout=self.timeout_minutes * 60 if self.timeout_minutes else None)
+                end = time.time()
+                logger.info(f"Time elapsed: {end - start}")
+                logger.info(f"Successfully converted {len(text)} pages to Markdown")
+
+                if len(text) >= MIN_DOC_TEXT_LENGHT_ACCEPTED:
+                    logger.info(f"Successfully converted {len(text)} text to Markdown")
+                    try_not_markdown = False
+
+            except concurrent.futures.TimeoutError:
+                logger.warning(f"Markdown conversion timed out after {self.timeout_minutes} minutes")
+                try_not_markdown = True
+                future.cancel()  # will only cancel if it hasn’t started
+                executor.shutdown(wait=False, cancel_futures=True)
+                executor = None  # avoid shutting down twice
+            except Exception as e:
+                logger.error(f"Markdown conversion failed: {e}")
+                try_not_markdown = True
+            finally:
+                if executor is not None:
+                    executor.shutdown(wait=True)
 
         if try_not_markdown:
             # Original plain text extraction
@@ -385,11 +404,32 @@ class DocumentLoader:
             # Use markitdown for markdown conversion
             logger.info("Converting file to Markdown with Markitdown")
 
-            md = MarkItDown()
-            text = md.convert(temp_file_path).markdown
+            def convert_to_markdown(path):
+                md = MarkItDown()
+                return md.convert(path).markdown
 
-            if len(text) >= MIN_DOC_TEXT_LENGHT_ACCEPTED:
-                try_not_markdown = False
+            executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+            future = executor.submit(convert_to_markdown, temp_file_path)
+            try:
+                text = future.result(timeout=self.timeout_minutes * 60 if self.timeout_minutes else None)
+
+                if len(text) >= MIN_DOC_TEXT_LENGHT_ACCEPTED:
+                    try_not_markdown = False
+
+            except concurrent.futures.TimeoutError:
+                logger.warning(f"Markdown conversion timed out after {self.timeout_minutes} minutes")
+                try_not_markdown = True
+                future.cancel()  # cancels only if not started yet
+                executor.shutdown(wait=False, cancel_futures=True)
+                executor = None
+
+            except Exception as e:
+                logger.error(f"Markdown conversion failed: {e}")
+                try_not_markdown = True
+
+            finally:
+                if executor is not None:
+                    executor.shutdown(wait=True)
 
         if try_not_markdown:
             # Original plain text extraction logic

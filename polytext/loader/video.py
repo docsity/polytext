@@ -25,6 +25,7 @@ class VideoLoader:
             temp_dir: str = 'temp',
             markdown_output: bool =True,
             bitrate_quality: int =9,
+            timeout_minutes: int = None,
             **kwargs
     ) -> None:
         """
@@ -41,6 +42,7 @@ class VideoLoader:
             save_transcript_chunks (bool, optional): Whether to save chunk transcripts in final output. Defaults to False.
             temp_dir (str, optional): Path for temporary file storage. Defaults to "temp".
             bitrate_quality (int, optional): Variable bitrate quality from 0-9 (9 being lowest). Defaults to 9.
+            timeout_minutes (int, optional): Timeout in minutes. Defaults to None.
 
         Raises:
             ValueError: If cloud storage clients are provided without bucket names
@@ -56,6 +58,7 @@ class VideoLoader:
         self.save_transcript_chunks = save_transcript_chunks
         self.type = "video"
         self.bitrate_quality = bitrate_quality
+        self.timeout_minutes = timeout_minutes
 
         # Set up custom temp directory
         self.temp_dir = os.path.abspath(temp_dir)
@@ -166,7 +169,8 @@ class VideoLoader:
                                                  markdown_output=self.markdown_output,
                                                  llm_api_key=self.llm_api_key,
                                                  save_transcript_chunks=self.save_transcript_chunks,
-                                                 bitrate_quality=self.bitrate_quality
+                                                 bitrate_quality=self.bitrate_quality,
+                                                 timeout_minutes=self.timeout_minutes
                                                  )
 
         result_dict["type"] = self.type

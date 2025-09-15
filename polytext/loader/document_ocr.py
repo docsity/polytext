@@ -25,6 +25,7 @@ class DocumentOCRLoader:
                  markdown_output: bool = True,
                  target_size: int = 1,
                  page_range: tuple[int, int] = None,
+                 timeout_minutes: int = None,
                  **kwargs
                  ):
         """
@@ -46,6 +47,7 @@ class DocumentOCRLoader:
             temp_dir (str, optional): Path for temporary file storage. Defaults to "temp".
             target_size (int, optional): Target file size in bytes. Defaults to 1MB
             page_range (tuple): Optional page range to extract (start, end)
+            timeout_minutes (int, optional): Timeout in minutes. Defaults to None.
 
         Raises:
             ValueError: If cloud storage clients are provided without bucket names
@@ -61,6 +63,7 @@ class DocumentOCRLoader:
         self.target_size = target_size
         self.page_range = page_range
         self.type = "document_ocr"
+        self.timeout_minutes = timeout_minutes
 
         # Set up custom temp directory
         self.temp_dir = os.path.abspath(temp_dir)
@@ -170,7 +173,8 @@ class DocumentOCRLoader:
                                        markdown_output=self.markdown_output,
                                        llm_api_key=self.llm_api_key,
                                        target_size=self.target_size,
-                                       page_range=self.page_range)
+                                       page_range=self.page_range,
+                                       timeout_minutes=self.timeout_minutes)
 
         result_dict["type"] = self.type
         result_dict["input"] = file_path

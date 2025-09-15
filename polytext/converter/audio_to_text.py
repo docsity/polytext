@@ -62,7 +62,8 @@ def compress_and_convert_audio(input_path: str, bitrate_quality: int = 9) -> str
 
 def transcribe_full_audio(audio_file, markdown_output: bool = False,
                           llm_api_key: str = None,
-                          save_transcript_chunks: bool = False, bitrate_quality=9) -> dict:
+                          save_transcript_chunks: bool = False, bitrate_quality=9,
+                          timeout_minutes: int = None) -> dict:
     """
     Convenience function to transcribe an audio file into text, optionally formatted as Markdown.
 
@@ -77,18 +78,19 @@ def transcribe_full_audio(audio_file, markdown_output: bool = False,
         llm_api_key (str, optional): API key for the LLM service. If provided, it will override the default configuration.
         save_transcript_chunks (bool, optional): Whether to save chunk transcripts in final output. Defaults to False.
         bitrate_quality (int, optional): Variable bitrate quality from 0-9 (9 being lowest). Defaults to 9
+        timeout_minutes (int, optional): Number of minutes to wait for a response. Defaults to None.
 
     Returns:
         str: The transcribed text from the audio file.
     """
     converter = AudioToTextConverter(markdown_output=markdown_output, llm_api_key=llm_api_key,
-                                     bitrate_quality=bitrate_quality)
+                                     bitrate_quality=bitrate_quality, timeout_minutes=timeout_minutes)
     return converter.transcribe_full_audio(audio_file, save_transcript_chunks)
 
 class AudioToTextConverter:
     def __init__(self, transcription_model: str ="gemini-2.0-flash", transcription_model_provider: str ="google",
                  k: int =5, min_matches: int =3, markdown_output: bool =True, llm_api_key: str =None, max_llm_tokens: int =8000, temp_dir: str ="temp",
-                 bitrate_quality: int =9):
+                 bitrate_quality: int =9, timeout_minutes: int =None):
         """
         Initialize the AudioToTextConverter class with a specified transcription model and provider.
 
@@ -102,6 +104,7 @@ class AudioToTextConverter:
             max_llm_tokens (int): Maximum number of tokens for the language model output. Defaults to 8000.
             temp_dir (str): Directory for temporary files. Defaults to "temp".
             bitrate_quality (int, optional): Variable bitrate quality from 0-9 (9 being lowest). Defaults to 9
+            timeout_minutes (int): Number of minutes to wait for a response.
 
         Raises:
             OSError: If temp directory creation fails
@@ -116,6 +119,7 @@ class AudioToTextConverter:
         self.max_llm_tokens = max_llm_tokens
         self.chunked_audio = False
         self.bitrate_quality = bitrate_quality
+        self.timeout_minutes = timeout_minutes
 
         # Set up custom temp directory
         self.temp_dir = os.path.abspath(temp_dir)
@@ -188,7 +192,11 @@ class AudioToTextConverter:
                     category=types.HarmCategory.HARM_CATEGORY_HARASSMENT,
                     threshold=types.HarmBlockThreshold.BLOCK_NONE,
                 ),
-            ]
+            ],
+            http_options=(
+                types.HttpOptions(timeout=self.timeout_minutes * 60_000)
+                if self.timeout_minutes is not None else None
+            ),
         )
 
         file_size = os.path.getsize(audio_file)

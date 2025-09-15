@@ -3,6 +3,9 @@ import os
 import logging
 import dotenv
 import mimetypes
+import json
+import httpx
+import httpcore
 from urllib.parse import urlparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -25,6 +28,27 @@ from ..utils.utils import remove_markdown_strip
 # External imports
 import boto3
 from google.cloud import storage
+from google.genai import errors as genai_errors
+
+class LoaderTimeoutError(Exception):
+    """Domain error that carries a JSON payload for CLI/handlers."""
+    def __init__(self, message: str = "timeout gemini",
+                 status: int = 504, code: str = "TIMEOUT"):
+        super().__init__(message)
+        self.status = status
+        self.code = code
+        self.message = message
+        self.payload = {"status": status, "code": code, "message": message}
+
+    def to_dict(self) -> dict:
+        return dict(self.payload)
+
+    def to_json(self) -> str:
+        return json.dumps(self.payload)
+
+    # Nice for `str(e)` or logging
+    def __str__(self) -> str:
+        return self.to_json()
 
 
 dotenv.load_dotenv()
@@ -35,7 +59,8 @@ MIN_DOC_TEXT_LENGTH_ACCEPTED = int(os.getenv("MIN_DOC_TEXT_LENGTH_ACCEPTED", "40
 
 
 class BaseLoader:
-    def __init__(self, markdown_output=True, llm_api_key=None, provider: str ="google", temp_dir: str ="temp", **kwargs):
+    def __init__(self, markdown_output=True, llm_api_key=None, provider: str = "google", temp_dir: str = "temp",
+                 timeout_minutes: int | None = None, **kwargs):
         """
         Initialize the BaseLoader with cloud storage and LLM configurations.
 
@@ -48,6 +73,7 @@ class BaseLoader:
             llm_api_key (str, optional): API key for language model service. Defaults to None.
             temp_dir (str, optional): Path for temporary file storage. Defaults to "temp".
             provider (str, optional): Provider of the model. Default to "google".
+            timeout_minutes (int, optional): Timeout in minutes. Defaults to None.
              **kwargs: Additional keyword arguments to pass to the underlying loader or extraction logic.
                 - target_size (int, optional): Target file size in bytes. Defaults to 1MB
                 - source (str): Source of the document. Must be either "cloud" or "local"
@@ -64,6 +90,7 @@ class BaseLoader:
         self.llm_api_key = llm_api_key
         self.temp_dir = temp_dir
         self.provider = provider
+        self.timeout_minutes = timeout_minutes
         self.kwargs = kwargs
         self.target_size = kwargs.get("target_size", 1)
         self.source = kwargs.get("source", "cloud")
@@ -128,6 +155,19 @@ class BaseLoader:
                     {"text": "", "completion_tokens": 0, "prompt_tokens": 0, "completion_model": "not provided",
                      "completion_model_provider": "not provided", "text_chunks": "not provided", "type": "document",
                      "input": first_file_url}]}
+        except (httpx.ReadTimeout,
+                httpx.TimeoutException,
+                httpcore.ReadTimeout,
+                httpcore.TimeoutException) as e:
+            raise LoaderTimeoutError()
+        except genai_errors.ServerError as e:
+            code = getattr(e, "code", None)
+            status = getattr(e, "status", None)
+            msg = str(getattr(e, "message", "")) or str(e)
+
+            if code == 504 or status == "DEADLINE_EXCEEDED" or "DEADLINE_EXCEEDED" in msg:
+                raise LoaderTimeoutError()
+            raise
 
         return response
 
@@ -244,22 +284,22 @@ class BaseLoader:
             file_extension = file_extension.lower()
 
         if is_document_fallback:
-            return DocumentOCRLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, **kwargs)
+            return DocumentOCRLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, timeout_minutes=self.timeout_minutes, **kwargs)
 
         if parsed_url.scheme in ["http", "https"] or input.startswith("www."):
             if "youtube.com" in parsed_url.netloc or "youtu.be" in parsed_url.netloc:
-                return YoutubeTranscriptLoaderWithLlm(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, **kwargs)
+                return YoutubeTranscriptLoaderWithLlm(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, timeout_minutes=self.timeout_minutes, **kwargs)
             else:
                 return HtmlLoader(markdown_output=self.markdown_output)
         elif mime_type:
             if file_extension in [".pdf", ".xlsx", ".docx", ".txt", ".csv", ".odt", ".pptx", ".xls", ".doc", ".ppt", ".rtf"]:
-                return DocumentLoader(markdown_output=self.markdown_output, temp_dir=self.temp_dir, **kwargs)
+                return DocumentLoader(markdown_output=self.markdown_output, temp_dir=self.temp_dir, timeout_minutes=self.timeout_minutes, **kwargs)
             elif mime_type.startswith("audio/"):
-                return AudioLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, **kwargs)
+                return AudioLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, timeout_minutes=self.timeout_minutes, **kwargs)
             elif mime_type.startswith("video/"):
-                return VideoLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, **kwargs)
+                return VideoLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, timeout_minutes=self.timeout_minutes, **kwargs)
             elif mime_type.startswith("image/"):
-                return OCRLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, **kwargs)
+                return OCRLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, timeout_minutes=self.timeout_minutes, **kwargs)
             elif mime_type.startswith("text/markdown"):
                 return MarkdownLoader(markdown_output=self.markdown_output, temp_dir=self.temp_dir, **kwargs)
             elif mime_type == "text/html":
