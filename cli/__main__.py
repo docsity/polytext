@@ -15,6 +15,11 @@ if getattr(sys, 'frozen', False):
     os.environ['PATH'] += os.pathsep + os.path.join(bundle_dir, 'ffmpeg')
 # --- PyInstaller: END ---
 
+try:
+    import sentry_sdk
+except ImportError:
+    sentry_sdk = None
+
 # Aggiungi la directory principale del progetto al sys.path
 project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root))
@@ -87,22 +92,42 @@ def process(
 
     except EmptyDocument as e:
         typer.secho(f"Processing Warning: The document appears to be empty or lacks extractable content. Reason: {e.message}", fg=typer.colors.YELLOW, err=True)
+        if sentry_sdk:
+            sentry_sdk.flush()
         sys.exit(1)
     except ConversionError as e:
         typer.secho(f"File Conversion Error: Could not convert the input file. This may require system dependencies like LibreOffice. Details: {e.message}", fg=typer.colors.RED, err=True)
+        if sentry_sdk:
+            sentry_sdk.flush()
         sys.exit(1)
     except FileNotFoundError:
         # This can be raised if a local file path is incorrect.
         typer.secho(f"Error: Input file not found at '{input_source}'. Please check the path.", fg=typer.colors.RED, err=True)
+        if sentry_sdk:
+            sentry_sdk.flush()
         sys.exit(1)
     except PermissionError:
          typer.secho(f"Error: Permission denied. Could not read '{input_source}' or write to '{output_path}'.", fg=typer.colors.RED, err=True)
+         if sentry_sdk:
+            sentry_sdk.flush()
          sys.exit(1)
     except Exception as e: # Catch-all for other errors from BaseLoader or its sub-loaders
-        typer.secho(f"An unexpected error occurred during processing: {repr(e)}", fg=typer.colors.RED, err=True)
+        error_details = {
+            'message': getattr(e, 'message', str(e)),
+            'code': getattr(e, 'code', None),
+            'status': getattr(e, 'status', None)
+        }
+        # Filter out None values to keep the JSON clean
+        filtered_error_details = {k: v for k, v in error_details.items() if v is not None}
+        error_json = json.dumps(filtered_error_details, ensure_ascii=False)
+        typer.secho(error_json, fg=typer.colors.RED, err=True)
+        typer.echo(error_json)
+        
         # For debugging, you might want to print the full traceback:
         # import traceback
         # traceback.print_exc()
+        if sentry_sdk:
+            sentry_sdk.flush()
         sys.exit(1)
 
 if __name__ == "__main__":
