@@ -12,7 +12,7 @@ from google.api_core import exceptions as google_exceptions
 from ..prompts.transcription import VIDEO_TO_MARKDOWN_PROMPT, VIDEO_TO_TEXT_PROMPT
 
 # Local imports
-from ..exceptions import EmptyDocument
+from ..exceptions import EmptyDocument, LoaderTimeoutError
 
 logger = logging.getLogger(__name__)
 
@@ -139,7 +139,11 @@ class YoutubeTranscriptLoaderWithLlm:
 
         )
 
+        start = None
+        timeout_s = None
         try:
+            start = time.monotonic()
+            timeout_s = None if self.timeout_minutes is None else self.timeout_minutes * 60
             # Call Gemini API to process the video
             response = client.models.generate_content(
                 model=self.model,
@@ -182,6 +186,23 @@ class YoutubeTranscriptLoaderWithLlm:
                 raise Exception(f"Invalid argument: {e.message}")
             else:
                 raise e
+
+        except errors.ServerError as e:
+            code = getattr(e, "code", None)
+            status = getattr(e, "status", None)
+            msg = str(getattr(e, "message", "")) or str(e)
+            elapsed = time.monotonic() - start
+
+            # canonical server timeout
+            if code == 504 or status == "DEADLINE_EXCEEDED" or "DEADLINE_EXCEEDED" in msg:
+                raise LoaderTimeoutError()
+
+            # timeout-ish INTERNAL: treat as timeout if it lands near our deadline
+            if timeout_s is not None and elapsed >= max(0, timeout_s - 1) and status == "INTERNAL":
+                raise LoaderTimeoutError()
+
+            # otherwise, let higher layers retry/handle
+            raise
 
     def load(self, input_path: str) -> dict:
         """

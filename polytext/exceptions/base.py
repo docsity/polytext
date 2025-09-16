@@ -1,4 +1,6 @@
 # exceptions/base.py
+import json
+
 class ConversionError(Exception):
     """
     Exception raised when document conversion to PDF fails.
@@ -51,3 +53,45 @@ class ExceededMaxPages(Exception):
         super().__init__(message)
         self.message = message
         self.code = code
+
+
+class LoaderError(Exception):
+    """Domain error that carries a JSON payload for CLI/handlers."""
+    def __init__(self, message: str = "timeout gemini",
+                 status: int = 504, code: str = "TIMEOUT"):
+        super().__init__(message)
+        self.status = status
+        self.code = code
+        self.message = message
+        self.payload = {"status": status, "code": code, "message": message}
+
+    def to_dict(self) -> dict:
+        return dict(self.payload)
+
+    def to_json(self) -> str:
+        return json.dumps(self.payload)
+
+    # Nice for `str(e)` or logging
+    def __str__(self) -> str:
+        return self.to_json()
+
+
+class LoaderTimeoutError(Exception):
+    """Domain error that carries a JSON payload for CLI/handlers."""
+    def __init__(self, message: str = "timeout gemini",
+                 status: int = 504, code: str = "TIMEOUT"):
+        super().__init__(message)
+        self.status = status
+        self.code = code
+        self.message = message
+        self.payload = {"status": status, "code": code, "message": message}
+
+    def to_dict(self) -> dict:
+        return dict(self.payload)
+
+    def to_json(self) -> str:
+        return json.dumps(self.payload)
+
+    # Nice for `str(e)` or logging
+    def __str__(self) -> str:
+        return self.to_json()
