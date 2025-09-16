@@ -63,17 +63,6 @@ class LoaderError(Exception):
         self.status = status
         self.code = code
         self.message = message
-        self.payload = {"status": status, "code": code, "message": message}
-
-    def to_dict(self) -> dict:
-        return dict(self.payload)
-
-    def to_json(self) -> str:
-        return json.dumps(self.payload)
-
-    # Nice for `str(e)` or logging
-    def __str__(self) -> str:
-        return self.to_json()
 
 
 class LoaderTimeoutError(Exception):
@@ -84,14 +73,3 @@ class LoaderTimeoutError(Exception):
         self.status = status
         self.code = code
         self.message = message
-        self.payload = {"status": status, "code": code, "message": message}
-
-    def to_dict(self) -> dict:
-        return dict(self.payload)
-
-    def to_json(self) -> str:
-        return json.dumps(self.payload)
-
-    # Nice for `str(e)` or logging
-    def __str__(self) -> str:
-        return self.to_json()
