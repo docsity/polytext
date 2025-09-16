@@ -39,6 +39,12 @@ def process(
         writable=True,
         resolve_path=True,
         help="Path where to write the processing result as JSON."
+    ),
+    timeout: int = typer.Option(
+        300,
+        "--timeout",
+        "-t",
+        help="Timeout for processing operations in seconds. Defaults to 300 (5 minutes)."
     )
 ):
     """
@@ -48,12 +54,14 @@ def process(
     typer.echo("Starting processing...")
     typer.echo(f"Input source: {input_source}")
     typer.echo(f"Output file: {output_path}")
+    typer.echo(f"Using timeout: {timeout} seconds")
+    timeout_minutes = round(timeout / 60)  # Convert seconds to minutes for BaseLoader
 
     try:
         # Instantiate BaseLoader.
         # BaseLoader will determine the source (local/cloud) from the input string.
         # As requested, we explicitly set the source to "local" for the CLI.
-        loader = BaseLoader(markdown_output=True, source="local")
+        loader = BaseLoader(markdown_output=True, source="local", timeout_minutes=timeout_minutes)
 
         typer.echo(f"Using BaseLoader to process: {input_source}")
 

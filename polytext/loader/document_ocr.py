@@ -65,7 +65,10 @@ class DocumentOCRLoader:
         self.type = "document_ocr"
         self.timeout_minutes = timeout_minutes
 
-        self.temp_dir = temp_dir
+        # Set up custom temp directory
+        self.temp_dir = os.path.abspath(temp_dir)
+        os.makedirs(self.temp_dir, exist_ok=True)
+        tempfile.tempdir = self.temp_dir
 
     def download_document(self, file_path, temp_file_path):
         """
@@ -117,11 +120,13 @@ class DocumentOCRLoader:
         logger.info(f"input_file: {input_file}")
 
         # Create a temporary file for output
-        output_file = os.path.join(self.temp_dir, os.path.basename(file_prefix) + ".pdf")
+        fd, output_file = tempfile.mkstemp(suffix=".pdf")
+        os.close(fd)  # Close file descriptor explicitly
 
         logger.info("Using LibreOffice")
         convert_to_pdf(input_file=input_file, output_file=output_file, original_file=file_prefix)
         logger.info("Document converted to pdf")
+        os.remove(input_file)
         return output_file
 
     def get_text_from_document_ocr(self, file_path):
@@ -145,9 +150,13 @@ class DocumentOCRLoader:
 
         # Load or download the document file
         if self.source == "cloud":
-            temp_file_path = os.path.join(self.temp_dir, os.path.basename(file_path))
-            self.download_document(file_path, temp_file_path)
-            logger.info(f"Successfully loaded document from {file_path}")
+            fd, temp_file_path = tempfile.mkstemp()
+            try:
+                fd, temp_file = tempfile.mkstemp()
+                temp_file_path = self.download_document(file_path, temp_file)
+                logger.info(f"Successfully loaded document from {file_path}")
+            finally:
+                os.close(fd)  # Close the file descriptor
         elif self.source == "local":
             temp_file_path = file_path  # For local files, use the path directly
             logger.info(f"Successfully loaded document from local path {file_path}")
@@ -169,6 +178,12 @@ class DocumentOCRLoader:
 
         result_dict["type"] = self.type
         result_dict["input"] = file_path
+
+        # Clean up temporary file if it was downloaded
+        if self.source == "cloud":
+            if os.path.exists(temp_file_path):
+                os.remove(temp_file_path)
+                logger.info(f"Removed temporary file {temp_file_path}")
 
         return result_dict
 

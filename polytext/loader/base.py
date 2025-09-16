@@ -27,7 +27,6 @@ from ..utils.utils import remove_markdown_strip
 
 # External imports
 import boto3
-import tempfile
 from google.cloud import storage
 from google.genai import errors as genai_errors
 
@@ -72,6 +71,7 @@ class BaseLoader:
             markdown_output (bool, optional): If True, the extracted text will be formatted as Markdown.
                 Defaults to True.
             llm_api_key (str, optional): API key for language model service. Defaults to None.
+            temp_dir (str, optional): Path for temporary file storage. Defaults to "temp".
             provider (str, optional): Provider of the model. Default to "google".
             timeout_minutes (int, optional): Timeout in minutes. Defaults to None.
              **kwargs: Additional keyword arguments to pass to the underlying loader or extraction logic.
@@ -88,11 +88,12 @@ class BaseLoader:
         """
         self.markdown_output = markdown_output
         self.llm_api_key = llm_api_key
+        self.temp_dir = temp_dir
         self.provider = provider
         self.timeout_minutes = timeout_minutes
         self.kwargs = kwargs
         self.target_size = kwargs.get("target_size", 1)
-        self.source = kwargs.get("source")  # Do not default, will be inferred in get_text
+        self.source = kwargs.get("source", "cloud")
         self.fallback_ocr = kwargs.get("fallback_ocr", False)
         self.save_transcript_chunks = kwargs.get("save_transcript_chunks", False)
         self.bitrate_quality = kwargs.get("bitrate_quality", 9)
@@ -136,21 +137,18 @@ class BaseLoader:
             raise TypeError("Parameter 'input' must be a list of strings.")
 
         first_file_url = input_list[0]
-        all_kwargs = {**self.kwargs, **kwargs}
+        kwargs = {**self.kwargs, **kwargs}
 
-        # Infer source from input if not explicitly provided
-        if not all_kwargs.get('source'):
-            parsed_url = urlparse(first_file_url)
-            if parsed_url.scheme in ['s3', 'gcs']:
-                all_kwargs['source'] = 'cloud'
-            elif self.is_local_path(first_file_url):
-                all_kwargs['source'] = 'local'
+        storage_client = self.initiate_storage(input=first_file_url)
+        loader_class = self.init_loader_class(input=first_file_url, storage_client=storage_client, llm_api_key=self.llm_api_key, **kwargs)
 
-        with tempfile.TemporaryDirectory() as temp_dir:
-            storage_client = self.initiate_storage(input=first_file_url)
-            loader_class = self.init_loader_class(input=first_file_url, storage_client=storage_client, llm_api_key=self.llm_api_key, temp_dir=temp_dir, **all_kwargs)
-
-            try:
+        try:
+            response = self.run_loader_class(loader_class=loader_class, input_list=input_list)
+        except EmptyDocument as e:
+            logger.info(f"Empty document encountered: {e.message}")
+            if self.fallback_ocr:
+                loader_class = self.init_loader_class(input=first_file_url, storage_client=storage_client,
+                                                      llm_api_key=self.llm_api_key, is_document_fallback=True, **kwargs)
                 response = self.run_loader_class(loader_class=loader_class, input_list=input_list)
             else:
                 response = {"text": "", "completion_tokens": 0, "prompt_tokens": 0, "output_list": [
@@ -227,11 +225,19 @@ class BaseLoader:
                 "document_gcs_bucket": bucket,
                 "file_path": file_path,
             }
-        else:
-            # For local paths, web URLs, or plain text, no storage client is needed at this stage.
+        elif (
+            input.startswith("http://")
+            or input.startswith("https://")
+            or input.startswith("www.")
+            or input.startswith("www.youtube")
+            or not  self.is_local_path(input)
+            or self.source == "local"
+        ):
             return dict()
+        else:
+            raise NotImplementedError
 
-    def init_loader_class(self, input: str, storage_client: dict, llm_api_key: str, temp_dir: str, is_document_fallback: bool = False,
+    def init_loader_class(self, input: str, storage_client: dict, llm_api_key: str, is_document_fallback: bool = False,
                           **kwargs) -> any:
         """
             Initializes and returns the appropriate content loader class based on the input URL's type.
@@ -247,7 +253,6 @@ class BaseLoader:
                                         (e.g., S3 client, GCS client, bucket names) as returned by initiate_storage.
                 llm_api_key (str): The API key for the LLM provider, necessary for loaders that
                                    interact with language models.
-                temp_dir (str): The path to the temporary directory for this processing job.
                 is_document_fallback (bool): If True, the DocumentOCRLoader will be used as a fallback
                 **kwargs: Additional keyword arguments to pass to the initialized loader class.
                           These will be merged with the `storage_client` dictionary.
@@ -296,12 +301,12 @@ class BaseLoader:
             elif mime_type.startswith("image/"):
                 return OCRLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, timeout_minutes=self.timeout_minutes, **kwargs)
             elif mime_type.startswith("text/markdown"):
-                return MarkdownLoader(markdown_output=self.markdown_output, temp_dir=temp_dir, **kwargs)
+                return MarkdownLoader(markdown_output=self.markdown_output, temp_dir=self.temp_dir, **kwargs)
             elif mime_type == "text/html":
                 return PlainTextLoader(
                     llm_api_key=llm_api_key,
                     markdown_output=self.markdown_output,
-                    temp_dir=temp_dir,
+                    temp_dir=self.temp_dir,
                     **kwargs,
                 )
             else:
@@ -311,7 +316,7 @@ class BaseLoader:
             return PlainTextLoader(
                 llm_api_key=llm_api_key,
                 markdown_output=self.markdown_output,
-                temp_dir=temp_dir,
+                temp_dir=self.temp_dir,
                 **kwargs,
             )
 
