@@ -136,13 +136,11 @@ class BaseLoader:
                      "completion_model_provider": "not provided", "text_chunks": "not provided", "type": "document",
                      "input": first_file_url}]}
         except LoaderTimeoutError:
-            logger.error("Timeout error encountered during loading.")
             raise LoaderError(message="timeout gemini", status=504, code="TIMEOUT")
         except (httpx.ReadTimeout,
                 httpx.TimeoutException,
                 httpcore.ReadTimeout,
                 httpcore.TimeoutException) as e:
-            logger.error("http timeout error encountered during loading.")
             raise LoaderError(message="timeout gemini", status=504, code="TIMEOUT")
         except genai_errors.ServerError as e:
             code = getattr(e, "code", None)
@@ -150,7 +148,6 @@ class BaseLoader:
             msg = str(getattr(e, "message", "")) or str(e)
 
             if code == 504 or status == "DEADLINE_EXCEEDED" or "DEADLINE_EXCEEDED" in msg:
-                logger.error("Server error 504 encountered during loading.")
                 raise LoaderError(message="timeout gemini", status=504, code="TIMEOUT")
             raise
 
