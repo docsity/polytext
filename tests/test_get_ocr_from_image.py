@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 from google.cloud import storage
 import logging
 
@@ -27,21 +28,25 @@ def main():
         # llm_api_key=os.getenv("GOOGLE_API_KEY"),
         target_size=target_size,
         source=source,
-        markdown_output=markdown_output
+        markdown_output=markdown_output,
+        timeout_minutes=1
     )
 
     # Define document data
     file_url = ""
 
-    local_file_path = "/Users/andreasolfanelli/Projects/polytext/IMG_9695.jpg"
-    # local_file_path_1 = "/Users/andreasolfanelli/Projects/polytext/IMG_9701.jpg"
-    # local_file_path_2 = "/Users/andreasolfanelli/Projects/polytext/IMG_9702.jpg"
+    # local_file_path = "/Users/marcodelgiudice/Projects/polytext/IMG_9695.jpg"
+    # local_file_path = "/Users/marcodelgiudice/Projects/polytext/IMG_9701.jpg"
+    local_file_path = "/Users/marcodelgiudice/Projects/polytext/IMG_9702.jpg"
 
     try:
+        start = time.time()
         # Call get_text method
         result_dict = ocr_loader.get_text(
             input_list=[local_file_path],
         )
+        end = time.time()
+        print("Time elapsed: ", end - start)
 
         import ipdb; ipdb.set_trace()
 

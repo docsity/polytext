@@ -1,6 +1,7 @@
 import os
 import sys
 import logging
+import time
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
@@ -25,23 +26,27 @@ def main():
         source=source,
         markdown_output=markdown_output,
         save_transcript_chunks = save_transcript_chunks,
-        bitrate_quality = bitrate_quality
+        bitrate_quality = bitrate_quality,
+        timeout_minutes=1
     )
 
     # Define document data
     file_path = "gcs://opit-da-test-ml-ai-store-bucket/learning_resources/course_id=406/module_id=2658/id=31427/8434.mp4"
 
-    local_file_path = "/Users/andreasolfanelli/Projects/polytext/tmp929e_7lh.mp3"
+    local_file_path = "/Users/marcodelgiudice/Projects/polytext/1757923647_audio.m4a"
 
     # Call get_text method
+    start = time.time()
     result_dict = loader.get_text(
         input_list=[local_file_path],
     )
+    end = time.time()
+    print("Time elapsed: ", end - start)
 
     import ipdb; ipdb.set_trace()
 
     try:
-        output_file = "transcript.md" if markdown_output else "transcript.txt"
+        output_file = "audio_8_barbero_0_5_ore.md" if markdown_output else "transcript.txt"
         with open(output_file, "w", encoding="utf-8") as f:
             f.write(result_dict["text"])
         print(f"Transcript saved to {output_file}")

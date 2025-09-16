@@ -37,7 +37,7 @@ class YoutubeTranscriptLoaderWithLlm:
     """
 
     def __init__(self, llm_api_key: str = None, model="models/gemini-2.5-flash-preview-05-20", model_provider="google", markdown_output: bool = True, temp_dir: str = 'temp',
-                 save_transcript_chunks: bool = False, **kwargs) -> None:
+                 save_transcript_chunks: bool = False, timeout_minutes: int = None, **kwargs) -> None:
         """
         Initialize the YoutubeTranscriptLoaderWithLlm class with API key and configuration.
 
@@ -48,6 +48,7 @@ class YoutubeTranscriptLoaderWithLlm:
             markdown_output (bool, optional): Whether to format the extracted text as Markdown (default: True).
             temp_dir (str, optional): Temporary directory to store intermediate transcript files (default: 'temp').
             save_transcript_chunks (bool, optional): Whether to include processed chunks in the final output (default: False).
+            timeout_minutes (int, optional): Timeout in minutes for LLM response (default: None).
         """
         self.llm_api_key = llm_api_key
         self.model = model
@@ -57,6 +58,7 @@ class YoutubeTranscriptLoaderWithLlm:
         self.markdown_output = markdown_output
         self.type = "youtube_url"
         self.temp_dir = os.path.abspath(temp_dir)
+        self.timeout_minutes = timeout_minutes
 
     @retry(
         (
@@ -129,7 +131,12 @@ class YoutubeTranscriptLoaderWithLlm:
                     threshold=types.HarmBlockThreshold.BLOCK_NONE,
                 ),
             ],
-            media_resolution=types.MediaResolution.MEDIA_RESOLUTION_LOW
+            media_resolution=types.MediaResolution.MEDIA_RESOLUTION_LOW,
+            http_options=(
+                types.HttpOptions(timeout=self.timeout_minutes * 60_000)
+                if self.timeout_minutes is not None else None
+            ),
+
         )
 
         try:

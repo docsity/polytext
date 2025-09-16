@@ -81,7 +81,7 @@ def compress_and_convert_image(input_path: str, target_size=1):
     except Exception as e:
         raise RuntimeError(f"FFmpeg error during image processing: {e}") from e
 
-def get_ocr(file_for_ocr, markdown_output=False, llm_api_key=None, target_size=1):
+def get_ocr(file_for_ocr, markdown_output=False, llm_api_key=None, target_size=1, timeout_minutes=None):
     """
     Convenience function to extract text from an image file using OCR, optionally formatted as Markdown.
 
@@ -96,16 +96,18 @@ def get_ocr(file_for_ocr, markdown_output=False, llm_api_key=None, target_size=1
         llm_api_key (str, optional): API key for the LLM service. If provided,
             it will override the default configuration.
         target_size (int, optional): Target file size in bytes. Defaults to 1MB
+        timeout_minutes (int, optional): Number of minutes to wait for a response. Defaults to None.
 
     Returns:
         dict: Dictionary containing the OCR results and metadata.
     """
-    converter = OCRToTextConverter(markdown_output=markdown_output, llm_api_key=llm_api_key, target_size=target_size)
+    converter = OCRToTextConverter(markdown_output=markdown_output, llm_api_key=llm_api_key, target_size=target_size,
+                                   timeout_minutes=timeout_minutes)
     return converter.get_ocr(file_for_ocr)
 
 class OCRToTextConverter:
     def __init__(self, ocr_model="gemini-2.0-flash", ocr_model_provider="google",
-                markdown_output=True, llm_api_key=None, target_size=1, temp_dir="temp"):
+                markdown_output=True, llm_api_key=None, target_size=1, temp_dir="temp", timeout_minutes=None):
         """
         Initialize the OCRToTextConverter class with specified OCR model and formatting options.
 
@@ -119,6 +121,7 @@ class OCRToTextConverter:
             llm_api_key (str, optional): Override API key for language model. Defaults to None.
             target_size (int, optional): Target file size in bytes. Defaults to 1MB
             temp_dir (str): Directory for temporary files. Defaults to "temp".
+            timeout_minutes (int, optional): Number of minutes to wait for a response. Defaults to None.
 
         Raises:
             OSError: If temp directory creation fails
@@ -129,6 +132,7 @@ class OCRToTextConverter:
         self.markdown_output = markdown_output
         self.llm_api_key = llm_api_key
         self.target_size = target_size
+        self.timeout_minutes = timeout_minutes
 
         # Set up custom temp directory
         self.temp_dir = os.path.abspath(temp_dir)
@@ -208,7 +212,11 @@ class OCRToTextConverter:
                         category=types.HarmCategory.HARM_CATEGORY_HARASSMENT,
                         threshold=types.HarmBlockThreshold.BLOCK_NONE,
                     ),
-                ]
+                ],
+                http_options=(
+                    types.HttpOptions(timeout=self.timeout_minutes * 60_000)
+                    if self.timeout_minutes is not None else None
+                ),
             )
 
             mime_type, _ = mimetypes.guess_type(file_for_ocr)
