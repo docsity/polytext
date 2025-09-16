@@ -15,7 +15,7 @@ if sentry_dsn:
         import sentry_sdk
         sentry_sdk.init(
             dsn=sentry_dsn,
-            environment=os.getenv('ENVIRONMENT', 'prod'),
+            environment=os.getenv('ENV', 'prod'),
             traces_sample_rate=1.0,
             profiles_sample_rate=1.0,
         )
