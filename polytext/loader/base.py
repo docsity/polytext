@@ -6,6 +6,7 @@ import mimetypes
 import json
 import httpx
 import httpcore
+import requests
 from urllib.parse import urlparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -149,6 +150,15 @@ class BaseLoader:
 
             if code == 504 or status == "DEADLINE_EXCEEDED" or "DEADLINE_EXCEEDED" in msg:
                 raise LoaderError(message="timeout gemini", status=504, code="TIMEOUT")
+            raise
+        except requests.exceptions.HTTPError as e:
+            code = getattr(e.response, "status_code", None)
+            status = getattr(e.response, "reason", None)
+
+            if code == 403 or status.upper() == "FORBIDDEN":
+                raise LoaderError(message="forbidden url", status=403, code="FORBIDDEN")
+            if code == 401 or status.upper() == "UNAUTHORIZED":
+                raise LoaderError(message="unauthorized url", status=401, code="UNAUTHORIZED")
             raise
 
         return response
