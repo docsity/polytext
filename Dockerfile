@@ -13,8 +13,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # Multimedia framework required by ffmpeg-python and pydub
     ffmpeg \
     # Dependencies for WeasyPrint and other GUI/graphic libraries
+    weasyprint \
     libpango-1.0-0 \
     libpangoft2-1.0-0 \
+    # dependencies for convert documents to pdf
+    libreoffice \
+    # Clean up apt cache to reduce image size
     && rm -rf /var/lib/apt/lists/*
 
 # Copy your local 'requirements' folder
