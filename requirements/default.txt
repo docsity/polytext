@@ -32,7 +32,7 @@ charset-normalizer==3.4.2
 requests==2.32.3
 
 # html to markdown
-markitdown==0.1.1
+markitdown[all]==0.1.1
 pymupdf4llm==0.0.24
 html2text==2025.4.15
 
