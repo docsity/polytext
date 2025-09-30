@@ -16,9 +16,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpango-1.0-0 \
     libpangoft2-1.0-0 \
     # dependencies for convert documents to pdf
+    libxrender1 \
+    libxtst6 \
+    libcups2 \
+    fonts-dejavu-core \
+    fonts-wqy-zenhei \
     libreoffice \
     # Clean up apt cache to reduce image size
     && rm -rf /var/lib/apt/lists/*
+
+# Configuration for LibreOffice to run in headless mode
+RUN mkdir -p /tmp/libreoffice/.config/libreoffice && chown -R root:root /tmp/libreoffice
+ENV SAL_ENABLE_FILE_SCHEME=1
+ENV HOME=/tmp/libreoffice
 
 # Copy your local 'requirements' folder
 COPY requirements/ ./requirements/
