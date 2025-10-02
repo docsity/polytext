@@ -16,7 +16,7 @@ from botocore.exceptions import ClientError
 
 # Local imports
 from ..converter.pdf import convert_to_pdf
-from ..exceptions.base import EmptyDocument, ExceededMaxPages
+from ..exceptions.base import EmptyDocument, ExceededMaxPages, LoaderError
 from ..loader.downloader.downloader import Downloader
 
 logger = logging.getLogger(__name__)
@@ -246,13 +246,13 @@ class DocumentLoader:
                     try_not_markdown = False
 
             except concurrent.futures.TimeoutError:
-                logger.warning(f"Markdown conversion timed out after {self.timeout_minutes} minutes")
+                logger.info(f"Markdown conversion timed out after {self.timeout_minutes} minutes")
                 try_not_markdown = True
                 future.cancel()  # will only cancel if it hasn’t started
                 executor.shutdown(wait=False, cancel_futures=True)
                 executor = None  # avoid shutting down twice
             except Exception as e:
-                logger.error(f"Markdown conversion failed: {e}")
+                logger.info(f"Markdown conversion failed: {e}")
                 try_not_markdown = True
             finally:
                 if executor is not None:
@@ -265,38 +265,45 @@ class DocumentLoader:
             last_pages_text = ""
             last_page_index_to_start = 10
 
-            for page_number in range(start_page, end_page):
-                page = pdf_document.load_page(page_number)
-                page_text = page.get_text("text", flags=16)
-                page_text = self.clean_text(page_text)
-                text += page_text
-                if page_number >= (pdf_document.page_count - last_page_index_to_start):
-                    last_pages_text += page_text
+            try:
+                for page_number in range(start_page, end_page):
+                    page = pdf_document.load_page(page_number)
+                    page_text = page.get_text("text", flags=16)
+                    page_text = self.clean_text(page_text)
+                    text += page_text
+                    if page_number >= (pdf_document.page_count - last_page_index_to_start):
+                        last_pages_text += page_text
 
-                # Early termination checks
-                if len(text) == 0 and page_number == 10:
-                    message = "First 10 pages of the document are empty"
-                    logger.info(message)
-                    raise EmptyDocument(message=message, code=998)
+                    # Early termination checks
+                    if len(text) == 0 and page_number == 10:
+                        message = "First 10 pages of the document are empty"
+                        logger.info(message)
+                        raise EmptyDocument(message=message, code=998)
 
-                if len(text) < MIN_DOC_TEXT_LENGHT_ACCEPTED and page_number == 20:
-                    message = f"First 20 pages of the document have less than {MIN_DOC_TEXT_LENGHT_ACCEPTED} chars"
-                    logger.info(message)
-                    raise EmptyDocument(message=message, code=998)
+                    if len(text) < MIN_DOC_TEXT_LENGHT_ACCEPTED and page_number == 20:
+                        message = f"First 20 pages of the document have less than {MIN_DOC_TEXT_LENGHT_ACCEPTED} chars"
+                        logger.info(message)
+                        raise EmptyDocument(message=message, code=998)
 
-                if (total_pages >= 500 and
-                        page_number == 10 and
-                        self.has_repeated_rows(text=text, threshold=100)):
-                    message = "First 10 pages of the document have 100 repeated rows"
-                    logger.info(message)
-                    raise EmptyDocument(message=message, code=998)
+                    if (total_pages >= 500 and
+                            page_number == 10 and
+                            self.has_repeated_rows(text=text, threshold=100)):
+                        message = "First 10 pages of the document have 100 repeated rows"
+                        logger.info(message)
+                        raise EmptyDocument(message=message, code=998)
 
-                if (total_pages >= 500 and
-                        (page_number == total_pages - 1) and
-                        self.has_repeated_rows(text=last_pages_text, threshold=100)):
-                    message = "Last 10 pages of the document have 100 repeated rows"
-                    logger.info(message)
-                    raise EmptyDocument(message=message, code=998)
+                    if (total_pages >= 500 and
+                            (page_number == total_pages - 1) and
+                            self.has_repeated_rows(text=last_pages_text, threshold=100)):
+                        message = "Last 10 pages of the document have 100 repeated rows"
+                        logger.info(message)
+                        raise EmptyDocument(message=message, code=998)
+            except EmptyDocument as e:
+                raise e
+            except Exception as e:
+                logger.info(f"Error during text extraction: {e}")
+                raise LoaderError(message="text extraction error", status=422, code="TEXT EXTRACTION ERROR")
+
 
         pdf_document.close()
         if self.source == "cloud":
@@ -417,14 +424,14 @@ class DocumentLoader:
                     try_not_markdown = False
 
             except concurrent.futures.TimeoutError:
-                logger.warning(f"Markdown conversion timed out after {self.timeout_minutes} minutes")
+                logger.info(f"Markdown conversion timed out after {self.timeout_minutes} minutes")
                 try_not_markdown = True
                 future.cancel()  # cancels only if not started yet
                 executor.shutdown(wait=False, cancel_futures=True)
                 executor = None
 
             except Exception as e:
-                logger.error(f"Markdown conversion failed: {e}")
+                logger.info(f"Markdown conversion failed: {e}")
                 try_not_markdown = True
 
             finally:
@@ -432,50 +439,56 @@ class DocumentLoader:
                     executor.shutdown(wait=True)
 
         if try_not_markdown:
-            # Original plain text extraction logic
-            logger.info("Fallback without Markdown conversion")
-            text = ""
-            last_pages_text = ""
-            last_page_index_to_start = 10
+            try:
+                # Original plain text extraction logic
+                logger.info("Fallback without Markdown conversion")
+                text = ""
+                last_pages_text = ""
+                last_page_index_to_start = 10
 
-            for page_number in range(start_page, end_page):
-                page = pdf_reader.pages[page_number]
-                page_text = page.extract_text()
-                page_text = self.clean_text(page_text)
-                text += page_text
+                for page_number in range(start_page, end_page):
+                    page = pdf_reader.pages[page_number]
+                    page_text = page.extract_text()
+                    page_text = self.clean_text(page_text)
+                    text += page_text
 
-                if page.page_number >= (total_pages - last_page_index_to_start):
-                    last_pages_text += page_text
+                    if page.page_number >= (total_pages - last_page_index_to_start):
+                        last_pages_text += page_text
 
-                # Early termination checks
-                if len(text) == 0 and page.page_number == 10:
-                    message = "First 10 pages of the document are empty"
-                    logger.info(message)
-                    os.remove(temp_file_path)
-                    raise EmptyDocument(message=message, code=998)
-                if len(text) < MIN_DOC_TEXT_LENGHT_ACCEPTED and page.page_number == 20:
-                    message = f"First 20 pages of the document have less than {MIN_DOC_TEXT_LENGHT_ACCEPTED} chars"
-                    logger.info(message)
-                    os.remove(temp_file_path)
-                    raise EmptyDocument(message=message, code=998)
-                if (
-                        total_pages >= 500
-                        and page.page_number == 10
-                        and self.has_repeated_rows(text=text, threshold=100)
-                ):
-                    message = "First 10 pages of the document have 100 repeated rows"
-                    logger.info(message)
-                    os.remove(temp_file_path)
-                    raise EmptyDocument(message=message, code=998)
-                if (
-                        total_pages >= 500
-                        and (page.page_number == total_pages - 1)
-                        and self.has_repeated_rows(text=last_pages_text, threshold=100)
-                ):
-                    message = "Last 10 pages of the document have 100 repeated rows"
-                    logger.info(message)
-                    os.remove(temp_file_path)
-                    raise EmptyDocument(message=message, code=998)
+                    # Early termination checks
+                    if len(text) == 0 and page.page_number == 10:
+                        message = "First 10 pages of the document are empty"
+                        logger.info(message)
+                        os.remove(temp_file_path)
+                        raise EmptyDocument(message=message, code=998)
+                    if len(text) < MIN_DOC_TEXT_LENGHT_ACCEPTED and page.page_number == 20:
+                        message = f"First 20 pages of the document have less than {MIN_DOC_TEXT_LENGHT_ACCEPTED} chars"
+                        logger.info(message)
+                        os.remove(temp_file_path)
+                        raise EmptyDocument(message=message, code=998)
+                    if (
+                            total_pages >= 500
+                            and page.page_number == 10
+                            and self.has_repeated_rows(text=text, threshold=100)
+                    ):
+                        message = "First 10 pages of the document have 100 repeated rows"
+                        logger.info(message)
+                        os.remove(temp_file_path)
+                        raise EmptyDocument(message=message, code=998)
+                    if (
+                            total_pages >= 500
+                            and (page.page_number == total_pages - 1)
+                            and self.has_repeated_rows(text=last_pages_text, threshold=100)
+                    ):
+                        message = "Last 10 pages of the document have 100 repeated rows"
+                        logger.info(message)
+                        os.remove(temp_file_path)
+                        raise EmptyDocument(message=message, code=998)
+            except EmptyDocument as e:
+                raise e
+            except Exception as e:
+                logger.info(f"Error during text extraction: {e}")
+                raise LoaderError(message="text extraction error", status=422, code="TEXT EXTRACTION ERROR")
 
         if len(text) == 0:
             message = "No text detected"

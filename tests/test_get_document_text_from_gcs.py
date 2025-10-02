@@ -24,7 +24,7 @@ def main():
 
     # Optional: specify page range (start_page, end_page) - pages are 1-indexed
     page_range = None # (1,2)  # Extract text from pages 1 to 10
-    source = "cloud"
+    source = "local"
     markdown_output = True
     fallback_ocr = False
 
@@ -39,6 +39,7 @@ def main():
         # document_aws_bucket=os.environ.get("AWS_BUCKET"),
         page_range=page_range,  # Optional
         timeout_minutes=1,
+        note_id=123
     )
 
     # Define document data
@@ -47,9 +48,13 @@ def main():
     file_path = "s3://docsity-data/documents/original/2025/05/25/arb45ujrrv-4d6ef3d3-e4c4-4f3d-95b3-01d476c81ab3-9198.doc"
     # file_path = "s3://docsity-data/documents/original/2025/05/25/mzatlcs8ja-5ccf33be-9fd5-4b77-933b-67f95fb73ca3-4858.pdf"
     file_path = "s3://docsity-ai/documents/uploads/2025/06/07/mbme4vnj-fa0a1418910209fb3cfb802fac25539913b2bae9.pdf"
-    # file_path = "s3://docsity-ai/documents/uploads/2025/06/05/mbixox3p-65ffea88dad50a6ed0ca428a38ebe77ca651b0ed.pdf"
+    file_path = "s3://docsity-ai/documents/uploads/2025/06/05/mbixox3p-65ffea88dad50a6ed0ca428a38ebe77ca651b0ed.pdf"
     # file_path = "s3://docsity/documents/original/2025/01/01/4pwihwrwr2-85f3508b-d526-4342-9ed2-a204d4b20c45-1837.pdf"
-    local_file_path = "/Users/marcodelgiudice/Projects/polytext/4pwihwrwr2-85f3508b-d526-4342-9ed2-a204d4b20c45-1837.pdf"
+    file_path = "s3://docsity/documents/original/2023/12/14/lq5f9p6x-1702571763742_Sul%20fondamento%20della%20Morale.pdf"
+    local_file_path = "/Users/marcodelgiudice/Projects/polytext/g0r3wlmmau-ab2a0fe5-c225-407f-b8fb-7c922a3559d6-7476.pdf"
+    local_file_path = "/Users/marcodelgiudice/Projects/polytext/meqe0elc-db3a0dbee73040d41fb27734c903bf7bd97ea741.pdf"
+    local_file_path = "/Users/marcodelgiudice/Projects/polytext/md1riltv-ee317bf18dc559451372647a687ed796583e112e.pdf"
+    local_file_path = "/Users/marcodelgiudice/Projects/polytext/mce3wko5-7adf6ae7b319ebb06823498939a7d88127c9e007.pdf"
 
     try:
         # Call get_document_text method
