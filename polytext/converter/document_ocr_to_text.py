@@ -224,6 +224,9 @@ class DocumentOCRToTextConverter:
                     types.HttpOptions(timeout=self.timeout_minutes * 60_000)
                     if self.timeout_minutes is not None else None
                 ),
+                # thinking_config=types.ThinkingConfig(
+                #     thinking_budget=0,  # Use `0` to turn off thinking
+                # )
             )
 
             mime_type, _ = mimetypes.guess_type(file_for_ocr)

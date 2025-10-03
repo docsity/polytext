@@ -23,9 +23,14 @@ def main():
         source=source,
     )
 
+    import time
+    start = time.time()
     result_dict = loader.get_text(
         input_list=[html_string]
     )
+    end = time.time()
+    print(f"Time taken: {end - start} seconds")
+
     return result_dict
 
 if __name__ == "__main__":

@@ -54,7 +54,7 @@ class TextToMdConverter:
             overlap_chars: int = 500,
             k: int = 5,
             min_matches: int = 3,
-            model: str = "gemini-2.0-flash",
+            model: str = "gemini-2.5-flash",
             model_provider: str = "google",
     ) -> None:
         """
@@ -146,7 +146,10 @@ class TextToMdConverter:
                 types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
                 types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
                 types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
-            ]
+            ],
+            thinking_config=types.ThinkingConfig(
+                thinking_budget=0,  # Use `0` to turn off thinking
+            )
         )
 
         response = client.models.generate_content(

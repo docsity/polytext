@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 class TextMerger:
     def __init__(
             self,
-            completion_model: str = "gemini-2.0-flash",
+            completion_model: str = "gemini-2.5-flash",
             completion_model_provider: str = "google",
             llm_api_key: str = None,
             max_llm_tokens: int = 8000,
@@ -246,7 +246,10 @@ class TextMerger:
                         category=types.HarmCategory.HARM_CATEGORY_HARASSMENT,
                         threshold=types.HarmBlockThreshold.BLOCK_NONE,
                     ),
-                ]
+                ],
+                thinking_config=types.ThinkingConfig(
+                    thinking_budget=0,  # Use `0` to turn off thinking
+                )
             )
 
             prompt = TEXT_MERGE_PROMPT.format(text_1=end_text_1, text_2=start_text_2)
