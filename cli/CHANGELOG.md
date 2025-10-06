@@ -1,4 +1,7 @@
-1.0.16 (unreleased)
+1.0.17 (unreleased)
+-------------------------
+
+1.0.16 (06/10/2025 13:00)
 -------------------------
 - update polytext to fix some markdown errors
 - add into cli command two opzional options: note_id and input_source_id 
