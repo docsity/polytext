@@ -50,6 +50,18 @@ def process(
         "--timeout",
         "-t",
         help="Timeout for processing operations in seconds. Defaults to 300 (5 minutes)."
+    ),
+    note_id: int = typer.Option(
+        None,
+        "--note_id",
+        "-n",
+        help="(Internal use) Note ID for tracking purposes."
+    ),
+    input_source_id: int = typer.Option(
+        None,
+        "--input_source_id",
+        "-i",
+        help="(Internal use) Input Source ID for tracking purposes."
     )
 ):
     """
@@ -66,7 +78,7 @@ def process(
         # Instantiate BaseLoader.
         # BaseLoader will determine the source (local/cloud) from the input string.
         # As requested, we explicitly set the source to "local" for the CLI.
-        loader = BaseLoader(markdown_output=True, source="local", timeout_minutes=timeout_minutes)
+        loader = BaseLoader(markdown_output=True, source="local", timeout_minutes=timeout_minutes, note_id=note_id, input_source_id=input_source_id)
 
         typer.echo(f"Using BaseLoader to process: {input_source}")
 
