@@ -160,6 +160,13 @@ class BaseLoader:
             if code == 401 or status.upper() == "UNAUTHORIZED":
                 raise LoaderError(message="unauthorized url", status=401, code="UNAUTHORIZED")
             raise
+        except genai_errors.APIError as e:
+            code = getattr(e, "code", None)
+            status = getattr(e, "status", None)
+
+            if code == 403 or status == "PERMISSION_DENIED":
+                raise LoaderError(message="forbidden", status=403, code="FORBIDDEN")
+            raise
 
         return response
 
