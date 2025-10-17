@@ -13,7 +13,7 @@ load_dotenv(".env")
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
-url = 'https://medium.com/@gzozulin/deep-research-agent-in-langgraph-with-semantic-memory-via-mcp-f690c4f9fc24'
+url = 'https://it.wikipedia.org/wiki/Termodinamica'
     # 'https://www.youmath.it/domande-a-risposte/view/5393-integrale-cos2x.html'
 
 def main():
@@ -33,4 +33,6 @@ def main():
         raise RuntimeError(f"Error extracting markdown or plain text: {str(e)}")
 
 if __name__ == "__main__":
-    main()
+    result = main()
+
+import ipdb; ipdb.set_trace()
