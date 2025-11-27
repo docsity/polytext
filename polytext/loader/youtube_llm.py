@@ -36,14 +36,14 @@ class YoutubeTranscriptLoaderWithLlm:
         type (str): Loader type identifier ("youtube_gemini").
     """
 
-    def __init__(self, llm_api_key: str = None, model="models/gemini-2.5-flash-preview-05-20", model_provider="google", markdown_output: bool = True, temp_dir: str = 'temp',
+    def __init__(self, llm_api_key: str = None, model="models/gemini-2.5-flash", model_provider="google", markdown_output: bool = True, temp_dir: str = 'temp',
                  save_transcript_chunks: bool = False, timeout_minutes: int = None, **kwargs) -> None:
         """
         Initialize the YoutubeTranscriptLoaderWithLlm class with API key and configuration.
 
         Args:
             llm_api_key (str, optional): API key for the LLM used for processing.
-            model (str, optional): Name of the LLM model used for transcription (default: "models/gemini-2.5-flash-preview-05-20").
+            model (str, optional): Name of the LLM model used for transcription (default: "models/gemini-2.5-flash").
             model_provider (str, optional): Provider of the LLM model (default: "google").
             markdown_output (bool, optional): Whether to format the extracted text as Markdown (default: True).
             temp_dir (str, optional): Temporary directory to store intermediate transcript files (default: 'temp').
@@ -136,6 +136,9 @@ class YoutubeTranscriptLoaderWithLlm:
                 types.HttpOptions(timeout=self.timeout_minutes * 60_000)
                 if self.timeout_minutes is not None else None
             ),
+            thinking_config=types.ThinkingConfig(
+                thinking_budget=0,  # Use `0` to turn off thinking
+            )
 
         )
 
