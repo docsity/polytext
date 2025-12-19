@@ -35,7 +35,8 @@ def main():
         # document_gcs_bucket=None, #os.getenv("GCS_BUCKET"),
         document_aws_bucket=os.environ.get("AWS_BUCKET"),
         page_range=page_range,  # Optional
-        timeout_minutes=1
+        timeout_minutes=1,
+        ocr_provider="azure_openai"
     )
 
     # Define document data
