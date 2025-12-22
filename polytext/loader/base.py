@@ -283,7 +283,7 @@ class BaseLoader:
             file_extension = file_extension.lower()
 
         if is_document_fallback:
-            return DocumentOCRLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, timeout_minutes=self.timeout_minutes, **kwargs)
+            return DocumentOCRLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, timeout_minutes=self.timeout_minutes, ocr_provider=self.provider, **kwargs)
 
         if parsed_url.scheme in ["http", "https"] or input.startswith("www."):
             if "youtube.com" in parsed_url.netloc or "youtu.be" in parsed_url.netloc:
