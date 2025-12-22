@@ -225,20 +225,35 @@ class DocumentOCRToTextConverter:
 
             data_url = f"data:{mime_type};base64,{image_b64}"
 
-            response = client.chat.completions.create(
-                model=self.ocr_model,  # Azure deployment name
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": prompt_template},
-                            {"type": "image_url", "image_url": {"url": data_url}},
-                        ],
-                    }
-                ],
-                max_completion_tokens=self.max_tokens,
-                # reasoning_effort="low"
-            )
+            if self.ocr_model in ("gpt-5", "gpt-5-mini"):
+                response = client.chat.completions.create(
+                    model=self.ocr_model,  # Azure deployment name
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": prompt_template},
+                                {"type": "image_url", "image_url": {"url": data_url}},
+                            ],
+                        }
+                    ],
+                    max_completion_tokens=self.max_tokens,
+                    reasoning_effort="low"
+                )
+            else:
+                response = client.chat.completions.create(
+                    model=self.ocr_model,  # Azure deployment name
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": prompt_template},
+                                {"type": "image_url", "image_url": {"url": data_url}},
+                            ],
+                        }
+                    ],
+                    max_completion_tokens=self.max_tokens,
+                )
 
             time_elapsed = time.time() - start_time
 

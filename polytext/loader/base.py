@@ -41,7 +41,7 @@ MIN_DOC_TEXT_LENGTH_ACCEPTED = int(os.getenv("MIN_DOC_TEXT_LENGTH_ACCEPTED", "40
 
 class BaseLoader:
     def __init__(self, markdown_output=True, llm_api_key=None, provider: str = "google", temp_dir: str = "temp",
-                 timeout_minutes: int | None = None, **kwargs):
+                 ocr_model: str = "gpt-5-mini", timeout_minutes: int | None = None, **kwargs):
         """
         Initialize the BaseLoader with cloud storage and LLM configurations.
 
@@ -54,6 +54,7 @@ class BaseLoader:
             llm_api_key (str, optional): API key for language model service. Defaults to None.
             temp_dir (str, optional): Path for temporary file storage. Defaults to "temp".
             provider (str, optional): Provider of the model. Default to "google".
+            ocr_model (str, optional): OCR model to use for text extraction from images. Defaults to "gpt-5-mini".
             timeout_minutes (int, optional): Timeout in minutes. Defaults to None.
              **kwargs: Additional keyword arguments to pass to the underlying loader or extraction logic.
                 - target_size (int, optional): Target file size in bytes. Defaults to 1MB
@@ -71,6 +72,7 @@ class BaseLoader:
         self.llm_api_key = llm_api_key
         self.temp_dir = temp_dir
         self.provider = provider
+        self.ocr_model = ocr_model
         self.timeout_minutes = timeout_minutes
         self.kwargs = kwargs
         self.target_size = kwargs.get("target_size", 1)
@@ -283,7 +285,7 @@ class BaseLoader:
             file_extension = file_extension.lower()
 
         if is_document_fallback:
-            return DocumentOCRLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, timeout_minutes=self.timeout_minutes, ocr_provider=self.provider, **kwargs)
+            return DocumentOCRLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, timeout_minutes=self.timeout_minutes, ocr_provider=self.provider, ocr_model=self.ocr_model, **kwargs)
 
         if parsed_url.scheme in ["http", "https"] or input.startswith("www."):
             if "youtube.com" in parsed_url.netloc or "youtu.be" in parsed_url.netloc:
