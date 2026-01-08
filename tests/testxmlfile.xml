@@ -1,0 +1,271 @@
+<?xml version="1.0" encoding="ISO-8859-1" standalone="yes"?>
+  <Risposta xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="OutputRIUnico.xsd">
+    <Testata>
+      <Riepilogo>
+        <RichiestaInput><![CDATA[http://aiws.intra.infocamere.it/aiws/rest/registroimprese/output/impresa/blocchi/codicefiscale/xml?codiceFiscale=02926100047&blocco=AMM]]></RichiestaInput>
+        <FormatoDocumentoAllegato>X</FormatoDocumentoAllegato>
+        <NumeroPosizioni>1</NumeroPosizioni>
+        <IdRichiesta>AW1B4H4YKP4D5704FAC5</IdRichiesta>
+        <DtEstrazione>2025-03-18</DtEstrazione>
+        <OraEstrazione>12:44:03</OraEstrazione>
+      </Riepilogo>
+      <RecordAccount>TELEMACO      W0GENUT REIMCX2B9DWXPRVCN       NRD247939   NGISP                                           CNT000000001                                                            AW1B4H4YKP4D5704FAC50001</RecordAccount>
+    </Testata>
+    <dati>
+      <Riconoscimento>
+        <IdentificativoPosizione>CN/247939</IdentificativoPosizione>
+        <OutputRestituiti>AMM/AMM</OutputRestituiti>
+      </Riconoscimento>
+      <blocchi-impresa>
+        <dati-identificativi f-sede-intercamerale="S" c-fonte="RI" fonte="Registro Imprese" tipo-soggetto="I" descrizione-tipo-soggetto="Sede dell'impresa" tipo-impresa="SC" descrizione-tipo-impresa="Societa' di capitale" dt-iscrizione-ri="14/03/2003" dt-atto-costituzione="28/02/2003" dt-ultimo-protocollo="20/02/2025"
+ dt-mod-ultimo-protocollo-evaso="20/02/2025" denominazione="OPEN DOT COM S.P.A. SOCIETA' DI SERVIZI DEI DOTTORI COMMERCIALISTI E DEGLI ESPERTI CONTABILI SIGLABILE &quot;OPEN DOT COM S.P.A.&quot; OVVERO &quot;OPEN S.P.A.&quot;" c-fiscale="02926100047" partita-iva="02926100047" c-lei="815600385001BDB17940" c-cciaa-competente="CN" cciaa-competente="CUNEO" cciaa="CN" n-rea="247939">
+          <stato-attivita c="A">attiva</stato-attivita>
+          <forma-giuridica c="SP">SOCIETA' PER AZIONI</forma-giuridica>
+          <indirizzo-localizzazione c-comune="078" comune="CUNEO" provincia="CN" c-toponimo="CSO" toponimo="CORSO" via="FRANCIA" n-civico="121/D" cap="12100"/>
+          <indirizzo-posta-certificata>OPENDOTCOMSPA@LEGALMAIL.IT</indirizzo-posta-certificata>
+          <telefono prefisso="0171" n="700700"/>
+          <sito-internet>WWW.OPENDOTCOM.IT</sito-internet>
+          <email>INFO@OPENDOTCOM.IT</email>
+          <persone-rappresentanti f-piu-persone="S"/>
+        </dati-identificativi>
+        <sintesi-attivita f-albi-ruoli-licenze="S" f-certificazioni-qualita="S" dt-inizio="01/03/2003">
+          <attivita-prevalente-r>ALTRE ATTIVITA' DEI SERVIZI CONNESSI ALLE TECONOLOGIE DELL'INFORMATICA,
+IN PARTICOLARE FORNITURA DI SOFTWARE E CONSULENZA IN MATERIA DI INFORMATICA
+FORNITA DA DOTTORI COMMERCIALISTI; COMMERCIO ELETTRONICO SU WEB DI SOFTWARE E
+...</attivita-prevalente-r>
+          <classificazione-ateco c-attivita="62.09.09" c-nace="62.09"/>
+        </sintesi-attivita>
+        <persone-sede>
+          <persona progressivo="26" f-rappresentante-ri="S" f-amministratore="S" f-sindaco="N">
+            <persona-fisica cognome="CAMILOTTI" nome="ALBERTO MARIA" c-fiscale="CMLLRT74M06L483S" sesso="M">
+              <estremi-nascita dt="06/08/1974" comune="UDINE" provincia="UD"/>
+              <domicilio-fiscale c-comune="129" comune="UDINE" provincia="UD" c-toponimo="VIA" toponimo="VIA" via="SABOTINO" n-civico="32" cap="33100"/>
+            </persona-fisica>
+            <atti-conferimento-cariche>
+              <atto-conferimento-cariche p-gruppo-cariche="0">
+                <cariche>
+                  <carica p-carica="1" c-carica="CON" dt-iscrizione="09/08/2011" dt-atto-nomina="11/05/2023" c-durata="AB" descrizione-durata="FINO APPROVAZIONE DEL BILANCIO" dt-riferimento-bilancio="31/12/2025" dt-presentazione="12/06/2023">CONSIGLIERE</carica>
+                </cariche>
+              </atto-conferimento-cariche>
+              <atto-conferimento-cariche p-gruppo-cariche="1">
+                <cariche>
+                  <carica p-carica="2" c-carica="PCA" dt-iscrizione="23/02/2017" dt-atto-nomina="11/05/2023" c-durata="AB" descrizione-durata="FINO APPROVAZIONE DEL BILANCIO" dt-riferimento-bilancio="31/12/2025" dt-presentazione="12/06/2023">PRESIDENTE CONSIGLIO AMMINISTRAZIONE</carica>
+                </cariche>
+                <poteri-persona p-poteri="16">AL PRESIDENTE DOTT. ALBERTO MARIA CAMILOTTI SONO ATTRIBUITI, CON FIRMA
+CONGIUNTA DELL'AMMINISTRATORE DELEGATO DOTT. ANTONELLO ALLOCCO, I SEGUENTI
+POTERI:
+1) STIPULAZIONE DI CONTRATTI PASSIVI E ORDINI DI ACQUISTO OLTRE L'IMPORTO DI
+50.000 EURO, ESCLUDENDO I BONIFICI ED I PAGAMENTI INFRAGRUPPO, I PAGAMENTI DI
+IMPOSTE, TRIBUTI E CONTRIBUTI, SANZIONI;
+2) STIPULAZIONE DI CONTRATTI DI FINANZIAMENTO PER IMPORTI SUPERIORI A 100.000
+EURO, NONCHE' CONTRATTI DI MUTUO E QUALSIASI STRUMENTO DI DEBITO.</poteri-persona>
+              </atto-conferimento-cariche>
+            </atti-conferimento-cariche>
+          </persona>
+          <persona progressivo="31" f-rappresentante-ri="S" f-amministratore="S" f-sindaco="N">
+            <persona-fisica cognome="ALLOCCO" nome="ANTONELLO" c-fiscale="LLCNNL63B01D205Z" sesso="M">
+              <estremi-nascita dt="01/02/1963" c-comune="078" comune="CUNEO" provincia="CN"/>
+              <domicilio-fiscale c-comune="078" comune="CUNEO" provincia="CN" c-toponimo="CSO" toponimo="CORSO" via="DANTE" n-civico="31" cap="12100"/>
+            </persona-fisica>
+            <atti-conferimento-cariche>
+              <atto-conferimento-cariche p-gruppo-cariche="0">
+                <cariche>
+                  <carica p-carica="1" c-carica="AMD" dt-iscrizione="27/02/2017" dt-atto-nomina="11/05/2023" c-durata="AB" descrizione-durata="FINO APPROVAZIONE DEL BILANCIO" dt-riferimento-bilancio="31/12/2025">AMMINISTRATORE DELEGATO</carica>
+                </cariche>
+                <poteri-persona p-poteri="20">A)  ALL'AMMINISTRATORE DELEGATO DOTT. ANTONELLO ALLOCCO SONO ATTRIBUITI, CON
+FIRMA LIBERA E DISGIUNTA, TUTTI I POTERI DI ORDINARIA AMMINISTRAZIONE, TRANNE
+QUELLI PER LEGGE RISERVATI AL CONSIGLIO DI AMMINISTRAZIONE, ENTRO I LIMITI
+INDICATI QUI DI SEGUITO, OLTRE I QUALI SARA' NECESSARIA LA FIRMA CONGIUNTA CON
+IL PRESIDENTE O IL VICEPRESIDENTE:
+A.1) STIPULAZIONE DI CONTRATTI PASSIVI E ORDINI DI ACQUISTO ENTRO IL LIMITE
+MASSIMO DI 50.000 EURO ANCHE QUALORA IL LIMITE MASSIMO VENGA RAGGIUNTO CON PIU'
+TRANSAZIONI E/O BONIFICI E/O PAGAMENTI E/O GARANZIE RIFERITE/I ALLA MEDESIMA
+OPERAZIONE; ESCLUDENDO DA DETTO LIMITE TUTTI I BONIFICI ED I PAGAMENTI
+INFRAGRUPPO, I PAGAMENTI DI IMPOSTE, TRIBUTI E CONTRIBUTI, SANZIONI;
+A.2) STIPULAZIONE DI CONTRATTI PASSIVI DI DURATA PLURIENNALE PER QUALSIASI
+IMPORTO (CON ESCLUSIONE DELLE UTENZE RELATIVE AGLI UFFICI);
+A.3) STIPULAZIONE DI CONTRATTI DI FINANZIAMENTO PER IMPORTI INFERIORI A 100.000
+EURO, NONCHE' CONTRATTI DI MUTUO E QUALSIASI STRUMENTO DI DEBITO;
+A.4) CONTRATTI AVENTI AD OGGETTO STRUMENTI FINANZIARI DERIVATI PER QUALSIASI
+IMPORTO;
+A.5) CESSIONE O CONCESSIONE IN LICENZA DI SOFTWARE, MARCHI E BREVETTI DI
+PROPRIETA' DELLA SOCIETA', CON ESCLUSIONE DELLE LICENZE D'USO CONCESSE AGLI
+UTENTI FINALI NEI NORMALI CONTRATTI D'USO ED ASSISTENZA TECNICA;
+B)  ATTRIBUISCE, INOLTRE, AL DOTT. ANTONELLO ALLOCCO, IN VIA ESCLUSIVA, TUTTI I
+POTERI INERENTI ALL'ATTUAZIONE DELLE NORME RELATIVE A:
+B.1) PREVENZIONE INFORTUNI E LA DISCIPLINA LEGALE IN MATERIA DI IGIENE E DI
+SICUREZZA DEL LAVORO, LA MESSA IN OPERA DI TUTTE LE MISURE ATTE A PREVENIRE
+EVENTI DANNOSI SUI LUOGHI DI LAVORO, LA RICHIESTA DELLE NECESSARIE
+AUTORIZZAZIONI E L'EFFETTUAZIONE DEI RELATIVI CONTROLLI E ADEGUAMENTI E QUINDI
+ATTRIBUENDO ALLO STESSO OGNI PIU' AMPIO POTERE PROPRIO DEL RUOLO SPECIFICO DI
+"TITOLARE" E "DATORE DI LAVORO", COME PREVISTO DALLE LEGGI IN VIGORE IN
+MATERIA, TEMPO PER TEMPO VIGENTI, E IN GENERE, RESPONSABILE DELLA GESTIONE
+DELLA SALUTE E SICUREZZA SUL LUOGO DI LAVORO;
+B.2) ANTINQUINAMENTO E SUI RIFIUTI, LA MESSA IN OPERA DI TUTTE LE MISURE ATTE A
+PREVENIRE EVENTI DANNOSI, LA RICHIESTA DELLE NECESSARIE AUTORIZZAZIONI E
+L'EFFETTUAZIONE DEI RELATIVI CONTROLLI E ADEGUAMENTI;
+B.3) TUTELA DELLE PERSONE E DI ALTRI SOGGETTI RISPETTO AL TRATTAMENTO DEI DATI
+PERSONALI, LA MESSA IN OPERA DI TUTTE LE MISURE ATTE A PREVENIRE EVENTI
+DANNOSI, LA RICHIESTA DELLE NECESSARIE AUTORIZZAZIONI E PER L'EFFETTUAZIONE DEI
+RELATIVI CONTROLLI E ADEGUAMENTI; IN RIFERIMENTO A TALE NORMATIVA IL DOTT.
+ANTONELLO ALLOCCO ASSUME ANCHE LE QUALIFICHE DI TITOLARE, RESPONSABILE E
+INCARICATO DEL TRATTAMENTO DEI DATI.
+B.4) OBBLIGHI DEL DATORE DI LAVORO ED AI RAPPORTI DI LAVORO, I RELATIVI
+ADEMPIMENTI CONTRIBUTIVI E FISCALI; L'ECOLOGIA, L'AMBIENTE, LA LOTTA CONTRO I
+RUMORI, LO SMALTIMENTO DEI RIFIUTI, LA PREVENZIONE INCENDI, LE MISURE DI
+PREVENZIONE DEI DANNI VERSO TERZI, COMPRESA LA VIGILANZA DELL'OSSERVANZA DEL
+DIVIETO DI FUMO EX ART. 51, LEGGE 3/2003, LA TUTELA DEL TRATTAMENTO DEI DATI
+PERSONALI EX DLGS. 196/2003 (E SUCCESSIVE MODIFICHE) E REGOLAMENTO EUROPEO
+679/2016;
+B.5) OBBLIGHI DI DEPOSITO, COMUNICAZIONE ED OGNI ALTRA INCOMBENZA NEI CONFRONTI
+DEL REGISTRO IMPRESE E DI OGNI ALTRO REGISTRO, ELENCO O UFFICIO GESTITO O
+DIPENDENTE DALLA CAMERA DI COMMERCIO.
+CON RIFERIMENTO AI PUNTI DA B.1) A B.5) ALL'AMMINISTRATORE DELEGATO VIENE
+CONFERITO IL POTERE DI GESTIONE ED ORGANIZZAZIONE CON PIENI POTERI DECISIONALI
+E DI SPESA, ATTRIBUENDO ALLO STESSO SPECIFICO INCARICO PER OPERARE IN NOME
+DELLA SOCIETA' AL FINE DI GARANTIRE LA PIENA ADESIONE ALLA NORMATIVA IN ESSERE
+(IN PARTICOLARE RIFERIMENTO, A TITOLO ESEMPLIFICATIVO, AL D. LGS. 81/08, D.
+LGS. 152/06), ANCHE ATTRAVERSO IL CONFERIMENTO DI SPECIFICHE DELEGHE LADDOVE
+CONSENTITO DALLA LEGISLAZIONE VIGENTE.
+ALLO STESSO CONSIGLIERE ANTONELLO ALLOCCO E' ALTRESI' ATTRIBUITA LA
+RESPONSABILITA' ED I RELATIVI POTERI PER LA GESTIONE DEL PERSONALE DIPENDENTE
+E/O PARASUBORDINATO ESSENDO AFFIDATI ALLO STESSO I RELATIVI ADEMPIMENTI DI
+NATURA AMMINISTRATIVA, NONCHE' TUTTI I RAPPORTI CON GLI ENTI PREVIDENZIALE,
+ASSICURATIVI E CON GLI ORGANI PREPOSTI AI CONTROLLI SU TALE MATERIA.
+C) IN RIFERIMENTO ALLE ATTIVITA' DI CUI AL PRECEDENTE PUNTO B), TUTTE LE
+INCOMBENZE FARANNO CARICO AL DOTT. ANTONELLO ALLOCCO IN VIA ESCLUSIVA, SENZA
+POSSIBILITA' DI INTERFERENZE DA PARTE DEGLI ALTRI; A TAL FINE:
+C.1) I POTERI DI GESTIONE, AMMINISTRAZIONE ORDINARIA E STRAORDINARIA, FACOLTA'
+RELATIVE, CON DIRITTO/DOVERE DI RAPPRESENTANZA/FIRMA ESCLUSIVA SPETTERANNO PER
+LE INCOMBENZE DI CUI SOPRA AL DOTT. ANTONELLO ALLOCCO, IL QUALE SARA', QUINDI,
+INVESTITO IN VIA ESCLUSIVA DI TUTTI I POTERI DECISIONALI E DIRETTIVI PER GLI
+AMBITI DI ASSOLUTA COMPETENZA CON RELATIVA RAPPRESENTANZA E FIRMA;
+C.2) IL DOTT. ANTONELLO ALLOCCO SI IMPEGNA AD APPORTARE NELLA SOCIETA' STESSA,
+IN VIA CONTINUATIVA, LA PROPRIA CAPACITA' TECNICO/PRATICA E LA SUA ATTIVITA' DI
+DIREZIONE PER I SETTORI OGGETTO DI DELEGA;
+C.3) AL DOTT. ANTONELLO ALLOCCO E' ATTRIBUITA IN TALE CAMPO PIENA AUTONOMIA,
+SENZA LIMITI DI SPESA;
+CON LA CONSEGUENZA CHE SARANNO AD ESCLUSIVO CARICO DEL DOTT. ANTONELLO ALLOCCO
+EVENTUALI CONSEGUENTI SANZIONI DI QUALSIASI NATURA E SPECIE.</poteri-persona>
+              </atto-conferimento-cariche>
+              <atto-conferimento-cariche p-gruppo-cariche="1">
+                <cariche>
+                  <carica p-carica="2" c-carica="CON" dt-iscrizione="27/02/2017" dt-atto-nomina="11/05/2023" c-durata="AB" descrizione-durata="FINO APPROVAZIONE DEL BILANCIO" dt-riferimento-bilancio="31/12/2025" dt-presentazione="12/06/2023">CONSIGLIERE</carica>
+                </cariche>
+              </atto-conferimento-cariche>
+              <atto-conferimento-cariche p-gruppo-cariche="2">
+                <cariche>
+                  <carica p-carica="3" c-carica="VPA" dt-iscrizione="27/02/2017" dt-atto-nomina="11/05/2023" c-durata="AB" descrizione-durata="FINO APPROVAZIONE DEL BILANCIO" dt-riferimento-bilancio="31/12/2025" dt-presentazione="12/06/2023">VICE PRESIDENTE DEL CONSIGLIO D'AMMINISTRAZIONE</carica>
+                </cariche>
+              </atto-conferimento-cariche>
+            </atti-conferimento-cariche>
+          </persona>
+          <persona progressivo="35" f-rappresentante-ri="S" f-amministratore="S" f-sindaco="N">
+            <persona-fisica cognome="BERNASCONI" nome="LUCA" c-fiscale="BRNLCU83R08L219E" sesso="M">
+              <estremi-nascita dt="08/10/1983" comune="TORINO" provincia="TO"/>
+              <domicilio-fiscale c-comune="272" comune="TORINO" provincia="TO" c-toponimo="VIA" toponimo="VIA" via="ALFONSO LAMARMORA" n-civico="78" cap="10100"/>
+            </persona-fisica>
+            <atti-conferimento-cariche>
+              <atto-conferimento-cariche p-gruppo-cariche="0">
+                <cariche>
+                  <carica p-carica="1" c-carica="CON" dt-iscrizione="26/07/2017" dt-atto-nomina="11/05/2023" c-durata="AB" descrizione-durata="FINO APPROVAZIONE DEL BILANCIO" dt-riferimento-bilancio="31/12/2025" dt-presentazione="12/06/2023">CONSIGLIERE</carica>
+                </cariche>
+              </atto-conferimento-cariche>
+              <atto-conferimento-cariche p-gruppo-cariche="1">
+                <cariche>
+                  <carica p-carica="2" c-carica="VPA" dt-iscrizione="22/06/2020" dt-atto-nomina="11/05/2023" c-durata="AB" descrizione-durata="FINO APPROVAZIONE DEL BILANCIO" dt-riferimento-bilancio="31/12/2025" dt-presentazione="12/06/2023">VICE PRESIDENTE DEL CONSIGLIO D'AMMINISTRAZIONE</carica>
+                </cariche>
+                <poteri-persona p-poteri="8">AL VICE PRESIDENTE DOTT. LUCA BERNASCONI SONO ATTRIBUITI, CON FIRMA CONGIUNTA
+DELL'AMMINISTRATORE DELEGATO DOTT. ANTONELLO ALLOCCO, I SEGUENTI POTERI:
+1) STIPULAZIONE DI CONTRATTI PASSIVI E ORDINI DI ACQUISTO OLTRE L'IMPORTO DI
+50.000 EURO, ESCLUDENDO I BONIFICI ED I PAGAMENTI INFRAGRUPPO, I PAGAMENTI DI
+IMPOSTE, TRIBUTI E CONTRIBUTI, SANZIONI;
+2) STIPULAZIONE DI CONTRATTI DI FINANZIAMENTO PER IMPORTI SUPERIORI A 100.000
+EURO, NONCHE' CONTRATTI DI MUTUO E QUALSIASI STRUMENTO DI DEBITO.</poteri-persona>
+              </atto-conferimento-cariche>
+            </atti-conferimento-cariche>
+          </persona>
+          <persona progressivo="22" f-amministratore="S" f-sindaco="N">
+            <persona-fisica cognome="SERGIACOMI" nome="MARIA CRISTINA" c-fiscale="SRGMCR65T55F351R" sesso="F">
+              <estremi-nascita dt="15/12/1965" c-comune="130" comune="MONDOVI'" provincia="CN"/>
+              <domicilio-fiscale c-comune="130" comune="MONDOVI'" provincia="CN" c-toponimo="VIA" toponimo="VIA" via="SAN FIORENZO" n-civico="39" cap="12084"/>
+            </persona-fisica>
+            <atti-conferimento-cariche>
+              <atto-conferimento-cariche p-gruppo-cariche="0">
+                <cariche>
+                  <carica p-carica="1" c-carica="CON" dt-iscrizione="29/05/2008" dt-atto-nomina="11/05/2023" c-durata="AB" descrizione-durata="FINO APPROVAZIONE DEL BILANCIO" dt-riferimento-bilancio="31/12/2025" dt-presentazione="12/06/2023">CONSIGLIERA</carica>
+                </cariche>
+              </atto-conferimento-cariche>
+            </atti-conferimento-cariche>
+          </persona>
+          <persona progressivo="36" f-amministratore="S" f-sindaco="N">
+            <persona-fisica cognome="BELTRITTI" nome="STEFANO" c-fiscale="BLTSFN55R24D205X" sesso="M">
+              <estremi-nascita dt="24/10/1955" c-comune="078" comune="CUNEO" provincia="CN"/>
+              <domicilio-fiscale c-comune="078" comune="CUNEO" provincia="CN" c-toponimo="VLE" toponimo="VIALE" via="BEATO ANGELO CARLETTI" n-civico="8/C" cap="12100"/>
+            </persona-fisica>
+            <atti-conferimento-cariche>
+              <atto-conferimento-cariche p-gruppo-cariche="0">
+                <cariche>
+                  <carica p-carica="1" c-carica="CON" dt-iscrizione="26/07/2017" dt-atto-nomina="11/05/2023" c-durata="AB" descrizione-durata="FINO APPROVAZIONE DEL BILANCIO" dt-riferimento-bilancio="31/12/2025" dt-presentazione="12/06/2023">CONSIGLIERE</carica>
+                </cariche>
+                <poteri-persona p-poteri="5">IL CDA ALL'UNANIMITA' DELIBERA DI CONFERMARE DELEGA, AL DOTT. STEFANO BELTRITTI
+IN MATERIA AMMINISTRATIVA, FINANZIARIA, CONTABILE E FISCALE ED IN PARTICOLARE
+GLI VIENE RICHIESTO DI:
+- COORDINARE L'ATTIVITA' DELL'UFFICIO AMMINISTRATIVO AVENDO CURA E CONTROLLO
+DELL'ASSETTO FINANZIARIO, AMMINISTRATIVO E CONTABILE DELLA SOCIETA';
+- SOVRAINTENDERE E COORDINARE L'AREA AMMINISTRATIVA NELLA PREDISPOSIZIONE DEL
+BUDGET ANNUALE;
+- SOVRAINTENDERE E COORDINARE L'AREA AMMINISTRATIVA NELLA PREDISPOSIZIONE DELLA
+BOZZA DI BILANCIO DI ESERCIZIO E NELLA PREDISPOSIZIONE DELLE SITUAZIONI
+INFRANNUALI;
+- SOVRAINTENDERE E COORDINARE L'AREA AMMINISTRATIVA NELLA DETERMINAZIONE DELLE
+IMPOSTE D'ESERCIZIO;
+- COMPIERE GLI ATTI INERENTI AGLI ADEMPIMENTI CONTABILI E FISCALI IVI COMPRESO
+IL RAPPORTO CON GLI ENTI PUBBLICI PREPOSTI AI CONTROLLI DI CARATTERE FISCALE E
+PREVIDENZIALE, ANCHE IN SEDE AMMINISTRATIVA NEL CORSO DI ISPEZIONI E VERIFICHE;
+- VERIFICARE E AUTORIZZARE I PAGAMENTI, NEI LIMITI DELLE DELEGHE ATTRIBUITE
+AGLI AMMINISTRATORI, CHE LA SOCIETA' DEVE ESEGUIRE TENUTO CONTO DELLE SEGUENTI
+INDICAZIONI:
+A) IL RISPETTO DELLE DELIBERE DEL CONSIGLIO D'AMMINISTRAZIONE;
+B) LA CORRISPONDENZA DELLA SPESA SOSTENUTA AI CONTRATTI STIPULATI ED AI
+REGOLAMENTI AZIENDALI;
+C) LA COMPATIBILITA' DEI FLUSSI DI CASSA GLOBALI NELL'OTTICA DELLA GESTIONE
+DELLA POSIZIONE FINANZIARIA.</poteri-persona>
+              </atto-conferimento-cariche>
+            </atti-conferimento-cariche>
+          </persona>
+          <persona progressivo="42" f-amministratore="S" f-sindaco="N">
+            <persona-fisica cognome="CUCHEL" nome="MARCO" c-fiscale="CCHMRC64S08I390R" sesso="M">
+              <estremi-nascita dt="08/11/1964" comune="SAN VINCENZO" provincia="LI"/>
+              <domicilio-fiscale comune="LIVORNO" provincia="LI" c-toponimo="VIA" toponimo="VIA" via="UMBRIA" n-civico="2" cap="57124"/>
+            </persona-fisica>
+            <atti-conferimento-cariche>
+              <atto-conferimento-cariche p-gruppo-cariche="0">
+                <cariche>
+                  <carica p-carica="1" c-carica="CON" dt-iscrizione="22/06/2020" dt-atto-nomina="11/05/2023" c-durata="AB" descrizione-durata="FINO APPROVAZIONE DEL BILANCIO" dt-riferimento-bilancio="31/12/2025" dt-presentazione="12/06/2023">CONSIGLIERE</carica>
+                </cariche>
+              </atto-conferimento-cariche>
+            </atti-conferimento-cariche>
+          </persona>
+          <persona progressivo="50" f-amministratore="S" f-sindaco="N">
+            <persona-fisica cognome="CERBONE" nome="GIUSEPPE" c-fiscale="CRBGPP58D13F839A" sesso="M">
+              <estremi-nascita dt="13/04/1958" comune="NAPOLI" provincia="NA"/>
+              <domicilio-fiscale comune="ROMA" provincia="RM" c-toponimo="VIA" toponimo="VIA" via="GIOVANNI ANTONELLI" n-civico="47" cap="00197"/>
+            </persona-fisica>
+            <atti-conferimento-cariche>
+              <atto-conferimento-cariche p-gruppo-cariche="0">
+                <cariche>
+                  <carica p-carica="1" c-carica="CON" dt-iscrizione="15/06/2023" dt-atto-nomina="11/05/2023" c-durata="AB" descrizione-durata="FINO APPROVAZIONE DEL BILANCIO" dt-riferimento-bilancio="31/12/2025" dt-presentazione="12/06/2023">CONSIGLIERE</carica>
+                </cariche>
+              </atto-conferimento-cariche>
+            </atti-conferimento-cariche>
+          </persona>
+        </persone-sede>
+        <amministrazione-controllo>
+          <forme-amministrative-in-carica>
+            <forma-amministrativa-in-carica c="CA" n-amministratori-in-carica="7">CONSIGLIO DI AMMINISTRAZIONE</forma-amministrativa-in-carica>
+          </forme-amministrative-in-carica>
+        </amministrazione-controllo>
+      </blocchi-impresa>
+    </dati>
+  </Risposta>

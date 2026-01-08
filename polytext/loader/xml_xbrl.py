@@ -69,6 +69,7 @@ class XmlXbrlLoader:
     def load(self, input_path: str) -> dict:
         """
         Load and return the content of an XML/XBRL file.
+        Dispatches to specific methods based on file extension.
 
         Args:
             input_path: Path to the file (local path or cloud key).
@@ -87,27 +88,11 @@ class XmlXbrlLoader:
             if not os.path.exists(temp_file_path):
                  raise LoaderError(f"File not found: {temp_file_path}", code="FILE_NOT_FOUND")
 
-            try:
-                with open(temp_file_path, 'r', encoding='utf-8') as f:
-                    text = f.read()
-            except UnicodeDecodeError:
-                # Fallback to latin-1 if utf-8 fails
-                 with open(temp_file_path, 'r', encoding='latin-1') as f:
-                    text = f.read()
-            
-            if not text.strip():
-                 raise EmptyDocument("File is empty", code="EMPTY_FILE")
-
-            return {
-                "text": text,
-                "completion_tokens": 0,
-                "prompt_tokens": 0,
-                "completion_model": "not provided",
-                "completion_model_provider": "not provided",
-                "text_chunks": "not provided",
-                "type": self.type,
-                "input": input_path,
-            }
+            _, ext = os.path.splitext(input_path)
+            if ext.lower() == '.xbrl':
+                return self.get_xbrl_text(temp_file_path, input_path)
+            else:
+                return self.get_xml_text(temp_file_path, input_path)
 
         except Exception as e:
              if isinstance(e, (EmptyDocument, LoaderError)):
@@ -117,3 +102,56 @@ class XmlXbrlLoader:
         finally:
             if should_cleanup and os.path.exists(temp_file_path):
                 os.remove(temp_file_path)
+
+    def _read_file_content(self, file_path: str) -> str:
+        """Helper to safely read file content with encoding fallback."""
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                return f.read()
+        except UnicodeDecodeError:
+             with open(file_path, 'r', encoding='latin-1') as f:
+                return f.read()
+
+    def get_xml_text(self, file_path: str, original_input: str) -> dict:
+        """Extract text from XML files."""
+        text = self._read_file_content(file_path)
+        
+        if not text.strip():
+                raise EmptyDocument("XML file is empty", code="EMPTY_FILE")
+
+        if self.markdown_output:
+            # Append a space to prevent base.py's remove_markdown_strip from stripping the closing backticks
+            text = f"```xml\n{text}\n``` "
+
+        return {
+            "text": text,
+            "completion_tokens": 0,
+            "prompt_tokens": 0,
+            "completion_model": "not provided",
+            "completion_model_provider": "not provided",
+            "text_chunks": "not provided",
+            "type": "xml",
+            "input": original_input,
+        }
+
+    def get_xbrl_text(self, file_path: str, original_input: str) -> dict:
+        """Extract text from XBRL files."""
+        text = self._read_file_content(file_path)
+        
+        if not text.strip():
+                raise EmptyDocument("XBRL file is empty", code="EMPTY_FILE")
+
+        if self.markdown_output:
+            # Append a space to prevent base.py's remove_markdown_strip from stripping the closing backticks
+            text = f"```xml\n{text}\n``` "
+
+        return {
+            "text": text,
+            "completion_tokens": 0,
+            "prompt_tokens": 0,
+            "completion_model": "not provided",
+            "completion_model_provider": "not provided",
+            "text_chunks": "not provided",
+            "type": "xbrl",
+            "input": original_input,
+        }

@@ -18,52 +18,25 @@ from polytext.loader.base import BaseLoader
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
-def create_dummy_file(filename, content):
-    with open(filename, "w", encoding="utf-8") as f:
-        f.write(content)
-    return os.path.abspath(filename)
-
 def main():
-    # Define test cases
-    xml_content = """<?xml version="1.0" encoding="UTF-8"?>
-<note>
-  <to>Tove</to>
-  <from>Jani</from>
-  <heading>Reminder</heading>
-  <body>Don't forget me this weekend!</body>
-</note>
-"""
-    xbrl_content = """<?xml version="1.0" encoding="UTF-8"?>
-<xbrl xmlns="http://www.xbrl.org/2003/instance">
-  <context id="c1">
-    <entity>
-      <identifier scheme="http://www.sec.gov/CIK">0000000000</identifier>
-    </entity>
-    <period>
-      <instant>2024-12-31</instant>
-    </period>
-  </context>
-  <unit id="u1">
-    <measure>iso4217:USD</measure>
-  </unit>
-  <us-gaap:Assets decimals="-6" contextRef="c1" unitRef="u1">1000000</us-gaap:Assets>
-</xbrl>
-"""
-
+    # Define test cases with existing files
     files_to_test = [
-        ("test_document.xml", xml_content, "Don't forget me"),
-        ("test_report.xbrl", xbrl_content, "us-gaap:Assets")
+        ("testxmlfile.xml", "Risposta"),
+        ("Testxbrlfile.xbrl", "xbrl")
     ]
     
-    created_files = []
+    current_dir = os.path.dirname(os.path.abspath(__file__))
 
     try:
         # Initialize BaseLoader to use local source
         loader = BaseLoader(source="local")
 
-        for filename, content, expected_substring in files_to_test:
-            abs_path = create_dummy_file(filename, content)
-            created_files.append(abs_path)
+        for filename, expected_substring in files_to_test:
+            abs_path = os.path.join(current_dir, filename)
+
+            if not os.path.exists(abs_path):
+                print(f"Skipping {filename}: File not found at {abs_path}")
+                continue
 
             print(f"\n--- Testing with file: {filename} ---")
             
@@ -72,13 +45,17 @@ def main():
             
             text = result.get("text", "")
             print(f"Successfully extracted text ({len(text)} characters)")
-            print(f"DEBUG: start {repr(text[:20])} end {repr(text[-20:])}")
-            
-            # Verify RAW content (no markdown wrapping)
-            if not text.startswith("```"):
-                 print(f"SUCCESS: Output is RAW content for {filename}.")
+            print("-" * 50)
+            print(f"PREVIEW START:\n{text[:500]}")
+            print("-" * 50)
+            print(f"DEBUG: Start: {repr(text[:20])}")
+            print(f"DEBUG: End: {repr(text[-20:])}")
+
+            # Verify RAW content wraps in Markdown
+            if text.strip().startswith("```xml") and text.strip().endswith("```"):
+                 print(f"SUCCESS: Output is correctly wrapped in Markdown code block for {filename}.")
             else:
-                 print(f"WARNING: Output wrapped in Markdown block for {filename} (Unexpected).")
+                 print(f"FAILURE: Output is NOT wrapped in Markdown block for {filename} (Expected).")
 
             if expected_substring in text:
                 print(f"SUCCESS: Text content verified for {filename}.")
@@ -87,10 +64,6 @@ def main():
 
     except Exception as e:
         logging.error(f"Error extracting text: {str(e)}")
-    finally:
-        for fpath in created_files:
-            if os.path.exists(fpath):
-                os.remove(fpath)
 
 if __name__ == "__main__":
     main()
