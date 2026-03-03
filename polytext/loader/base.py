@@ -22,7 +22,8 @@ from ..loader import (
     DocumentOCRLoader,
     MarkdownLoader,
     YoutubeTranscriptLoaderWithLlm,
-    XmlXbrlLoader
+    XmlXbrlLoader,
+    NotebookLoader
 )
 from ..exceptions import EmptyDocument, LoaderTimeoutError, LoaderError
 from ..utils.utils import remove_markdown_strip
@@ -290,6 +291,9 @@ class BaseLoader:
 
         if file_extension in [".xml", ".xbrl"]:
             return XmlXbrlLoader(temp_dir=self.temp_dir, markdown_output=self.markdown_output, **kwargs)
+
+        if file_extension == ".ipynb":
+            return NotebookLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, timeout_minutes=self.timeout_minutes, **kwargs)
 
         if parsed_url.scheme in ["http", "https"] or input.startswith("www."):
             if "youtube.com" in parsed_url.netloc or "youtu.be" in parsed_url.netloc:

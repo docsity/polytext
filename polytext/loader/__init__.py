@@ -10,6 +10,7 @@ from .document_ocr import DocumentOCRLoader
 from .plain_text import PlainTextLoader
 from .youtube_llm import YoutubeTranscriptLoaderWithLlm
 from .xml_xbrl import XmlXbrlLoader
+from .notebook import NotebookLoader
 from .base import BaseLoader
 
-__all__ = ['DocumentLoader', 'VideoLoader', 'AudioLoader', 'HtmlLoader', 'YoutubeTranscriptLoader', 'OCRLoader', 'MarkdownLoader', 'DocumentOCRLoader', 'PlainTextLoader', 'YoutubeTranscriptLoaderWithLlm', 'XmlXbrlLoader', 'BaseLoader']
+__all__ = ['DocumentLoader', 'VideoLoader', 'AudioLoader', 'HtmlLoader', 'YoutubeTranscriptLoader', 'OCRLoader', 'MarkdownLoader', 'DocumentOCRLoader', 'PlainTextLoader', 'YoutubeTranscriptLoaderWithLlm', 'XmlXbrlLoader', 'NotebookLoader', 'BaseLoader']
