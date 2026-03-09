@@ -350,7 +350,7 @@ class AudioToTextConverter:
                 completion_tokens += transcript_dict["completion_tokens"]
                 prompt_tokens += transcript_dict["prompt_tokens"]
 
-        text_merger = TextMerger()
+        text_merger = TextMerger(llm_api_key=self.llm_api_key)
         # Merge all transcripts
         full_text_merged_dict = text_merger.merge_chunks_with_llm_sequential(chunks=transcript_chunks)
 
