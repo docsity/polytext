@@ -21,7 +21,7 @@ def main():
     gcs_client = storage.Client()
 
     markdown_output = True
-    source = "cloud"
+    source = "local"
 
     # Initialize MarkdownLoader with GCS client and bucket
     # markdown_loader = MarkdownLoader(
@@ -40,9 +40,10 @@ def main():
 
     # Define document data
     # file_path = "user_activity/user_id=1087/transcript.md"
-    file_path = "gcs://opit-da-test-ml-ai-store-bucket/user_activity/user_id=1087/transcript.md"
+    # file_path = "gcs://opit-da-test-ml-ai-store-bucket/user_activity/user_id=1087/transcript.md"
 
-    # file_path = "/Users/marcodelgiudice/Projects/polytext/transcript.md"
+    file_path = "/Users/marcodelgiudice/Projects/polytext/704432_1768748552.md"
+    # file_path = "s3://docsity-ai/ai_notes/2026/01/18/704432_1768748552.md"
 
     try:
         # Call get_text_from_markdown method
