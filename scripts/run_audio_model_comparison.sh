@@ -4,6 +4,7 @@ set -euo pipefail
 # Example custom run:
 # ./scripts/run_audio_model_comparison.sh \
 #   --audio-files /Users/marcodelgiudice/Projects/polytext/audio_8_barbero_0_5_ore.m4a \
+#   --gcs-video-files gcs://opit-da-test-ml-ai-store-bucket/learning_resources/course_id=132/module_id=312/id=4020/2333.mp4 \
 #   --models gemini-2.0-flash gemini-3.1-flash-lite-preview \
 #   --quality-model gemini-3.1-pro-preview \
 #   --max-eval-chars 30000 \

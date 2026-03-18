@@ -1,15 +1,31 @@
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, call
 
 from tests.test_compare_audio_models import (
     compute_length_metrics,
     extract_eval_snippet,
     build_length_comparison,
     transcribe_with_model,
+    parse_gcs_uri,
+    resolve_input_to_audio,
+    cleanup_temp_paths,
 )
 
 
 class TestAudioComparisonHelpers(unittest.TestCase):
+    def test_parse_gcs_uri(self):
+        bucket, file_path = parse_gcs_uri("gcs://my-bucket/videos/sample.mp4")
+
+        self.assertEqual(bucket, "my-bucket")
+        self.assertEqual(file_path, "videos/sample.mp4")
+
+    def test_parse_gcs_uri_rejects_non_gcs(self):
+        with self.assertRaises(ValueError):
+            parse_gcs_uri("/tmp/local.mp4")
+
+        with self.assertRaises(ValueError):
+            parse_gcs_uri("gcs://bucket-only")
+
     def test_compute_length_metrics(self):
         text = "## Title\nHello world.\n### Subtitle\nAnother line."
         metrics = compute_length_metrics(text)
@@ -97,6 +113,57 @@ class TestAudioComparisonHelpers(unittest.TestCase):
             audio_path="/tmp/dummy.mp3",
             save_transcript_chunks=True,
         )
+
+    def test_resolve_input_to_audio_local_audio(self):
+        result = resolve_input_to_audio("/tmp/sample_audio.mp3")
+
+        self.assertEqual(result["input_type"], "local_audio")
+        self.assertEqual(result["audio_path"], "/tmp/sample_audio.mp3")
+        self.assertEqual(result["cleanup_paths"], [])
+
+    @patch("tests.test_compare_audio_models.os.close")
+    @patch("tests.test_compare_audio_models.tempfile.mkstemp", return_value=(123, "/tmp/downloaded_video.mp4"))
+    @patch("tests.test_compare_audio_models.convert_video_to_audio", return_value="/tmp/converted_audio.mp3")
+    @patch("tests.test_compare_audio_models.Downloader")
+    @patch("tests.test_compare_audio_models.storage.Client")
+    def test_resolve_input_to_audio_gcs_video(
+        self,
+        mock_storage_client_cls,
+        mock_downloader_cls,
+        mock_convert_video_to_audio,
+        mock_mkstemp,
+        mock_close,
+    ):
+        mock_storage_client = mock_storage_client_cls.return_value
+        mock_downloader = mock_downloader_cls.return_value
+
+        result = resolve_input_to_audio("gcs://my-bucket/path/to/video.mp4", bitrate_quality=7)
+
+        self.assertEqual(result["input_type"], "gcs_video")
+        self.assertEqual(result["audio_path"], "/tmp/converted_audio.mp3")
+        self.assertEqual(result["cleanup_paths"], ["/tmp/downloaded_video.mp4", "/tmp/converted_audio.mp3"])
+        self.assertEqual(result["input_path"], "gcs://my-bucket/path/to/video.mp4")
+
+        mock_downloader_cls.assert_called_once_with(
+            gcs_client=mock_storage_client,
+            document_gcs_bucket="my-bucket",
+        )
+        mock_downloader.download_file_from_gcs.assert_called_once_with(
+            file_path="path/to/video.mp4",
+            temp_file_path="/tmp/downloaded_video.mp4",
+        )
+        mock_convert_video_to_audio.assert_called_once_with(
+            video_file="/tmp/downloaded_video.mp4",
+            bitrate_quality=7,
+        )
+
+    @patch("tests.test_compare_audio_models.os.remove")
+    @patch("tests.test_compare_audio_models.os.path.exists", side_effect=[True, False, True])
+    def test_cleanup_temp_paths(self, mock_exists, mock_remove):
+        cleanup_temp_paths(["/tmp/a.mp4", "/tmp/b.mp3", "/tmp/c.tmp"])
+
+        mock_exists.assert_has_calls([call("/tmp/a.mp4"), call("/tmp/b.mp3"), call("/tmp/c.tmp")])
+        mock_remove.assert_has_calls([call("/tmp/a.mp4"), call("/tmp/c.tmp")])
 
 
 if __name__ == "__main__":

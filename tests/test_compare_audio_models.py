@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import re
+import tempfile
 import time
 from collections import Counter
 from datetime import datetime
@@ -11,8 +12,11 @@ from pathlib import Path
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
+from google.cloud import storage
 
 from polytext.converter.audio_to_text import AudioToTextConverter
+from polytext.converter.video_to_audio import convert_video_to_audio
+from polytext.loader.downloader.downloader import Downloader
 
 logging.basicConfig(
     level=logging.INFO,
@@ -30,8 +34,10 @@ DEFAULT_TRANSCRIPTION_MODELS = [
 DEFAULT_QUALITY_MODEL = "gemini-3.1-pro-preview"
 DEFAULT_MAX_EVAL_CHARS = 30000
 DEFAULT_OUTPUT_DIR = "test_performance/audio_model_comparison"
+DEFAULT_BITRATE_QUALITY = 9
 REPETITION_MIN_SENTENCE_CHARS = 120
 REPETITION_MIN_REPETITIONS = 3
+GCS_VIDEO_EXTENSIONS = {".mp4", ".mov", ".m4v", ".webm", ".avi", ".mkv"}
 COMPARISON_METRIC_KEYS = (
     "char_count",
     "word_count",
@@ -41,6 +47,70 @@ COMPARISON_METRIC_KEYS = (
     "repeated_long_sentence_occurrences",
     "max_long_sentence_repetitions",
 )
+
+
+def parse_gcs_uri(gcs_uri: str) -> tuple[str, str]:
+    if not gcs_uri.startswith("gcs://"):
+        raise ValueError(f"Not a GCS URI: {gcs_uri}")
+
+    path = gcs_uri.replace("gcs://", "", 1)
+    parts = path.split("/", 1)
+    if len(parts) != 2 or not parts[0] or not parts[1]:
+        raise ValueError(f"Invalid GCS URI, expected gcs://bucket/path: {gcs_uri}")
+    return parts[0], parts[1]
+
+
+def is_gcs_video_uri(input_path: str) -> bool:
+    if not input_path.startswith("gcs://"):
+        return False
+    _, file_path = parse_gcs_uri(input_path)
+    return Path(file_path).suffix.lower() in GCS_VIDEO_EXTENSIONS
+
+
+def cleanup_temp_paths(paths: list[str]) -> None:
+    for path in paths:
+        if path and os.path.exists(path):
+            os.remove(path)
+            logger.info("Removed temporary file %s", path)
+
+
+def resolve_input_to_audio(input_path: str, bitrate_quality: int = DEFAULT_BITRATE_QUALITY) -> dict:
+    if is_gcs_video_uri(input_path):
+        bucket, file_path = parse_gcs_uri(input_path)
+        suffix = Path(file_path).suffix.lower() or ".mp4"
+        fd, temp_video_path = tempfile.mkstemp(suffix=suffix)
+        os.close(fd)
+
+        gcs_client = storage.Client()
+        downloader = Downloader(gcs_client=gcs_client, document_gcs_bucket=bucket)
+        downloader.download_file_from_gcs(file_path=file_path, temp_file_path=temp_video_path)
+
+        audio_path = convert_video_to_audio(video_file=temp_video_path, bitrate_quality=bitrate_quality)
+        return {
+            "input_path": input_path,
+            "input_type": "gcs_video",
+            "audio_path": audio_path,
+            "cleanup_paths": [temp_video_path, audio_path],
+        }
+
+    if input_path.startswith("gcs://"):
+        raise ValueError(
+            f"Unsupported GCS input for this benchmark (only video files are supported): {input_path}"
+        )
+
+    return {
+        "input_path": input_path,
+        "input_type": "local_audio",
+        "audio_path": input_path,
+        "cleanup_paths": [],
+    }
+
+
+def input_stem(input_path: str) -> str:
+    if input_path.startswith("gcs://"):
+        _, file_path = parse_gcs_uri(input_path)
+        return Path(file_path).stem
+    return Path(input_path).stem
 
 
 def compute_repetition_metrics(
@@ -289,22 +359,27 @@ def save_markdown_report(run_dir: Path, payload: dict) -> Path:
 
 def run_benchmark(
     audio_files: list[str],
+    gcs_video_files: list[str],
     transcription_models: list[str],
     quality_model: str,
     max_eval_chars: int,
     output_dir: str,
     llm_api_key: str | None,
     timeout_minutes: int | None,
+    bitrate_quality: int,
 ) -> dict:
     if len(transcription_models) != 2:
         raise ValueError("transcription_models must contain exactly 2 models")
 
     run_dir = ensure_output_dir(output_dir)
     logger.info("Saving outputs in %s", run_dir)
+    input_files = [*audio_files, *gcs_video_files]
 
     payload = {
         "generated_at": datetime.now().isoformat(),
         "audio_files": audio_files,
+        "gcs_video_files": gcs_video_files,
+        "input_files": input_files,
         "transcription_models": transcription_models,
         "quality_model": quality_model,
         "max_eval_chars": max_eval_chars,
@@ -314,17 +389,22 @@ def run_benchmark(
 
     model_a, model_b = transcription_models
 
-    for audio_file in audio_files:
-        logger.info("Processing %s", audio_file)
+    for input_path in input_files:
+        logger.info("Processing %s", input_path)
         item = {
-            "audio_file": audio_file,
+            "audio_file": input_path,
             "transcriptions": {},
         }
+        resolved_input = {"input_type": "unknown", "audio_path": input_path, "cleanup_paths": []}
         try:
+            resolved_input = resolve_input_to_audio(input_path=input_path, bitrate_quality=bitrate_quality)
+            item["input_type"] = resolved_input["input_type"]
+            item["resolved_audio_path"] = resolved_input["audio_path"]
+
             for model_name in transcription_models:
                 logger.info("Transcribing with %s", model_name)
                 result_dict, elapsed = transcribe_with_model(
-                    audio_file=audio_file,
+                    audio_file=resolved_input["audio_path"],
                     transcription_model=model_name,
                     llm_api_key=llm_api_key,
                     timeout_minutes=timeout_minutes,
@@ -332,7 +412,7 @@ def run_benchmark(
                 transcript_text = result_dict.get("text", "")
                 metrics = compute_length_metrics(transcript_text)
 
-                audio_stem = Path(audio_file).stem
+                audio_stem = input_stem(input_path)
                 transcript_path = run_dir / f"{sanitize_for_filename(audio_stem)}.{sanitize_for_filename(model_name)}.md"
                 transcript_path.write_text(transcript_text, encoding="utf-8")
 
@@ -358,8 +438,10 @@ def run_benchmark(
                 llm_api_key=llm_api_key,
             )
         except Exception as exc:
-            logger.exception("Failed processing %s", audio_file)
+            logger.exception("Failed processing %s", input_path)
             item["error"] = str(exc)
+        finally:
+            cleanup_temp_paths(resolved_input.get("cleanup_paths", []))
 
         payload["items"].append(item)
 
@@ -381,8 +463,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--audio-files",
         nargs="+",
-        default=DEFAULT_AUDIO_FILES,
+        default=None,
         help="Local audio files to compare",
+    )
+    parser.add_argument(
+        "--gcs-video-files",
+        nargs="+",
+        default=[],
+        help="GCS video files (gcs://bucket/path.mp4) to convert to audio and compare",
     )
     parser.add_argument(
         "--models",
@@ -417,20 +505,32 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Optional API key override. If omitted, GOOGLE_API_KEY from env is used.",
     )
+    parser.add_argument(
+        "--bitrate-quality",
+        type=int,
+        default=DEFAULT_BITRATE_QUALITY,
+        help="Bitrate quality used when converting GCS video to audio (0-9, 9 is lowest quality).",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     load_dotenv(".env")
     args = parse_args()
+    audio_files = args.audio_files
+    if audio_files is None:
+        audio_files = [] if args.gcs_video_files else DEFAULT_AUDIO_FILES
+
     outputs = run_benchmark(
-        audio_files=args.audio_files,
+        audio_files=audio_files,
+        gcs_video_files=args.gcs_video_files,
         transcription_models=args.models,
         quality_model=args.quality_model,
         max_eval_chars=args.max_eval_chars,
         output_dir=args.output_dir,
         llm_api_key=args.llm_api_key,
         timeout_minutes=args.timeout_minutes,
+        bitrate_quality=args.bitrate_quality,
     )
     print(json.dumps(outputs, indent=2))
 
