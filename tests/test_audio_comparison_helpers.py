@@ -77,6 +77,7 @@ class TestAudioComparisonHelpers(unittest.TestCase):
             "repeated_long_sentence_groups": 0,
             "repeated_long_sentence_occurrences": 0,
             "max_long_sentence_repetitions": 1,
+            "generation_time_seconds": 10.0,
         }
         model_b = {
             "char_count": 80,
@@ -86,6 +87,7 @@ class TestAudioComparisonHelpers(unittest.TestCase):
             "repeated_long_sentence_groups": 3,
             "repeated_long_sentence_occurrences": 15,
             "max_long_sentence_repetitions": 6,
+            "generation_time_seconds": 15.0,
         }
         comparison = build_length_comparison(model_a, model_b)
 
@@ -96,6 +98,7 @@ class TestAudioComparisonHelpers(unittest.TestCase):
         self.assertEqual(comparison["repeated_long_sentence_groups"]["delta_model_b_minus_model_a"], 3)
         self.assertEqual(comparison["repeated_long_sentence_occurrences"]["delta_model_b_minus_model_a"], 15)
         self.assertEqual(comparison["max_long_sentence_repetitions"]["delta_model_b_minus_model_a"], 5)
+        self.assertEqual(comparison["generation_time_seconds"]["delta_model_b_minus_model_a"], 5.0)
 
     @patch("tests.test_compare_audio_models.AudioToTextConverter")
     def test_transcribe_with_model_enables_save_transcript_chunks_by_default(self, mock_converter_cls):
@@ -107,11 +110,38 @@ class TestAudioComparisonHelpers(unittest.TestCase):
             transcription_model="gemini-2.0-flash",
             llm_api_key=None,
             timeout_minutes=None,
+            markdown_output=True,
         )
 
+        mock_converter_cls.assert_called_once_with(
+            transcription_model="gemini-2.0-flash",
+            markdown_output=True,
+            llm_api_key=None,
+            timeout_minutes=None,
+        )
         mock_converter.transcribe_full_audio.assert_called_once_with(
             audio_path="/tmp/dummy.mp3",
             save_transcript_chunks=True,
+        )
+
+    @patch("tests.test_compare_audio_models.AudioToTextConverter")
+    def test_transcribe_with_model_supports_plain_text_output(self, mock_converter_cls):
+        mock_converter = mock_converter_cls.return_value
+        mock_converter.transcribe_full_audio.return_value = {"text": "ok"}
+
+        transcribe_with_model(
+            audio_file="/tmp/dummy.mp3",
+            transcription_model="gemini-3.1-flash-lite-preview",
+            llm_api_key="k",
+            timeout_minutes=2,
+            markdown_output=False,
+        )
+
+        mock_converter_cls.assert_called_once_with(
+            transcription_model="gemini-3.1-flash-lite-preview",
+            markdown_output=False,
+            llm_api_key="k",
+            timeout_minutes=2,
         )
 
     def test_resolve_input_to_audio_local_audio(self):

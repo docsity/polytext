@@ -46,6 +46,7 @@ COMPARISON_METRIC_KEYS = (
     "repeated_long_sentence_groups",
     "repeated_long_sentence_occurrences",
     "max_long_sentence_repetitions",
+    "generation_time_seconds",
 )
 
 
@@ -208,10 +209,11 @@ def transcribe_with_model(
     transcription_model: str,
     llm_api_key: str | None,
     timeout_minutes: int | None,
+    markdown_output: bool = True,
 ) -> tuple[dict, float]:
     converter = AudioToTextConverter(
         transcription_model=transcription_model,
-        markdown_output=True,
+        markdown_output=markdown_output,
         llm_api_key=llm_api_key,
         timeout_minutes=timeout_minutes,
     )
@@ -336,6 +338,10 @@ def save_markdown_report(run_dir: Path, payload: dict) -> Path:
         lines.append(f"- `{model_a}` chars/words: {a_metrics['char_count']} / {a_metrics['word_count']}")
         lines.append(f"- `{model_b}` chars/words: {b_metrics['char_count']} / {b_metrics['word_count']}")
         lines.append(
+            f"- generation time (s): "
+            f"{a_metrics['generation_time_seconds']} / {b_metrics['generation_time_seconds']}"
+        )
+        lines.append(
             f"- repeated long-sentence groups (>= {REPETITION_MIN_REPETITIONS}x): "
             f"{a_metrics['repeated_long_sentence_groups']} / {b_metrics['repeated_long_sentence_groups']}"
         )
@@ -367,6 +373,7 @@ def run_benchmark(
     llm_api_key: str | None,
     timeout_minutes: int | None,
     bitrate_quality: int,
+    markdown_output: bool,
 ) -> dict:
     if len(transcription_models) != 2:
         raise ValueError("transcription_models must contain exactly 2 models")
@@ -384,6 +391,7 @@ def run_benchmark(
         "quality_model": quality_model,
         "max_eval_chars": max_eval_chars,
         "output_dir": str(run_dir),
+        "markdown_output": markdown_output,
         "items": [],
     }
 
@@ -408,9 +416,11 @@ def run_benchmark(
                     transcription_model=model_name,
                     llm_api_key=llm_api_key,
                     timeout_minutes=timeout_minutes,
+                    markdown_output=markdown_output,
                 )
                 transcript_text = result_dict.get("text", "")
                 metrics = compute_length_metrics(transcript_text)
+                metrics["generation_time_seconds"] = round(elapsed, 3)
 
                 audio_stem = input_stem(input_path)
                 transcript_path = run_dir / f"{sanitize_for_filename(audio_stem)}.{sanitize_for_filename(model_name)}.md"
@@ -511,6 +521,19 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_BITRATE_QUALITY,
         help="Bitrate quality used when converting GCS video to audio (0-9, 9 is lowest quality).",
     )
+    parser.add_argument(
+        "--markdown-output",
+        dest="markdown_output",
+        action="store_true",
+        default=True,
+        help="Enable markdown transcription output (default).",
+    )
+    parser.add_argument(
+        "--no-markdown-output",
+        dest="markdown_output",
+        action="store_false",
+        help="Disable markdown transcription output and use plain text output.",
+    )
     return parser.parse_args()
 
 
@@ -531,6 +554,7 @@ def main() -> None:
         llm_api_key=args.llm_api_key,
         timeout_minutes=args.timeout_minutes,
         bitrate_quality=args.bitrate_quality,
+        markdown_output=args.markdown_output,
     )
     print(json.dumps(outputs, indent=2))
 

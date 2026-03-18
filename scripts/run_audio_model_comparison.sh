@@ -10,7 +10,7 @@ set -euo pipefail
 #   --max-eval-chars 30000 \
 #   --output-dir test_performance/audio_model_comparison
 #
-# You can also pass --timeout-minutes N and/or --llm-api-key YOUR_KEY.
+# You can also pass --timeout-minutes N, --llm-api-key YOUR_KEY, or --no-markdown-output.
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COMPARE_SCRIPT="$ROOT_DIR/tests/test_compare_audio_models.py"
