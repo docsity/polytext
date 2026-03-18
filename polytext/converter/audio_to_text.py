@@ -8,6 +8,7 @@ import ffmpeg
 from retry import retry
 from google import genai
 from google.genai import types
+from google.genai import errors as genai_errors
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from google.api_core import exceptions as google_exceptions
 
@@ -88,14 +89,14 @@ def transcribe_full_audio(audio_file, markdown_output: bool = False,
     return converter.transcribe_full_audio(audio_file, save_transcript_chunks)
 
 class AudioToTextConverter:
-    def __init__(self, transcription_model: str ="gemini-2.0-flash", transcription_model_provider: str ="google",
+    def __init__(self, transcription_model: str ="gemini-3.1-flash-lite-preview", transcription_model_provider: str ="google",
                  k: int =5, min_matches: int =3, markdown_output: bool =True, llm_api_key: str =None, max_llm_tokens: int =8000, temp_dir: str ="temp",
                  bitrate_quality: int =9, timeout_minutes: int =None):
         """
         Initialize the AudioToTextConverter class with a specified transcription model and provider.
 
         Args:
-            transcription_model (str): Model name for transcription. Defaults to "gemini-2.0-flash".
+            transcription_model (str): Model name for transcription. Defaults to "gemini-3.1-flash-lite-preview".
             transcription_model_provider (str): Provider of transcription service. Defaults to "google".
             k (int): Number of words to use when searching for overlap between chunks. Defaults to 5.
             min_matches (int): Minimum matching words for chunk merging. Defaults to 3.
@@ -131,7 +132,8 @@ class AudioToTextConverter:
                 google_exceptions.DeadlineExceeded,
                 google_exceptions.ResourceExhausted,
                 google_exceptions.ServiceUnavailable,
-                google_exceptions.InternalServerError
+                google_exceptions.InternalServerError,
+                genai_errors.ServerError
         ),
         tries=8,
         delay=1,
@@ -207,7 +209,7 @@ class AudioToTextConverter:
             my_file = client.files.upload(file=audio_file)
 
             response = client.models.count_tokens(
-                model='gemini-2.0-flash',
+                model=self.transcription_model,
                 contents=[my_file]
             )
             logger.info(f"File size in tokens: {response}")
