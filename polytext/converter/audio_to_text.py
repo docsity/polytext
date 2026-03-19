@@ -177,6 +177,7 @@ class AudioToTextConverter:
             client = genai.Client()
 
         config = types.GenerateContentConfig(
+            temperature=0,
             safety_settings=[
                 types.SafetySetting(
                     category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,

@@ -19,6 +19,7 @@ class _FakeModels:
     def __init__(self):
         self.count_tokens_model = None
         self.generate_content_model = None
+        self.generate_content_config = None
 
     def count_tokens(self, model, contents):
         self.count_tokens_model = model
@@ -26,6 +27,7 @@ class _FakeModels:
 
     def generate_content(self, model, contents, config):
         self.generate_content_model = model
+        self.generate_content_config = config
         return SimpleNamespace(
             text="transcript",
             usage_metadata=SimpleNamespace(
@@ -82,6 +84,7 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
             converter.transcribe_audio("dummy.mp3")
 
         self.assertEqual(fake_client.models.count_tokens_model, selected_model)
+        self.assertEqual(fake_client.models.generate_content_config.temperature, 0)
 
     def test_retries_on_genai_server_error_for_audio_transcription(self):
         fake_client = _FlakyServerErrorClient()

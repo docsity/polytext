@@ -16,6 +16,6 @@ def download_youtube_m4a(url: str, outdir: str = ".", title: str = "test") -> st
         info = ydl.extract_info(url, download=True)
         return f"{outdir}/{title}.m4a"
 
-url = "https://www.youtube.com/watch?v=HMubfzOyRYU"
+url = "https://www.youtube.com/watch?v=ettkBbDYYMU&list=PLYGddM5-fq839XWgrtaqOZzthDuJeUPvO&index=7"
 
-print(download_youtube_m4a(url=url, title="audio_8_barbero_0_5_ore"))
+print(download_youtube_m4a(url=url, title="lezione_archeologia_70_min"))
