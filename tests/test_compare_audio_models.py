@@ -114,6 +114,28 @@ def input_stem(input_path: str) -> str:
     return Path(input_path).stem
 
 
+def save_raw_chunk_transcriptions(
+    run_dir: Path,
+    input_path: str,
+    model_name: str,
+    text_chunks: list[str],
+    markdown_output: bool,
+) -> list[str]:
+    extension = "md" if markdown_output else "txt"
+    chunk_dir = run_dir / (
+        f"{sanitize_for_filename(input_stem(input_path))}."
+        f"{sanitize_for_filename(model_name)}.raw_chunks"
+    )
+    chunk_dir.mkdir(parents=True, exist_ok=True)
+
+    chunk_paths = []
+    for idx, chunk_text in enumerate(text_chunks):
+        chunk_path = chunk_dir / f"chunk_{idx:03d}.{extension}"
+        chunk_path.write_text(chunk_text or "", encoding="utf-8")
+        chunk_paths.append(str(chunk_path))
+    return chunk_paths
+
+
 def compute_repetition_metrics(
     text: str,
     min_sentence_chars: int = REPETITION_MIN_SENTENCE_CHARS,
@@ -374,6 +396,7 @@ def run_benchmark(
     timeout_minutes: int | None,
     bitrate_quality: int,
     markdown_output: bool,
+    save_raw_chunks_files: bool,
 ) -> dict:
     if len(transcription_models) != 2:
         raise ValueError("transcription_models must contain exactly 2 models")
@@ -392,6 +415,7 @@ def run_benchmark(
         "max_eval_chars": max_eval_chars,
         "output_dir": str(run_dir),
         "markdown_output": markdown_output,
+        "save_raw_chunks_files": save_raw_chunks_files,
         "items": [],
     }
 
@@ -433,6 +457,19 @@ def run_benchmark(
                     "completion_tokens": result_dict.get("completion_tokens"),
                     "transcript_path": str(transcript_path),
                 }
+                if save_raw_chunks_files:
+                    text_chunks = result_dict.get("text_chunks")
+                    if isinstance(text_chunks, list) and text_chunks:
+                        chunk_paths = save_raw_chunk_transcriptions(
+                            run_dir=run_dir,
+                            input_path=input_path,
+                            model_name=model_name,
+                            text_chunks=text_chunks,
+                            markdown_output=markdown_output,
+                        )
+                    else:
+                        chunk_paths = []
+                    item["transcriptions"][model_name]["raw_chunk_transcript_paths"] = chunk_paths
 
             item["length_comparison"] = build_length_comparison(
                 item["transcriptions"][model_a]["metrics"],
@@ -534,6 +571,12 @@ def parse_args() -> argparse.Namespace:
         action="store_false",
         help="Disable markdown transcription output and use plain text output.",
     )
+    parser.add_argument(
+        "--save-raw-chunks-files",
+        action="store_true",
+        default=False,
+        help="Save raw chunk transcriptions to per-model files in the run output directory.",
+    )
     return parser.parse_args()
 
 
@@ -555,6 +598,7 @@ def main() -> None:
         timeout_minutes=args.timeout_minutes,
         bitrate_quality=args.bitrate_quality,
         markdown_output=args.markdown_output,
+        save_raw_chunks_files=args.save_raw_chunks_files,
     )
     print(json.dumps(outputs, indent=2))
 

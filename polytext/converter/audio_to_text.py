@@ -90,7 +90,7 @@ def transcribe_full_audio(audio_file, markdown_output: bool = False,
 
 class AudioToTextConverter:
     def __init__(self, transcription_model: str ="gemini-3.1-flash-lite-preview", transcription_model_provider: str ="google",
-                 k: int =5, min_matches: int =3, markdown_output: bool =True, llm_api_key: str =None, max_llm_tokens: int =8000, temp_dir: str ="temp",
+                 k: int =5, min_matches: int =3, markdown_output: bool =True, llm_api_key: str =None, max_llm_tokens: int =5500, temp_dir: str ="temp",
                  bitrate_quality: int =9, timeout_minutes: int =None):
         """
         Initialize the AudioToTextConverter class with a specified transcription model and provider.
@@ -102,7 +102,7 @@ class AudioToTextConverter:
             min_matches (int): Minimum matching words for chunk merging. Defaults to 3.
             markdown_output (bool): Enable Markdown formatting in output. Defaults to True.
             llm_api_key (str, optional): Override API key for language model. Defaults to None.
-            max_llm_tokens (int): Maximum number of tokens for the language model output. Defaults to 8000.
+            max_llm_tokens (int): Maximum number of tokens for the language model output. Defaults to 5500.
             temp_dir (str): Directory for temporary files. Defaults to "temp".
             bitrate_quality (int, optional): Variable bitrate quality from 0-9 (9 being lowest). Defaults to 9
             timeout_minutes (int): Number of minutes to wait for a response.

@@ -1,4 +1,6 @@
 import unittest
+import tempfile
+from pathlib import Path
 from unittest.mock import patch, call
 
 from tests.test_compare_audio_models import (
@@ -9,6 +11,7 @@ from tests.test_compare_audio_models import (
     parse_gcs_uri,
     resolve_input_to_audio,
     cleanup_temp_paths,
+    save_raw_chunk_transcriptions,
 )
 
 
@@ -194,6 +197,27 @@ class TestAudioComparisonHelpers(unittest.TestCase):
 
         mock_exists.assert_has_calls([call("/tmp/a.mp4"), call("/tmp/b.mp3"), call("/tmp/c.tmp")])
         mock_remove.assert_has_calls([call("/tmp/a.mp4"), call("/tmp/c.tmp")])
+
+    def test_save_raw_chunk_transcriptions_writes_files_and_returns_paths(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            run_dir = Path(tmp_dir)
+            paths = save_raw_chunk_transcriptions(
+                run_dir=run_dir,
+                input_path="gcs://bucket/path/to/video.mp4",
+                model_name="gemini-3.1-flash-lite-preview",
+                text_chunks=["chunk one", "chunk two"],
+                markdown_output=False,
+            )
+
+            self.assertEqual(len(paths), 2)
+            first = Path(paths[0])
+            second = Path(paths[1])
+            self.assertTrue(first.exists())
+            self.assertTrue(second.exists())
+            self.assertEqual(first.suffix, ".txt")
+            self.assertEqual(second.suffix, ".txt")
+            self.assertEqual(first.read_text(encoding="utf-8"), "chunk one")
+            self.assertEqual(second.read_text(encoding="utf-8"), "chunk two")
 
 
 if __name__ == "__main__":
