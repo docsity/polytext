@@ -8,6 +8,7 @@ set -euo pipefail
 #   --models gemini-2.0-flash gemini-3.1-flash-lite-preview \
 #   --quality-model gemini-3.1-pro-preview \
 #   --max-eval-chars 30000 \
+#   --save-raw-chunks-files \
 #   --output-dir test_performance/audio_model_comparison
 #
 # You can also pass --timeout-minutes N, --llm-api-key YOUR_KEY, or --no-markdown-output.
