@@ -25,11 +25,16 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 DEFAULT_YOUTUBE_URLS = [
-    "https://www.youtube.com/watch?v=xY5x0q5JoPI",
-    "https://www.youtube.com/watch?v=w82a1FT5o88",
-    "https://www.youtube.com/watch?v=V8eLdbKXGzk",
-    "https://www.youtube.com/watch?v=yoD8RMq2OkU",
-    "https://www.youtube.com/watch?v=Md4Fs-Zc3tg&t=173s"
+    # "https://www.youtube.com/watch?v=xY5x0q5JoPI"
+    # "https://www.youtube.com/watch?v=w82a1FT5o88",
+    # "https://www.youtube.com/watch?v=V8eLdbKXGzk"
+    # "https://www.youtube.com/watch?v=yoD8RMq2OkU",
+    # "https://www.youtube.com/watch?v=pHVxPYhUA8o"
+    # "https://www.youtube.com/watch?v=K16GrU2l20Q"
+    # "https://www.youtube.com/watch?v=ylvTFvJvB84"
+    # "https://www.youtube.com/watch?v=oaaF_Yy6NY4",
+    "https://www.youtube.com/watch?v=2TuJkp1z8PM"
+    # "https://www.youtube.com/watch?v=ZcI7vQ6A4oE"
 ]
 DEFAULT_TRANSCRIPTION_MODELS = [
     "models/gemini-2.5-flash",
@@ -301,6 +306,7 @@ def write_csv_report(run_dir: Path, payload: dict) -> Path:
     fieldnames = [
         "youtube_url",
         "model",
+        "requested_model",
         "elapsed_seconds",
         "char_count",
         "word_count",
@@ -313,6 +319,9 @@ def write_csv_report(run_dir: Path, payload: dict) -> Path:
         "prompt_tokens",
         "completion_tokens",
         "transcript_path",
+        "finish_reason",
+        "fallback_from_model",
+        "fallback_reason",
         "baseline_model",
         "char_count_delta_vs_baseline",
         "word_count_delta_vs_baseline",
@@ -346,7 +355,8 @@ def write_csv_report(run_dir: Path, payload: dict) -> Path:
             metrics = current["metrics"]
             row = {
                 "youtube_url": item["youtube_url"],
-                "model": model_name,
+                "model": current.get("completion_model", model_name),
+                "requested_model": model_name,
                 "elapsed_seconds": current["elapsed_seconds"],
                 "char_count": metrics["char_count"],
                 "word_count": metrics["word_count"],
@@ -359,6 +369,9 @@ def write_csv_report(run_dir: Path, payload: dict) -> Path:
                 "prompt_tokens": current.get("prompt_tokens"),
                 "completion_tokens": current.get("completion_tokens"),
                 "transcript_path": current["transcript_path"],
+                "finish_reason": current.get("finish_reason"),
+                "fallback_from_model": current.get("fallback_from_model"),
+                "fallback_reason": current.get("fallback_reason"),
                 "baseline_model": baseline_model,
                 "quality_winner": quality_analysis.get("winner") if isinstance(quality_analysis, dict) else None,
                 "quality_confidence": quality_analysis.get("confidence") if isinstance(quality_analysis, dict) else None,
@@ -436,6 +449,10 @@ def run_benchmark(
                     "metrics": metrics,
                     "prompt_tokens": result_dict.get("prompt_tokens"),
                     "completion_tokens": result_dict.get("completion_tokens"),
+                    "completion_model": result_dict.get("completion_model"),
+                    "finish_reason": result_dict.get("finish_reason"),
+                    "fallback_from_model": result_dict.get("fallback_from_model"),
+                    "fallback_reason": result_dict.get("fallback_reason"),
                     "transcript_path": str(transcript_path),
                 }
 

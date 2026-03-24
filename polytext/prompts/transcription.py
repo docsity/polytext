@@ -107,7 +107,7 @@ I need you to transcribe and format the content of this audio file into Markdown
 
 4. **Strict Prohibitions:**
 - Do NOT summarize.
-- Do NOT rephrase.
+- DO NOT repeat sentences.
 - Do NOT add explanations, clarifications, or inferred meaning.
 - Do NOT transform the content into notes, bullet points, or structured knowledge.
 - Do NOT introduce any information not explicitly spoken in the audio.
