@@ -1,5 +1,7 @@
 import unittest
 import tempfile
+import threading
+import time
 from pathlib import Path
 from unittest.mock import patch, call
 
@@ -12,6 +14,7 @@ from tests.test_compare_audio_models import (
     resolve_input_to_audio,
     cleanup_temp_paths,
     save_raw_chunk_transcriptions,
+    run_benchmark,
 )
 
 
@@ -218,6 +221,63 @@ class TestAudioComparisonHelpers(unittest.TestCase):
             self.assertEqual(second.suffix, ".txt")
             self.assertEqual(first.read_text(encoding="utf-8"), "chunk one")
             self.assertEqual(second.read_text(encoding="utf-8"), "chunk two")
+
+    @patch("tests.test_compare_audio_models.compare_quality_with_gemini_pro")
+    @patch("tests.test_compare_audio_models.resolve_input_to_audio")
+    @patch("tests.test_compare_audio_models.transcribe_with_model")
+    def test_run_benchmark_transcribes_models_in_parallel(
+        self,
+        mock_transcribe_with_model,
+        mock_resolve_input_to_audio,
+        mock_compare_quality,
+    ):
+        in_call = 0
+        max_in_call = 0
+        lock = threading.Lock()
+
+        def fake_transcribe_with_model(*args, **kwargs):
+            nonlocal in_call, max_in_call
+            model_name = kwargs["transcription_model"]
+            with lock:
+                in_call += 1
+                max_in_call = max(max_in_call, in_call)
+            time.sleep(0.05)
+            with lock:
+                in_call -= 1
+            return (
+                {
+                    "text": f"transcript for {model_name}",
+                    "prompt_tokens": 10,
+                    "completion_tokens": 20,
+                },
+                0.05,
+            )
+
+        mock_transcribe_with_model.side_effect = fake_transcribe_with_model
+        mock_resolve_input_to_audio.return_value = {
+            "input_path": "/tmp/sample.mp3",
+            "input_type": "local_audio",
+            "audio_path": "/tmp/sample.mp3",
+            "cleanup_paths": [],
+        }
+        mock_compare_quality.return_value = {"analysis": {"summary": "ok"}}
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            run_benchmark(
+                audio_files=["/tmp/sample.mp3"],
+                gcs_video_files=[],
+                transcription_models=["gemini-2.0-flash", "gemini-3.1-flash-lite-preview"],
+                quality_model="gemini-3.1-pro-preview",
+                max_eval_chars=30000,
+                output_dir=tmp_dir,
+                llm_api_key=None,
+                timeout_minutes=None,
+                bitrate_quality=9,
+                markdown_output=True,
+                save_raw_chunks_files=False,
+            )
+
+        self.assertEqual(max_in_call, 2)
 
 
 if __name__ == "__main__":

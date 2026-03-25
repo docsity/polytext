@@ -76,9 +76,9 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
         converter = AudioToTextConverter()
         self.assertEqual(converter.transcription_model, "gemini-3.1-flash-lite-preview")
 
-    def test_default_audio_max_llm_tokens_is_5500(self):
+    def test_default_audio_max_llm_tokens_is_4250(self):
         converter = AudioToTextConverter()
-        self.assertEqual(converter.max_llm_tokens, 5500)
+        self.assertEqual(converter.max_llm_tokens, 4250)
 
     @patch("polytext.converter.audio_to_text.os.path.getsize", return_value=21 * 1024 * 1024)
     def test_count_tokens_uses_selected_transcription_model_for_large_audio(self, _mock_getsize):
@@ -91,6 +91,7 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
 
         self.assertEqual(fake_client.models.count_tokens_model, selected_model)
         self.assertEqual(fake_client.models.generate_content_config.temperature, 0)
+        self.assertEqual(fake_client.models.generate_content_config.thinking_config.thinking_budget, 0)
         self.assertTrue(fake_client.models.generate_content_config.automatic_function_calling.disable)
         self.assertEqual(fake_client.models.generate_content_config.tools, [])
         self.assertIn(

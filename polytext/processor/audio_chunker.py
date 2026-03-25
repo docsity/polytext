@@ -1,5 +1,7 @@
 import os
 import logging
+import tempfile
+import uuid
 import ffmpeg
 from pydub import AudioSegment
 from typing import List, Tuple, Dict, Any
@@ -21,6 +23,8 @@ class AudioChunker:
         self.overlap_duration = overlap_duration
         self.tokens_per_minute = tokens_per_minute
         self.prompt_overhead = prompt_overhead
+        self.chunk_temp_dir = os.path.abspath("temp")
+        self.chunk_run_id = uuid.uuid4().hex[:8]
 
         self.audio = AudioSegment.from_file(audio_path)
         self.duration_ms = len(self.audio)
@@ -68,10 +72,16 @@ class AudioChunker:
         i, (start_ms, end_ms) = chunk_info
 
         # Ensure temp directory exists
-        os.makedirs("temp", exist_ok=True)
+        os.makedirs(self.chunk_temp_dir, exist_ok=True)
 
-        # Create a temporary file for this chunk
-        temp_filename = f"temp/temp_chunk_{i}.mp3"
+        # Create a unique temporary filename for this chunk to avoid collisions
+        # when multiple models transcribe in parallel.
+        fd, temp_filename = tempfile.mkstemp(
+            prefix=f"temp_chunk_{self.chunk_run_id}_{i}_",
+            suffix=".mp3",
+            dir=self.chunk_temp_dir,
+        )
+        os.close(fd)
 
         # Calculate duration in seconds
         duration = (end_ms - start_ms) / 1000

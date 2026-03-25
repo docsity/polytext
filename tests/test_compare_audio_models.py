@@ -6,6 +6,7 @@ import re
 import tempfile
 import time
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 
@@ -266,6 +267,11 @@ Goal:
 - Compare the two transcripts and highlight likely hallucinations, insertions, and deletions.
 - Be conservative: if uncertain, say uncertain.
 - Focus on factual consistency between A and B, missing segments, and suspicious added content.
+- Markdown structure and formatting differences (headings, paragraph breaks, bold/italic, punctuation style)
+  are acceptable and should NOT be treated as errors by themselves.
+- Do NOT penalize Markdown headings/formatting if the underlying spoken content is preserved.
+- The key quality criterion is fidelity to spoken content: prioritize detecting re-elaboration
+  (rewriting/paraphrasing of what was said), invented details, and omitted spoken material.
 
 Return ONLY valid JSON with this schema:
 {{
@@ -433,15 +439,29 @@ def run_benchmark(
             item["input_type"] = resolved_input["input_type"]
             item["resolved_audio_path"] = resolved_input["audio_path"]
 
+            model_results: dict[str, tuple[dict, float]] = {}
+            with ThreadPoolExecutor(max_workers=len(transcription_models)) as model_executor:
+                future_to_model = {
+                    model_executor.submit(
+                        transcribe_with_model,
+                        audio_file=resolved_input["audio_path"],
+                        transcription_model=model_name,
+                        llm_api_key=llm_api_key,
+                        timeout_minutes=timeout_minutes,
+                        markdown_output=markdown_output,
+                    ): model_name
+                    for model_name in transcription_models
+                }
+                for model_name in transcription_models:
+                    logger.info("Submitted transcription with %s", model_name)
+
+                for future in as_completed(future_to_model):
+                    model_name = future_to_model[future]
+                    logger.info("Completed transcription with %s", model_name)
+                    model_results[model_name] = future.result()
+
             for model_name in transcription_models:
-                logger.info("Transcribing with %s", model_name)
-                result_dict, elapsed = transcribe_with_model(
-                    audio_file=resolved_input["audio_path"],
-                    transcription_model=model_name,
-                    llm_api_key=llm_api_key,
-                    timeout_minutes=timeout_minutes,
-                    markdown_output=markdown_output,
-                )
+                result_dict, elapsed = model_results[model_name]
                 transcript_text = result_dict.get("text", "")
                 metrics = compute_length_metrics(transcript_text)
                 metrics["generation_time_seconds"] = round(elapsed, 3)
