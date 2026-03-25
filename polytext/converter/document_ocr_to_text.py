@@ -110,7 +110,7 @@ def get_document_ocr(document_for_ocr, markdown_output=False, llm_api_key=None, 
     return converter.get_document_ocr(document_for_ocr)
 
 class DocumentOCRToTextConverter:
-    def __init__(self, ocr_model="gemini-2.0-flash", ocr_model_provider="google",
+    def __init__(self, ocr_model="gemini-3.1-flash-lite-preview", ocr_model_provider="google",
                 markdown_output=True, llm_api_key=None, target_size=1, temp_dir="temp",
                  page_range=None, timeout_minutes: int = None):
         """
@@ -120,7 +120,7 @@ class DocumentOCRToTextConverter:
         It supports various image formats and can output either plain text or markdown.
 
         Args:
-            ocr_model (str): Model name for OCR processing. Defaults to "gemini-2.0-flash".
+            ocr_model (str): Model name for OCR processing. Defaults to "gemini-3.1-flash-lite-preview".
             ocr_model_provider (str): Provider of OCR service. Defaults to "google".
             markdown_output (bool): Enable markdown formatting in output. Defaults to True.
             llm_api_key (str, optional): Override API key for language model. Defaults to None.
@@ -182,6 +182,7 @@ class DocumentOCRToTextConverter:
         """
 
         temp_file_for_ocr = None
+        # should_delete_temp_file = False
         start_time = time.time()
 
         if self.markdown_output:
@@ -224,6 +225,7 @@ class DocumentOCRToTextConverter:
                     types.HttpOptions(timeout=self.timeout_minutes * 60_000)
                     if self.timeout_minutes is not None else None
                 ),
+                system_instruction=[prompt_template]
             )
 
             mime_type, _ = mimetypes.guess_type(file_for_ocr)
@@ -233,6 +235,7 @@ class DocumentOCRToTextConverter:
             if file_size > self.target_size * 1024 * 1024 or mime_type not in SUPPORTED_MIME_TYPES:
                 logger.info(f"Image file size exceeds {self.target_size}MB or unsupported mime type, compressing and converting image")
                 temp_file_for_ocr = compress_and_convert_image(input_path=file_for_ocr, target_size=self.target_size)
+                # should_delete_temp_file = True
                 file_size = os.path.getsize(temp_file_for_ocr)
             else:
                 logger.info(f"Image file size does not exceed {self.target_size}MB and mime type is supported, no compression or conversion needed")
@@ -247,7 +250,7 @@ class DocumentOCRToTextConverter:
 
                 logger.info(f"Uploaded image file - Starting OCR...")
 
-                contents = [prompt_template, myfile]
+                contents = [myfile]
                 response = client.models.generate_content(
                     model=self.ocr_model,
                     contents=contents,
@@ -269,7 +272,6 @@ class DocumentOCRToTextConverter:
                 response = client.models.generate_content(
                     model=self.ocr_model,
                     contents=[
-                        prompt_template,
                         types.Part.from_bytes(
                             data=image_data,
                             mime_type=mime_type,
@@ -297,7 +299,8 @@ class DocumentOCRToTextConverter:
             return final_ocr_dict
 
         finally:
-            # Clean up the temporary compressed file
+            # Clean up only files created by this converter.
+            # if should_delete_temp_file and temp_file_for_ocr and os.path.exists(temp_file_for_ocr):
             if temp_file_for_ocr and os.path.exists(temp_file_for_ocr):
                 os.remove(temp_file_for_ocr)
 
