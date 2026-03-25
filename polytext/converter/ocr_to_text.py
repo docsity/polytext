@@ -175,6 +175,7 @@ class OCRToTextConverter:
         """
 
         temp_file_for_ocr = None
+        # should_delete_temp_file = False
         start_time = time.time()
 
         if self.markdown_output:
@@ -217,6 +218,7 @@ class OCRToTextConverter:
                     types.HttpOptions(timeout=self.timeout_minutes * 60_000)
                     if self.timeout_minutes is not None else None
                 ),
+                system_instruction=[prompt_template]
             )
 
             mime_type, _ = mimetypes.guess_type(file_for_ocr)
@@ -226,6 +228,7 @@ class OCRToTextConverter:
             if file_size > self.target_size * 1024 * 1024 or mime_type not in SUPPORTED_MIME_TYPES:
                 logger.info(f"Image file size exceeds {self.target_size}MB or unsupported mime type, compressing and converting image")
                 temp_file_for_ocr = compress_and_convert_image(input_path=file_for_ocr, target_size=self.target_size)
+                # should_delete_temp_file = True
                 file_size = os.path.getsize(temp_file_for_ocr)
             else:
                 logger.info(f"Image file size does not exceed {self.target_size}MB and mime type is supported, no compression or conversion needed")
@@ -240,7 +243,7 @@ class OCRToTextConverter:
 
                 logger.info(f"Uploaded image file - Starting OCR...")
 
-                contents = [prompt_template, myfile]
+                contents = [myfile]
                 response = client.models.generate_content(
                     model=self.ocr_model,
                     contents=contents,
@@ -262,7 +265,6 @@ class OCRToTextConverter:
                 response = client.models.generate_content(
                     model=self.ocr_model,
                     contents=[
-                        prompt_template,
                         types.Part.from_bytes(
                             data=image_data,
                             mime_type=mime_type,
@@ -290,7 +292,8 @@ class OCRToTextConverter:
             return final_ocr_dict
 
         finally:
-            # Clean up the temporary compressed file
+            # Clean up only files created by this converter.
+            # if should_delete_temp_file and temp_file_for_ocr and os.path.exists(temp_file_for_ocr):
             if temp_file_for_ocr and os.path.exists(temp_file_for_ocr):
                 os.remove(temp_file_for_ocr)
 
