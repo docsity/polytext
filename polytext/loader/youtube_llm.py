@@ -19,7 +19,7 @@ from ..exceptions import EmptyDocument, LoaderTimeoutError
 logger = logging.getLogger(__name__)
 
 MIN_YOUTUBE_TEXT_LENGTH_ACCEPTED = int(os.getenv("MIN_YOUTUBE_TEXT_LENGTH_ACCEPTED", "200"))
-YOUTUBE_MAX_OUTPUT_TOKENS = int(os.getenv("YOUTUBE_MAX_OUTPUT_TOKENS", "32000"))
+YOUTUBE_MAX_OUTPUT_TOKENS = int(os.getenv("YOUTUBE_MAX_OUTPUT_TOKENS", "50000"))
 YOUTUBE_MIN_OUTPUT_TOKENS = 500
 YOUTUBE_TAIL_REPETITION_LINES = int(os.getenv("YOUTUBE_TAIL_REPETITION_LINES", "200"))
 YOUTUBE_TAIL_REPETITION_THRESHOLD = float(os.getenv("YOUTUBE_TAIL_REPETITION_THRESHOLD", "0.35"))
@@ -151,10 +151,6 @@ class YoutubeTranscriptLoaderWithLlm:
             video_url=video_url,
             temperature=fallback_temperature,
         )
-        result["fallback_from_model"] = self.model
-        result["fallback_to_model"] = fallback_model
-        result["fallback_reason"] = reason
-        result["fallback_temperature"] = fallback_temperature
         return result
 
     def should_final_fallback_model(self, error: EmptyDocument) -> bool:
@@ -334,10 +330,8 @@ class YoutubeTranscriptLoaderWithLlm:
                            "completion_model_provider": self.model_provider,
                            "text_chunks": "not provided",
                            "type": "youtube_gemini",
-                           "input": video_url,
-                           "finish_reason": finish_reason,
-                           "max_output_tokens": used_output_budget,
-                           "temperature": temperature}
+                           "input": video_url
+                           }
 
             logger.info(f"Gemini - YouTube performed using {self.model} in {time_elapsed:.2f} seconds")
             return result_dict
@@ -354,7 +348,7 @@ class YoutubeTranscriptLoaderWithLlm:
                     video_url=video_url,
                     reason=e.message,
                     fallback_model=self.final_fallback_model,
-                    fallback_temperature=0.0,
+                    fallback_temperature=self.fallback_temperature,
                 )
             raise
 
