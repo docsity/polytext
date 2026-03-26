@@ -26,7 +26,7 @@ from ..loader import (
     NotebookLoader
 )
 from ..exceptions import EmptyDocument, LoaderTimeoutError, LoaderError
-from ..utils.utils import remove_markdown_strip
+from ..utils.utils import clean_extracted_text_whitespace, remove_markdown_strip
 
 # External imports
 import boto3
@@ -423,8 +423,10 @@ class BaseLoader:
         else:
             result_dict = loader_class.load(input_path=self.parse_input(input_string=input_list[0])["file_path"])
 
+        result_dict["text"] = clean_extracted_text_whitespace(remove_markdown_strip(result_dict["text"]))
+
         result_dict = {
-            "text": remove_markdown_strip(result_dict["text"]),
+            "text": result_dict["text"],
             "completion_tokens": result_dict["completion_tokens"],
             "prompt_tokens": result_dict["prompt_tokens"],
             "output_list": [result_dict],
