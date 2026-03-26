@@ -24,8 +24,11 @@ def main():
     )
 
     result_dict = loader.get_text(
-        input_list=[html_string]
+        input_list=[plain_text]
     )
+
+    import ipdb; ipdb.set_trace()
+
     return result_dict
 
 if __name__ == "__main__":
