@@ -46,6 +46,20 @@ Each chunk-level transcription result should expose enough metadata for downstre
 
 The full-audio result should continue exposing aggregate token counts and the final text. For chunked audio, metadata from chunk retries should be preserved in chunk payloads and surfaced in a lightweight aggregate form if practical without broad API breakage.
 
+## Token Budgets
+
+The converter should stop using one variable for two meanings.
+
+- `max_llm_tokens` remains the chunk-sizing budget passed to `AudioChunker`
+- `max_output_tokens` becomes the Gemini `GenerateContentConfig.max_output_tokens` value
+
+To stay conservative for transcription quality, the defaults should remain linked:
+
+- default `max_llm_tokens = 4250`
+- default `max_output_tokens = max_llm_tokens` unless explicitly overridden
+
+This keeps current runtime behavior safe while making the API semantics explicit and allowing future tuning without re-coupling chunk sizing and generation output caps.
+
 ## Error Handling
 
 - keep retry-on-transient-server-error behavior
@@ -62,5 +76,6 @@ Add regression coverage in `tests/test_audio_transcription_model_migration.py` f
 - max-tokens-triggered fallback
 - healthy transcript avoiding fallback
 - chunk-local retry behavior where only the failing chunk is retried
+- separate token-budget semantics so chunk sizing still uses `max_llm_tokens` while Gemini config uses `max_output_tokens`
 
 The implementation should follow TDD: add one failing test, verify the failure, implement the minimum fix, then repeat.

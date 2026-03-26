@@ -46,7 +46,7 @@ AUDIO_TAIL_REPETITION_THRESHOLD = float(os.getenv("AUDIO_TAIL_REPETITION_THRESHO
 AUDIO_FALLBACK_SOURCE_PATTERN = os.getenv("AUDIO_FALLBACK_SOURCE_PATTERN", "flash-lite-preview")
 AUDIO_FALLBACK_MODEL = os.getenv("AUDIO_FALLBACK_MODEL", "gemini-3-flash-preview")
 AUDIO_FALLBACK_TEMPERATURE = float(os.getenv("AUDIO_FALLBACK_TEMPERATURE", "1.0"))
-AUDIO_FINAL_FALLBACK_MODEL = os.getenv("AUDIO_FINAL_FALLBACK_MODEL", "gemini-2.5-flash")
+AUDIO_FINAL_FALLBACK_MODEL = os.getenv("AUDIO_FINAL_FALLBACK_MODEL", "gemini-2.0-flash")
 AUDIO_FILE_UPLOAD_THRESHOLD_BYTES = 20 * 1024 * 1024
 
 
@@ -135,7 +135,9 @@ def compress_and_convert_audio(input_path: str, bitrate_quality: int = 9) -> str
 def transcribe_full_audio(audio_file, markdown_output: bool = False,
                           llm_api_key: str = None,
                           save_transcript_chunks: bool = False, bitrate_quality=9,
-                          timeout_minutes: int = None) -> dict:
+                          timeout_minutes: int = None,
+                          max_llm_tokens: int = 4250,
+                          max_output_tokens: int | None = None) -> dict:
     """
     Convenience function to transcribe an audio file into text, optionally formatted as Markdown.
 
@@ -151,17 +153,21 @@ def transcribe_full_audio(audio_file, markdown_output: bool = False,
         save_transcript_chunks (bool, optional): Whether to save chunk transcripts in final output. Defaults to False.
         bitrate_quality (int, optional): Variable bitrate quality from 0-9 (9 being lowest). Defaults to 9
         timeout_minutes (int, optional): Number of minutes to wait for a response. Defaults to None.
+        max_llm_tokens (int, optional): Token budget used for audio chunk sizing. Defaults to 4250.
+        max_output_tokens (int | None, optional): Maximum Gemini output tokens. Defaults to `max_llm_tokens`.
 
     Returns:
         str: The transcribed text from the audio file.
     """
     converter = AudioToTextConverter(markdown_output=markdown_output, llm_api_key=llm_api_key,
-                                     bitrate_quality=bitrate_quality, timeout_minutes=timeout_minutes)
+                                     bitrate_quality=bitrate_quality, timeout_minutes=timeout_minutes,
+                                     max_llm_tokens=max_llm_tokens, max_output_tokens=max_output_tokens)
     return converter.transcribe_full_audio(audio_file, save_transcript_chunks)
 
 class AudioToTextConverter:
     def __init__(self, transcription_model: str ="gemini-3.1-flash-lite-preview", transcription_model_provider: str ="google",
-                 k: int =5, min_matches: int =3, markdown_output: bool =True, llm_api_key: str =None, max_llm_tokens: int =4250, temp_dir: str ="temp",
+                 k: int =5, min_matches: int =3, markdown_output: bool =True, llm_api_key: str =None, max_llm_tokens: int =4250,
+                 max_output_tokens: int | None =None, temp_dir: str ="temp",
                  bitrate_quality: int =9, timeout_minutes: int =None):
         """
         Initialize the AudioToTextConverter class with a specified transcription model and provider.
@@ -173,7 +179,9 @@ class AudioToTextConverter:
             min_matches (int): Minimum matching words for chunk merging. Defaults to 3.
             markdown_output (bool): Enable Markdown formatting in output. Defaults to True.
             llm_api_key (str, optional): Override API key for language model. Defaults to None.
-            max_llm_tokens (int): Maximum number of tokens for the language model output. Defaults to 4250.
+            max_llm_tokens (int): Token budget used to size audio chunks. Defaults to 4250.
+            max_output_tokens (int | None): Maximum number of output tokens for Gemini generation.
+                Defaults to `max_llm_tokens`.
             temp_dir (str): Directory for temporary files. Defaults to "temp".
             bitrate_quality (int, optional): Variable bitrate quality from 0-9 (9 being lowest). Defaults to 9
             timeout_minutes (int): Number of minutes to wait for a response.
@@ -189,7 +197,8 @@ class AudioToTextConverter:
         self.markdown_output = markdown_output
         self.llm_api_key = llm_api_key
         self.max_llm_tokens = max(max_llm_tokens, AUDIO_MIN_OUTPUT_TOKENS)
-        self.max_output_tokens = self.max_llm_tokens
+        requested_output_tokens = self.max_llm_tokens if max_output_tokens is None else max_output_tokens
+        self.max_output_tokens = max(requested_output_tokens, AUDIO_MIN_OUTPUT_TOKENS)
         self.chunked_audio = False
         self.bitrate_quality = bitrate_quality
         self.timeout_minutes = timeout_minutes
@@ -241,6 +250,7 @@ class AudioToTextConverter:
             markdown_output=self.markdown_output,
             llm_api_key=self.llm_api_key,
             max_llm_tokens=self.max_llm_tokens,
+            max_output_tokens=self.max_output_tokens,
             temp_dir=self.temp_dir,
             bitrate_quality=self.bitrate_quality,
             timeout_minutes=self.timeout_minutes,

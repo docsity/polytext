@@ -2,9 +2,9 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Mirror the YouTube anti-hallucination fallback logic in audio transcription while ensuring only failing chunks are retried.
+**Goal:** Mirror the YouTube anti-hallucination fallback logic in audio transcription while ensuring only failing chunks are retried, and split chunk token budget from output token budget.
 
-**Architecture:** Keep `polytext/loader/audio.py` thin and move the new behavior into `polytext/converter/audio_to_text.py`, where single-file and chunked audio transcription already converge. Add shared guard helpers, chunk-local fallback orchestration, and regression tests covering each guarded failure mode.
+**Architecture:** Keep `polytext/loader/audio.py` thin and move the new behavior into `polytext/converter/audio_to_text.py`, where single-file and chunked audio transcription already converge. Add shared guard helpers, chunk-local fallback orchestration, and separate `max_llm_tokens` from `max_output_tokens` while keeping them equal by default.
 
 **Tech Stack:** Python 3.12+, Google GenAI SDK, `retry`, `pytest`, `unittest.mock`
 
@@ -141,4 +141,40 @@ Expected: only the intended fallback and metadata changes.
 ```bash
 git add polytext/converter/audio_to_text.py polytext/loader/audio.py tests/test_audio_transcription_model_migration.py docs/plans/2026-03-25-audio-chunk-fallback-design.md docs/plans/2026-03-25-audio-chunk-fallback.md
 git commit -m "feat: add chunk-local audio fallback safeguards"
+```
+
+### Task 5: Split chunk and output token budgets
+
+**Files:**
+- Modify: `polytext/converter/audio_to_text.py`
+- Modify: `tests/test_audio_transcription_model_migration.py`
+- Modify: `tests/test_audio_chunker.py`
+
+**Step 1: Write the failing test**
+
+Add focused tests for:
+
+- default `max_output_tokens` matches `max_llm_tokens`
+- custom `max_output_tokens` changes Gemini config without changing chunk budget
+- `transcribe_full_audio()` still passes `max_llm_tokens` to `AudioChunker`
+
+**Step 2: Run test to verify it fails**
+
+Run: `.venv/bin/python -m unittest tests.test_audio_transcription_model_migration tests.test_audio_chunker`
+Expected: FAIL because the converter still derives `max_output_tokens` directly from the chunk budget and does not expose the split API.
+
+**Step 3: Write minimal implementation**
+
+Add an optional `max_output_tokens` parameter to `AudioToTextConverter`, default it to `max_llm_tokens` when omitted, use it only for Gemini generation config, and keep chunking wired to `max_llm_tokens`.
+
+**Step 4: Run test to verify it passes**
+
+Run: `.venv/bin/python -m unittest tests.test_audio_transcription_model_migration tests.test_audio_chunker`
+Expected: PASS.
+
+**Step 5: Commit**
+
+```bash
+git add polytext/converter/audio_to_text.py tests/test_audio_transcription_model_migration.py tests/test_audio_chunker.py docs/plans/2026-03-25-audio-chunk-fallback-design.md docs/plans/2026-03-25-audio-chunk-fallback.md
+git commit -m "refactor: split audio chunk and output token budgets"
 ```
