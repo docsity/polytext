@@ -219,7 +219,7 @@ class TextToMdConverter:
         transcript_chunks = [t[1] for t in sorted(results, key=lambda x: x[0])]
 
         # Merge all processed chunks into one final result
-        text_merger = TextMerger()
+        text_merger = TextMerger(llm_api_key=self.llm_api_key)
         final_text = text_merger.merge_chunks_with_llm_sequential(chunks=transcript_chunks)
 
         result_dict = {
