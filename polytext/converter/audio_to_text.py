@@ -5,8 +5,6 @@ import tempfile
 import time
 import mimetypes
 import uuid
-import re
-from collections import Counter
 import ffmpeg
 from retry import retry
 from google import genai
@@ -19,6 +17,7 @@ from ..exceptions import EmptyDocument
 from ..prompts.transcription import AUDIO_TO_MARKDOWN_PROMPT, AUDIO_TO_PLAIN_TEXT_PROMPT
 from ..processor.audio_chunker import AudioChunker
 from ..processor.text_merger import TextMerger
+from .gemini_quality_guards import extract_finish_reason, tail_has_excessive_repetition
 
 logger = logging.getLogger(__name__)
 
@@ -48,51 +47,6 @@ AUDIO_FALLBACK_MODEL = os.getenv("AUDIO_FALLBACK_MODEL", "gemini-3-flash-preview
 AUDIO_FALLBACK_TEMPERATURE = float(os.getenv("AUDIO_FALLBACK_TEMPERATURE", "1.0"))
 AUDIO_FINAL_FALLBACK_MODEL = os.getenv("AUDIO_FINAL_FALLBACK_MODEL", "gemini-2.0-flash")
 AUDIO_FILE_UPLOAD_THRESHOLD_BYTES = 20 * 1024 * 1024
-
-
-def normalize_text_line(line: str) -> str:
-    return re.sub(r"\s+", " ", line.strip().lower())
-
-
-def split_sentences(text: str) -> list[str]:
-    chunks = re.split(r"(?<=[.!?])\s+|\n+", text or "")
-    return [normalize_text_line(chunk) for chunk in chunks if normalize_text_line(chunk)]
-
-
-def repetition_ratio(items: list[str], min_occurrences: int = 2) -> float:
-    if not items:
-        return 0.0
-
-    counts = Counter(items)
-    repeated_items = sum(count for count in counts.values() if count >= min_occurrences)
-    return repeated_items / len(items)
-
-
-def tail_has_excessive_repetition(text: str, tail_lines: int = AUDIO_TAIL_REPETITION_LINES) -> bool:
-    if not text:
-        return False
-
-    lines = [normalize_text_line(line) for line in text.splitlines() if normalize_text_line(line)]
-    tail = lines[-tail_lines:] if len(lines) > tail_lines else lines
-    if len(tail) >= 4 and repetition_ratio(tail) >= AUDIO_TAIL_REPETITION_THRESHOLD:
-        return True
-
-    sentences = split_sentences("\n".join(tail))
-    if len(sentences) >= 4 and repetition_ratio(sentences) >= AUDIO_TAIL_REPETITION_THRESHOLD:
-        return True
-
-    return False
-
-
-def extract_finish_reason(response) -> str | None:
-    candidates = getattr(response, "candidates", None) or []
-    if not candidates:
-        return None
-
-    finish_reason = getattr(candidates[0], "finish_reason", None)
-    if finish_reason is None:
-        return None
-    return str(finish_reason).upper()
 
 def compress_and_convert_audio(input_path: str, bitrate_quality: int = 9) -> str:
     """
@@ -417,7 +371,11 @@ class AudioToTextConverter:
             time_elapsed = end_time - start_time
             response_text = response.text or ""
             finish_reason = extract_finish_reason(response)
-            has_repetitive_tail = tail_has_excessive_repetition(response_text)
+            has_repetitive_tail = tail_has_excessive_repetition(
+                response_text,
+                tail_lines=AUDIO_TAIL_REPETITION_LINES,
+                threshold=AUDIO_TAIL_REPETITION_THRESHOLD,
+            )
             usage_metadata = getattr(response, "usage_metadata", None)
             completion_tokens = getattr(usage_metadata, "candidates_token_count", 0) or 0
             prompt_tokens = getattr(usage_metadata, "prompt_token_count", 0) or 0

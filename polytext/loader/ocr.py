@@ -44,8 +44,11 @@ class OCRLoader:
             document_gcs_bucket (str, optional): GCS bucket name for document storage. Defaults to None.
             llm_api_key (str, optional): API key for language model service. Defaults to None.
             temp_dir (str, optional): Path for temporary file storage. Defaults to "temp".
-            target_size (int, optional): Target file size in bytes. Defaults to 1MB
+            target_size (int, optional): Target file size in bytes. Defaults to 1MB.
             timeout_minutes (int, optional): Timeout in minutes. Defaults to None.
+            **kwargs:
+                ocr_model (str, optional): Explicit Gemini OCR model to pass through to the converter.
+                max_output_tokens (int, optional): Maximum Gemini output tokens for OCR generation.
 
         Raises:
             ValueError: If cloud storage clients are provided without bucket names
@@ -61,6 +64,13 @@ class OCRLoader:
         self.target_size = target_size
         self.type = "image"
         self.timeout_minutes = timeout_minutes
+        requested_ocr_model = kwargs.get("ocr_model")
+        self.ocr_model = (
+            requested_ocr_model
+            if isinstance(requested_ocr_model, str) and requested_ocr_model.startswith("gemini")
+            else None
+        )
+        self.max_output_tokens = kwargs.get("max_output_tokens")
 
         # Set up custom temp directory
         self.temp_dir = os.path.abspath(temp_dir)
@@ -130,7 +140,9 @@ class OCRLoader:
                               markdown_output=self.markdown_output,
                               llm_api_key=self.llm_api_key,
                               target_size=self.target_size,
-                              timeout_minutes=self.timeout_minutes)
+                              timeout_minutes=self.timeout_minutes,
+                              ocr_model=self.ocr_model,
+                              max_output_tokens=self.max_output_tokens)
 
         result_dict["type"] = self.type
         result_dict["input"] = file_path

@@ -78,6 +78,9 @@ class DocumentOCRLoader:
                 - For Google Gemini: optional / usually ignored.
                 - For Azure OpenAI: **deployment name** (e.g. "gpt-5-mini").
                 Defaults to None.
+            **kwargs:
+                max_output_tokens (int, optional): Maximum Gemini output tokens for
+                    Google document OCR generation.
 
         Raises:
             ValueError: If cloud storage clients are provided without bucket names.
@@ -97,6 +100,7 @@ class DocumentOCRLoader:
 
         self.ocr_provider = (ocr_provider or "google").lower()
         self.ocr_model = ocr_model
+        self.max_output_tokens = kwargs.get("max_output_tokens")
 
         # Set up custom temp directory
         self.temp_dir = os.path.abspath(temp_dir)
@@ -253,6 +257,12 @@ class DocumentOCRLoader:
                 target_size=self.target_size,
                 page_range=self.page_range,
                 timeout_minutes=self.timeout_minutes,
+                ocr_model=(
+                    self.ocr_model
+                    if isinstance(self.ocr_model, str) and self.ocr_model.startswith("gemini")
+                    else None
+                ),
+                max_output_tokens=self.max_output_tokens,
             )
 
         result_dict["type"] = self.type
