@@ -11,11 +11,12 @@ load_dotenv('..env')
 
 from polytext.loader.base import BaseLoader
 
-url = 'https://youtu.be/xumfir54xb4?si=k7DVvwAsZU9EeZZv'
+url = 'https://www.youtube.com/watch?v=6Ql5mQdxeWk'
 # private 'https://www.youtube.com/watch?v=y0JSaif7DRU'
 # 'https://www.youtube.com/watch?v=xY5x0q5JoPI'
 # 'https://www.youtube.com/watch?v=6Ql5mQdxeWk'
 # 'https://www.youtube.com/watch?v=Md4Fs-Zc3tg&t=173s'
+# 'https://www.youtube.com/watch?v=w82a1FT5o88'
 # no parole https://www.youtube.com/watch?v=SGT1mvdfLeU
 # age restricted https://www.youtube.com/watch?v=l_pmZOlJUu4
 
@@ -37,6 +38,7 @@ def main():
     print(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     end = time.time()
     print("Time elapsed: ", end - start)
+    print(result_dict)
     return result_dict
 
 if __name__ == "__main__":

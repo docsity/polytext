@@ -3,6 +3,7 @@
 import os
 import tempfile
 import logging
+import gzip
 
 # Local imports
 from ..converter import md_to_text
@@ -98,8 +99,15 @@ class MarkdownLoader:
         logger.info(f"Reading markdown from file: {file_path}")
 
         try:
-            with open(file_path, 'r', encoding='utf-8') as file:
-                markdown_content = file.read()
+            with open(file_path, "rb") as file:
+                file_bytes = file.read()
+
+            # Some cloud uploads keep a .md extension but store gzip-compressed bytes.
+            if file_bytes.startswith(b"\x1f\x8b"):
+                logger.info(f"Detected gzip-compressed markdown file: {file_path}")
+                file_bytes = gzip.decompress(file_bytes)
+
+            markdown_content = file_bytes.decode("utf-8")
 
             if not self.markdown_output:
                 logger.info(f"Markdown output disabled. Markdown content will be converted to plain text.")
@@ -110,6 +118,12 @@ class MarkdownLoader:
         except FileNotFoundError:
             logger.info(f"File not found: {file_path}")
             raise
+        except UnicodeDecodeError as e:
+            logger.info(f"Invalid UTF-8 markdown content in file {file_path}: {e}")
+            raise IOError(f"Unable to decode markdown file {file_path} as UTF-8") from e
+        except gzip.BadGzipFile as e:
+            logger.info(f"Detected gzip signature but failed to decompress file {file_path}: {e}")
+            raise IOError(f"Unable to decompress gzip markdown file {file_path}") from e
         except IOError as e:
             logger.info(f"Error reading file {file_path}: {e}")
             raise
