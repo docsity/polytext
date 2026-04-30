@@ -20,7 +20,8 @@ dotenv.load_dotenv()
 def text_to_md(transcript_text: str,
     markdown_output: bool,
     llm_api_key: str,
-    save_transcript_chunks: bool) -> dict:
+    save_transcript_chunks: bool,
+    prompt_template_override: str | None = None) -> dict:
     """
     Transform raw transcript text into Markdown using a language model.
 
@@ -39,7 +40,11 @@ def text_to_md(transcript_text: str,
             - completion_model_provider (str): Name of the model provider.
             - text_chunks (list, optional): List of intermediate chunks, if requested.
     """
-    yt_tr_conv = TextToMdConverter(markdown_output=markdown_output, llm_api_key=llm_api_key)
+    yt_tr_conv = TextToMdConverter(
+        markdown_output=markdown_output,
+        llm_api_key=llm_api_key,
+        prompt_template_override=prompt_template_override,
+    )
     return yt_tr_conv.convert_text_to_md(transcript_text, save_transcript_chunks=save_transcript_chunks)
 
 
@@ -56,6 +61,7 @@ class TextToMdConverter:
             min_matches: int = 3,
             model: str = "gemini-3.1-flash-lite-preview",
             model_provider: str = "google",
+            prompt_template_override: str | None = None,
     ) -> None:
         """
         Initialize the converter with configuration parameters.
@@ -82,6 +88,7 @@ class TextToMdConverter:
         self.min_matches = min_matches
         self.model = model
         self.model_provider = model_provider
+        self.prompt_template_override = prompt_template_override
 
     def get_client(self) -> object:
         """
@@ -99,6 +106,9 @@ class TextToMdConverter:
         Returns:
             str: The selected prompt template.
         """
+        if self.prompt_template_override:
+            logging.info("Using custom prompt template override")
+            return self.prompt_template_override
         if self.markdown_output:
             logging.info("Using prompt for markdown format")
             return TEXT_TO_MARKDOWN_PROMPT

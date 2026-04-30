@@ -1,8 +1,8 @@
-from markitdown import MarkItDown
 from urllib.parse import urlparse
 import html2text
 import requests
-import io
+import fitz
+from pymupdf4llm import to_markdown
 
 def detect_type_from_url_or_headers(url: str) -> str:
     # 1. Try URL extension
@@ -26,9 +26,25 @@ def detect_type_from_url_or_headers(url: str) -> str:
     # Default fallback
     return "html"
 
+def convert_with_pymupdf4llm(data: bytes, filetype: str) -> str:
+    document = fitz.open(stream=data, filetype=filetype)
+    try:
+        return to_markdown(document)
+    finally:
+        document.close()
+
+
+def convert_html_with_fallback(html_content: str) -> str:
+    try:
+        return convert_with_pymupdf4llm(html_content.encode("utf-8"), "html")
+    except Exception:
+        h = html2text.HTML2Text()
+        h.ignore_links = False
+        return h.handle(html_content)
+
+
 def fetch_and_convert(url: str) -> str:
     filetype = detect_type_from_url_or_headers(url)
-    md = MarkItDown()
 
     headers = {
         "User-Agent": (
@@ -43,11 +59,9 @@ def fetch_and_convert(url: str) -> str:
     response.raise_for_status()
 
     if filetype == "pdf":
-        stream = io.BytesIO(response.content)
-        return md.convert(stream, extension=".pdf").markdown
-    else:
-        stream = io.BytesIO(response.text.encode("utf-8"))
-        return md.convert(stream, extension=".html").markdown
+        return convert_with_pymupdf4llm(response.content, "pdf")
+
+    return convert_html_with_fallback(response.text)
 
 def html_to_md(path_or_url: str) -> dict:
     if (
@@ -59,9 +73,7 @@ def html_to_md(path_or_url: str) -> dict:
     else:
         with open(path_or_url, "r", encoding="utf-8") as f:
             html_content = f.read()
-            h = html2text.HTML2Text()
-            h.ignore_links = False
-            md_text = h.handle(html_content)
+            md_text = convert_html_with_fallback(html_content)
 
     return {
         "text": md_text,
