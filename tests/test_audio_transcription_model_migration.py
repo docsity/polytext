@@ -4,7 +4,13 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from google.genai import errors as genai_errors
-from polytext.converter.audio_to_text import AudioToTextConverter, transcribe_full_audio
+from polytext.converter.audio_to_text import (
+    AUDIO_TO_MARKDOWN_PROMPT,
+    AUDIO_TO_PLAIN_TEXT_PROMPT,
+    AudioToTextConverter,
+    preprocess_audio_for_transcription,
+    transcribe_full_audio,
+)
 
 
 def _make_response(
@@ -109,6 +115,75 @@ class _ImmediateExecutor:
 
 
 class TestAudioTranscriptionModelMigration(unittest.TestCase):
+    @patch("polytext.converter.audio_to_text.ffmpeg")
+    def test_preprocess_audio_for_transcription_trims_leading_and_trailing_silence(self, mock_ffmpeg):
+        with tempfile.NamedTemporaryFile(suffix=".wav") as temp_audio:
+            fake_stream = MagicMock()
+            mock_ffmpeg.input.return_value.filter.return_value = fake_stream
+            fake_stream.filter.return_value = fake_stream
+
+            output_path = preprocess_audio_for_transcription(temp_audio.name, bitrate_quality=7)
+
+        self.assertTrue(output_path.endswith(".mp3"))
+        self.assertEqual(mock_ffmpeg.input.call_args.args[0], temp_audio.name)
+        first_filter = mock_ffmpeg.input.return_value.filter.call_args_list[0]
+        self.assertEqual(first_filter.args[0], "silenceremove")
+        self.assertEqual(first_filter.kwargs["start_periods"], 1)
+        self.assertEqual(first_filter.kwargs["start_silence"], 0.3)
+        self.assertEqual(first_filter.kwargs["start_threshold"], "-50dB")
+
+        reverse_call = fake_stream.filter.call_args_list[0]
+        self.assertEqual(reverse_call.args[0], "areverse")
+
+        second_trim_call = fake_stream.filter.call_args_list[1]
+        self.assertEqual(second_trim_call.args[0], "silenceremove")
+
+        output_kwargs = fake_stream.output.call_args.kwargs
+        self.assertEqual(output_kwargs["q"], 7)
+        self.assertEqual(output_kwargs["acodec"], "libmp3lame")
+        self.assertEqual(output_kwargs["ac"], 1)
+        self.assertEqual(output_kwargs["ar"], 16000)
+
+    @patch("polytext.converter.audio_to_text.TextMerger")
+    @patch("polytext.converter.audio_to_text.AudioChunker")
+    @patch.object(AudioToTextConverter, "process_chunk")
+    @patch("polytext.converter.audio_to_text.preprocess_audio_for_transcription")
+    def test_transcribe_full_audio_always_preprocesses_input_before_chunking(
+        self,
+        mock_preprocess,
+        mock_process_chunk,
+        mock_chunker_cls,
+        mock_text_merger_cls,
+    ):
+        fake_chunker = MagicMock()
+        mock_chunker_cls.return_value = fake_chunker
+        fake_chunker.extract_chunks.return_value = [{"file_path": "/tmp/fake_chunk.mp3"}]
+        mock_process_chunk.return_value = (
+            0,
+            {"transcript": "chunk transcript", "completion_tokens": 1, "prompt_tokens": 1},
+        )
+        mock_text_merger_cls.return_value.merge_chunks_with_llm_sequential.return_value = {
+            "full_text_merged": "chunk transcript",
+            "completion_tokens": 2,
+            "prompt_tokens": 3,
+        }
+
+        with tempfile.NamedTemporaryFile(suffix=".wav") as source_audio, tempfile.NamedTemporaryFile(suffix=".mp3") as processed_audio:
+            source_audio.write(b"fake-audio")
+            source_audio.flush()
+            mock_preprocess.return_value = processed_audio.name
+
+            converter = AudioToTextConverter()
+            result = converter.transcribe_full_audio(source_audio.name)
+
+        self.assertEqual(result["text"], "chunk transcript")
+        mock_preprocess.assert_called_once_with(source_audio.name, bitrate_quality=converter.bitrate_quality)
+        self.assertEqual(mock_chunker_cls.call_args.args[0], processed_audio.name)
+
+    def test_audio_prompts_forbid_filling_silence(self):
+        self.assertIn("do not invent or infer speech", AUDIO_TO_MARKDOWN_PROMPT.lower())
+        self.assertIn("do not invent or infer speech", AUDIO_TO_PLAIN_TEXT_PROMPT.lower())
+
     def test_default_audio_transcription_model_is_gemini_3_1_flash_lite_preview(self):
         converter = AudioToTextConverter()
         self.assertEqual(converter.transcription_model, "gemini-3.1-flash-lite-preview")
@@ -302,10 +377,12 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
     @patch("polytext.converter.audio_to_text.ThreadPoolExecutor", new=_ImmediateExecutor)
     @patch("polytext.converter.audio_to_text.TextMerger")
     @patch("polytext.converter.audio_to_text.AudioChunker")
+    @patch("polytext.converter.audio_to_text.preprocess_audio_for_transcription")
     @patch("polytext.converter.audio_to_text.genai.Client")
     def test_chunked_audio_retries_only_the_failing_chunk(
         self,
         mock_client_cls,
+        mock_preprocess,
         mock_chunker_cls,
         mock_text_merger_cls,
         _mock_as_completed,
@@ -333,6 +410,7 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
             for handle in (source_audio, chunk_one, chunk_two):
                 handle.write(b"fake-audio")
                 handle.flush()
+            mock_preprocess.return_value = source_audio.name
 
             fake_chunker.extract_chunks.return_value = [
                 {"file_path": chunk_one.name},
@@ -359,8 +437,10 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
     @patch("polytext.converter.audio_to_text.ThreadPoolExecutor", new=_ImmediateExecutor)
     @patch("polytext.converter.audio_to_text.TextMerger")
     @patch("polytext.converter.audio_to_text.AudioChunker")
+    @patch("polytext.converter.audio_to_text.preprocess_audio_for_transcription")
     def test_transcribe_full_audio_uses_max_llm_tokens_for_chunking_when_output_budget_differs(
         self,
+        mock_preprocess,
         mock_chunker_cls,
         mock_text_merger_cls,
         _mock_as_completed,
@@ -385,6 +465,7 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
             with tempfile.NamedTemporaryFile(suffix=".mp3") as source_audio:
                 source_audio.write(b"fake-audio")
                 source_audio.flush()
+                mock_preprocess.return_value = source_audio.name
                 converter.transcribe_full_audio(source_audio.name)
 
         self.assertEqual(mock_chunker_cls.call_args.kwargs["max_llm_tokens"], 4250)

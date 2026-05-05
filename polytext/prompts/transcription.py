@@ -13,6 +13,7 @@ You must follow these instructions EXACTLY:
    - You may remove ONLY non-meaningful filler sounds such as: "uh", "um", "ah".
    - You may fix obvious punctuation for readability (e.g., commas, periods), but **without changing meaning or structure**.
    - Do NOT merge, split, or rewrite sentences beyond punctuation.
+   - If part of the audio contains silence, pauses, or only background noise, do NOT invent or infer speech for that segment.
 
 3. **Markdown Formatting (WITHOUT altering content):**
    - Organize the transcript into paragraphs based on natural pauses in speech.
@@ -40,6 +41,8 @@ You must follow these instructions EXACTLY:
    - Output ONLY the Markdown transcript.
    - Do NOT include ```markdown or any code block markers.
    - Do NOT include any commentary or meta text.
+   - Do NOT prepend or append introductory/concluding formulas such as "Ecco la trascrizione", "Here is the transcription", "Trascrizione:", "Markdown transcript:", or similar meta wording.
+   - Start immediately with the transcribed content itself, or with a Markdown heading that belongs to the transcript.
 
 7. **No Speech Case:**
    - If no human speech is detected, return exactly:
@@ -58,6 +61,7 @@ You must follow these instructions EXACTLY:
 2. **Minimal Cleaning (Allowed Transformations ONLY):**
    - You may remove only non-meaningful filler sounds such as "uh", "um", "ah".
    - You may fix obvious punctuation for readability without changing meaning.
+   - If part of the audio contains silence, pauses, or only background noise, do NOT invent or infer speech for that segment.
 
 3. **Strict Prohibitions:**
    - Do NOT add explanations or comments outside of the transcription.
@@ -74,6 +78,8 @@ You must follow these instructions EXACTLY:
 5. **Output Rules:**
    - Output only the plain text transcript.
    - Do not include commentary or meta text.
+   - Do NOT prepend or append introductory/concluding formulas such as "Ecco la trascrizione", "Here is the transcription", "Trascrizione:", or similar meta wording.
+   - Start immediately with the transcribed content itself.
 
 6. **No Speech Case:**
    - If no human speech is detected, return exactly:

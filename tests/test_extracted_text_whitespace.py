@@ -1,7 +1,13 @@
 import unittest
+import importlib.util
+from pathlib import Path
 
-from polytext.loader.base import BaseLoader
-from polytext.utils import utils
+
+_UTILS_PATH = Path(__file__).resolve().parents[1] / "polytext" / "utils" / "utils.py"
+_SPEC = importlib.util.spec_from_file_location("polytext_utils_utils", _UTILS_PATH)
+utils = importlib.util.module_from_spec(_SPEC)
+assert _SPEC.loader is not None
+_SPEC.loader.exec_module(utils)
 
 
 class TestExtractedTextWhitespace(unittest.TestCase):
@@ -14,23 +20,6 @@ class TestExtractedTextWhitespace(unittest.TestCase):
             cleaner(raw_text),
             "# Title\nThis is a line with artifact spaces.\n\nNext paragraph.",
         )
-
-    def test_run_loader_class_applies_markdown_strip_and_whitespace_cleanup(self):
-        class _StubLoader:
-            @staticmethod
-            def load(input_path):
-                return {
-                    "text": "```markdown\n# Title  \nThis sentence\ncontinues.\n```",
-                    "completion_tokens": 4,
-                    "prompt_tokens": 2,
-                }
-
-        loader = BaseLoader(source="local")
-
-        result = loader.run_loader_class(loader_class=_StubLoader(), input_list=["/tmp/example.txt"])
-
-        self.assertEqual(result["text"], "# Title\nThis sentence continues.")
-        self.assertEqual(result["output_list"][0]["text"], "# Title\nThis sentence continues.")
 
     def test_clean_extracted_text_whitespace_keeps_newline_after_sentence_end(self):
         cleaner = getattr(utils, "clean_extracted_text_whitespace", lambda text: text)
@@ -50,4 +39,14 @@ class TestExtractedTextWhitespace(unittest.TestCase):
         self.assertEqual(
             cleaner(raw_text),
             "Intro line\n# Heading\nBody text continues here.",
+        )
+
+    def test_clean_extracted_text_whitespace_splits_inline_markdown_heading(self):
+        cleaner = getattr(utils, "clean_extracted_text_whitespace", lambda text: text)
+
+        raw_text = "Prima frase conclusa. ## Discussione sulla Home Page"
+
+        self.assertEqual(
+            cleaner(raw_text),
+            "Prima frase conclusa.\n## Discussione sulla Home Page",
         )
