@@ -20,6 +20,7 @@ Image description instructions:
 - When meaningful non-text visual content is present, insert a concise description using exactly this format: [Image description: ...].
 - Insert the description where the image appears in the reading order.
 - If an image visually interrupts a sentence, place the description after the nearest complete sentence or phrase, then continue with the remaining text.
+- Write each image description in the same language as the document and its transcription.
 - Keep descriptions brief and functional.
 - For diagrams, schemas, charts, maps, screenshots, and visual tables, include all meaningful information needed to understand the context, including labels, relationships, axes, trends, hierarchy, and text inside the image when it is not already transcribed elsewhere.
 - Do not describe purely decorative marks, borders, logos, or icons unless they carry document meaning.

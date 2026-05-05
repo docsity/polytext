@@ -48,6 +48,17 @@ class TestOCRImageDescriptions(unittest.TestCase):
         self.assertIn("[Image description:", prompt)
         self.assertIn(OCR_IMAGE_DESCRIPTION_INSTRUCTIONS.strip(), prompt)
 
+    def test_image_description_instructions_preserve_document_language(self):
+        prompt = build_ocr_prompt(
+            OCR_TO_MARKDOWN_PROMPT,
+            include_image_descriptions=True,
+        )
+
+        self.assertIn(
+            "Write each image description in the same language as the document",
+            prompt,
+        )
+
     def test_base_loader_stores_include_image_descriptions(self):
         loader = BaseLoader(source="local", include_image_descriptions=True)
 
