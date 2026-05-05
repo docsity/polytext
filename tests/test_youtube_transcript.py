@@ -11,7 +11,7 @@ load_dotenv('..env')
 
 from polytext.loader.base import BaseLoader
 
-url = 'https://www.youtube.com/watch?v=6Ql5mQdxeWk'
+url = 'https://www.youtube.com/watch?v=FvfsFk2p1J0'
 # private 'https://www.youtube.com/watch?v=y0JSaif7DRU'
 # 'https://www.youtube.com/watch?v=xY5x0q5JoPI'
 # 'https://www.youtube.com/watch?v=6Ql5mQdxeWk'
