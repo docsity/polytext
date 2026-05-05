@@ -101,8 +101,8 @@ def compress_and_convert_audio(input_path: str, bitrate_quality: int = 9) -> str
 def preprocess_audio_for_transcription(
         input_path: str,
         bitrate_quality: int = 9,
-        silence_threshold: str = "-50dB",
-        min_silence_duration_seconds: float = 0.3,
+        silence_threshold: str = "-45dB",
+        min_silence_duration_seconds: float = 0.5,
 ) -> str:
     """
     Trim silence only at the start/end of the audio and normalize it to a compact MP3.
