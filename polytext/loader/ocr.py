@@ -25,6 +25,7 @@ class OCRLoader:
                  markdown_output: bool = True,
                  target_size: int = 1,
                  timeout_minutes: int = None,
+                 include_image_descriptions: bool = False,
                  **kwargs
                  ):
         """
@@ -46,6 +47,9 @@ class OCRLoader:
             temp_dir (str, optional): Path for temporary file storage. Defaults to "temp".
             target_size (int, optional): Target file size in bytes. Defaults to 1MB.
             timeout_minutes (int, optional): Timeout in minutes. Defaults to None.
+            include_image_descriptions (bool, optional): If True, OCR prompts include
+                brief functional descriptions for meaningful non-text images.
+                Defaults to False.
             **kwargs:
                 ocr_model (str, optional): Explicit Gemini OCR model to pass through to the converter.
                 max_output_tokens (int, optional): Maximum Gemini output tokens for OCR generation.
@@ -64,6 +68,7 @@ class OCRLoader:
         self.target_size = target_size
         self.type = "image"
         self.timeout_minutes = timeout_minutes
+        self.include_image_descriptions = include_image_descriptions
         requested_ocr_model = kwargs.get("ocr_model")
         self.ocr_model = (
             requested_ocr_model
@@ -142,7 +147,8 @@ class OCRLoader:
                               target_size=self.target_size,
                               timeout_minutes=self.timeout_minutes,
                               ocr_model=self.ocr_model,
-                              max_output_tokens=self.max_output_tokens)
+                              max_output_tokens=self.max_output_tokens,
+                              include_image_descriptions=self.include_image_descriptions)
 
         result_dict["type"] = self.type
         result_dict["input"] = file_path

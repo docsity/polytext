@@ -10,7 +10,11 @@ from google import genai
 from google.genai import types
 from google.api_core import exceptions as google_exceptions
 
-from ..prompts.ocr import OCR_TO_MARKDOWN_PROMPT, OCR_TO_PLAIN_TEXT_PROMPT
+from ..prompts.ocr import (
+    OCR_TO_MARKDOWN_PROMPT,
+    OCR_TO_PLAIN_TEXT_PROMPT,
+    build_ocr_prompt,
+)
 from ..exceptions import EmptyDocument
 from .gemini_quality_guards import (
     extract_finish_reason,
@@ -102,6 +106,7 @@ def get_ocr(
     timeout_minutes=None,
     ocr_model: str | None = None,
     max_output_tokens: int | None = None,
+    include_image_descriptions: bool = False,
 ):
     """
     Convenience function to extract text from an image file using OCR, optionally formatted as Markdown.
@@ -121,6 +126,9 @@ def get_ocr(
         ocr_model (str | None, optional): Gemini OCR model to use. Defaults to the converter default.
         max_output_tokens (int | None, optional): Maximum Gemini output tokens.
             Defaults to the converter default.
+        include_image_descriptions (bool, optional): If True, OCR prompts include
+            brief functional descriptions for meaningful non-text images.
+            Defaults to False.
 
     Returns:
         dict: Dictionary containing the OCR results and metadata.
@@ -132,13 +140,15 @@ def get_ocr(
         target_size=target_size,
         timeout_minutes=timeout_minutes,
         max_output_tokens=max_output_tokens,
+        include_image_descriptions=include_image_descriptions,
     )
     return converter.get_ocr(file_for_ocr)
 
 class OCRToTextConverter:
     def __init__(self, ocr_model="gemini-3.1-flash-lite-preview", ocr_model_provider="google",
                 markdown_output=True, llm_api_key=None, target_size=1, temp_dir="temp",
-                 timeout_minutes=None, fallback_stage: int = 0, max_output_tokens: int | None = None):
+                 timeout_minutes=None, fallback_stage: int = 0, max_output_tokens: int | None = None,
+                 include_image_descriptions: bool = False):
         """
         Initialize the OCRToTextConverter class with specified OCR model and formatting options.
 
@@ -157,6 +167,9 @@ class OCRToTextConverter:
                 Defaults to 0.
             max_output_tokens (int | None, optional): Maximum Gemini output tokens.
                 Defaults to `OCR_MAX_OUTPUT_TOKENS`.
+            include_image_descriptions (bool, optional): If True, OCR prompts include
+                brief functional descriptions for meaningful non-text images.
+                Defaults to False.
 
         Raises:
             OSError: If temp directory creation fails
@@ -168,6 +181,7 @@ class OCRToTextConverter:
         self.llm_api_key = llm_api_key
         self.target_size = target_size
         self.timeout_minutes = timeout_minutes
+        self.include_image_descriptions = include_image_descriptions
         requested_output_tokens = OCR_MAX_OUTPUT_TOKENS if max_output_tokens is None else max_output_tokens
         self.max_output_tokens = max(requested_output_tokens, OCR_MIN_OUTPUT_TOKENS)
         self.fallback_stage = fallback_stage
@@ -180,6 +194,13 @@ class OCRToTextConverter:
         self.temp_dir = os.path.abspath(temp_dir)
         os.makedirs(self.temp_dir, exist_ok=True)
         tempfile.tempdir = self.temp_dir
+
+    def _build_prompt_template(self) -> str:
+        base_prompt = OCR_TO_MARKDOWN_PROMPT if self.markdown_output else OCR_TO_PLAIN_TEXT_PROMPT
+        return build_ocr_prompt(
+            base_prompt,
+            include_image_descriptions=self.include_image_descriptions,
+        )
 
     def should_fallback_temperature_retry(self, error: EmptyDocument, temperature: float) -> bool:
         if self.fallback_stage != 0:
@@ -226,6 +247,7 @@ class OCRToTextConverter:
             timeout_minutes=self.timeout_minutes,
             fallback_stage=fallback_stage,
             max_output_tokens=self.max_output_tokens,
+            include_image_descriptions=self.include_image_descriptions,
         )
         result = fallback_converter.get_ocr(
             file_for_ocr=file_for_ocr,
@@ -282,12 +304,9 @@ class OCRToTextConverter:
 
         if self.markdown_output:
             logger.info("Using prompt for markdown format")
-            # Convert the text to markdown format
-            prompt_template = OCR_TO_MARKDOWN_PROMPT
         else:
             logger.info("Using prompt for plain text format")
-            # Convert the text to plain text format
-            prompt_template = OCR_TO_PLAIN_TEXT_PROMPT
+        prompt_template = self._build_prompt_template()
 
         try:
             if self.llm_api_key:

@@ -43,7 +43,8 @@ MIN_DOC_TEXT_LENGTH_ACCEPTED = int(os.getenv("MIN_DOC_TEXT_LENGTH_ACCEPTED", "40
 
 class BaseLoader:
     def __init__(self, markdown_output=True, llm_api_key=None, provider: str = "google", temp_dir: str = "temp",
-                 ocr_model: str = "gpt-5-mini", timeout_minutes: int | None = None, **kwargs):
+                 ocr_model: str = "gpt-5-mini", timeout_minutes: int | None = None,
+                 include_image_descriptions: bool = False, **kwargs):
         """
         Initialize the BaseLoader with cloud storage and LLM configurations.
 
@@ -58,6 +59,9 @@ class BaseLoader:
             provider (str, optional): Provider of the model. Default to "google".
             ocr_model (str, optional): OCR model to use for text extraction from images. Defaults to "gpt-5-mini".
             timeout_minutes (int, optional): Timeout in minutes. Defaults to None.
+            include_image_descriptions (bool, optional): If True, OCR prompts include
+                brief functional descriptions for meaningful non-text images.
+                Defaults to False.
              **kwargs: Additional keyword arguments to pass to the underlying loader or extraction logic.
                 - target_size (int, optional): Target file size in bytes. Defaults to 1MB
                 - source (str): Source of the document. Must be either "cloud" or "local"
@@ -76,6 +80,7 @@ class BaseLoader:
         self.provider = provider
         self.ocr_model = ocr_model
         self.timeout_minutes = timeout_minutes
+        self.include_image_descriptions = include_image_descriptions
         self.kwargs = kwargs
         self.target_size = kwargs.get("target_size", 1)
         self.source = kwargs.get("source", "cloud")
@@ -287,7 +292,7 @@ class BaseLoader:
             file_extension = file_extension.lower()
 
         if is_document_fallback:
-            return DocumentOCRLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, timeout_minutes=self.timeout_minutes, ocr_provider=self.provider, ocr_model=self.ocr_model, **kwargs)
+            return DocumentOCRLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, timeout_minutes=self.timeout_minutes, ocr_provider=self.provider, ocr_model=self.ocr_model, include_image_descriptions=self.include_image_descriptions, **kwargs)
 
         if file_extension in [".xml", ".xbrl"]:
             return XmlXbrlLoader(temp_dir=self.temp_dir, markdown_output=self.markdown_output, **kwargs)
@@ -308,7 +313,7 @@ class BaseLoader:
             elif mime_type.startswith("video/"):
                 return VideoLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, timeout_minutes=self.timeout_minutes, **kwargs)
             elif mime_type.startswith("image/"):
-                return OCRLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, timeout_minutes=self.timeout_minutes, **kwargs)
+                return OCRLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, timeout_minutes=self.timeout_minutes, include_image_descriptions=self.include_image_descriptions, **kwargs)
             elif mime_type.startswith("text/markdown"):
                 return MarkdownLoader(markdown_output=self.markdown_output, temp_dir=self.temp_dir, **kwargs)
             elif mime_type == "text/html":

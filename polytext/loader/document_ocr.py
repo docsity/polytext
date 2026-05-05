@@ -45,6 +45,7 @@ class DocumentOCRLoader:
                  timeout_minutes: int = None,
                  ocr_provider: str = "google",
                  ocr_model: str | None = None,
+                 include_image_descriptions: bool = False,
                  **kwargs
                  ):
         """
@@ -78,6 +79,9 @@ class DocumentOCRLoader:
                 - For Google Gemini: optional / usually ignored.
                 - For Azure OpenAI: **deployment name** (e.g. "gpt-5-mini").
                 Defaults to None.
+            include_image_descriptions (bool, optional): If True, OCR prompts include
+                brief functional descriptions for meaningful non-text images.
+                Defaults to False.
             **kwargs:
                 max_output_tokens (int, optional): Maximum Gemini output tokens for
                     Google document OCR generation.
@@ -100,6 +104,7 @@ class DocumentOCRLoader:
 
         self.ocr_provider = (ocr_provider or "google").lower()
         self.ocr_model = ocr_model
+        self.include_image_descriptions = include_image_descriptions
         self.max_output_tokens = kwargs.get("max_output_tokens")
 
         # Set up custom temp directory
@@ -248,6 +253,7 @@ class DocumentOCRLoader:
                 page_range=self.page_range,
                 timeout_minutes=self.timeout_minutes,
                 ocr_model=self.ocr_model or None,
+                include_image_descriptions=self.include_image_descriptions,
             )
         else:
             result_dict = ocr_fn(
@@ -263,6 +269,7 @@ class DocumentOCRLoader:
                     else None
                 ),
                 max_output_tokens=self.max_output_tokens,
+                include_image_descriptions=self.include_image_descriptions,
             )
 
         result_dict["type"] = self.type
