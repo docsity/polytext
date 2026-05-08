@@ -17,13 +17,17 @@ Your output must be a plain text.
 
 OCR_IMAGE_DESCRIPTION_INSTRUCTIONS = """
 Image description instructions:
-- When meaningful non-text visual content is present, insert a concise description using exactly this format: [Image description: ...].
+VERY IMPORTANT: The language of the image description MUST be the same as the language of the document and its transcription, even if the image contains text in a different language. Always write the description in the document's language.
+- When meaningful non-text visual content is present, insert a concise description using exactly this format: [[DESC: ...]].
 - Insert the description where the image appears in the reading order.
 - If an image visually interrupts a sentence, place the description after the nearest complete sentence or phrase, then continue with the remaining text.
 - Each image description MUST be written in the same language as the document and its transcription.
 - Keep descriptions brief and functional.
 - For diagrams, schemas, charts, maps, screenshots, and visual tables, include all meaningful information needed to understand the context, including labels, relationships, axes, trends, hierarchy, and text inside the image when it is not already transcribed elsewhere.
 - Do not describe purely decorative marks, borders, logos, or icons unless they carry document meaning.
+
+VERY IMPORTANT: The language of the image description MUST be the same as the language of the document and its transcription, even if the image contains text in a different language.
+Always write the description in the document's language. For example, if the document is in Italian, write the description in Italian, if the document is in English, write the description in English, if the document is in Spanish, write the description in Spanish, and so on.
 """
 
 

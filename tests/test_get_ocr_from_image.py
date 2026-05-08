@@ -38,7 +38,7 @@ def main():
 
     # local_file_path = "/Users/marcodelgiudice/Projects/polytext/IMG_9695.jpg"
     # local_file_path = "/Users/marcodelgiudice/Projects/polytext/IMG_9701.jpg"
-    local_file_path = "/Users/marcodelgiudice/Projects/polytext/puniche3.png"
+    local_file_path = "/Users/marcodelgiudice/Projects/polytext/vetrini.png"
 
     try:
         start = time.time()
@@ -48,6 +48,8 @@ def main():
         )
         end = time.time()
         print("Time elapsed: ", end - start)
+
+        print(result_dict["text"])
 
         import ipdb; ipdb.set_trace()
 
