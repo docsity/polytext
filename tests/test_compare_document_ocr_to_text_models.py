@@ -158,6 +158,7 @@ def extract_with_model(
         timeout_minutes=timeout_minutes,
         target_size=target_size,
         page_range=page_range,
+        include_image_descriptions=True
     )
     start = time.time()
     mime_type, _ = mimetypes.guess_type(document_file)

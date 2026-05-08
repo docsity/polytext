@@ -136,7 +136,7 @@ def get_document_ocr(
         dict: Dictionary containing the OCR results and metadata.
     """
     converter = DocumentOCRToTextConverter(
-        ocr_model=ocr_model or "gemini-3.1-flash-lite-preview",
+        ocr_model=ocr_model or "gemini-3.1-flash-lite",
         markdown_output=markdown_output,
         llm_api_key=llm_api_key,
         target_size=target_size,
@@ -148,7 +148,7 @@ def get_document_ocr(
     return converter.get_document_ocr(document_for_ocr)
 
 class DocumentOCRToTextConverter:
-    def __init__(self, ocr_model="gemini-3.1-flash-lite-preview", ocr_model_provider="google",
+    def __init__(self, ocr_model="gemini-3.1-flash-lite", ocr_model_provider="google",
                 markdown_output=True, llm_api_key=None, target_size=1, temp_dir="temp",
                  page_range=None, timeout_minutes: int = None, fallback_stage: int = 0,
                  max_output_tokens: int | None = None, include_image_descriptions: bool = False):
@@ -159,7 +159,7 @@ class DocumentOCRToTextConverter:
         It supports various image formats and can output either plain text or markdown.
 
         Args:
-            ocr_model (str): Model name for OCR processing. Defaults to "gemini-3.1-flash-lite-preview".
+            ocr_model (str): Model name for OCR processing. Defaults to "gemini-3.1-flash-lite".
             ocr_model_provider (str): Provider of OCR service. Defaults to "google".
             markdown_output (bool): Enable markdown formatting in output. Defaults to True.
             llm_api_key (str, optional): Override API key for language model. Defaults to None.

@@ -5,6 +5,7 @@ Maintain paragraph breaks and formatting.
 Your output must be a markdown-formatted text.
 In particular, use markdown headings (#, ##, ###, etc.) to reproduce the structure of the document and preserve bold, italic or underlined words and phrases.
 Use the first level heading (#) only if you are absolutely sure that the text is the title of the document, otherwise use lower level headings (e.g. ##, ###).
+Use LaTeX syntax to represent mathematical formulas, equations, and symbols, ensuring they are properly formatted for markdown rendering.
 Furthermore, you must omit page numbers in the final text.
 In case no readable text is present, write exactly "no readable text present".
 """
