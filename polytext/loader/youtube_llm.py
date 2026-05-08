@@ -22,10 +22,11 @@ YOUTUBE_MAX_OUTPUT_TOKENS = int(os.getenv("YOUTUBE_MAX_OUTPUT_TOKENS", "50000"))
 YOUTUBE_MIN_OUTPUT_TOKENS = 500
 YOUTUBE_TAIL_REPETITION_LINES = int(os.getenv("YOUTUBE_TAIL_REPETITION_LINES", "200"))
 YOUTUBE_TAIL_REPETITION_THRESHOLD = float(os.getenv("YOUTUBE_TAIL_REPETITION_THRESHOLD", "0.35"))
-YOUTUBE_FALLBACK_SOURCE_PATTERN = os.getenv("YOUTUBE_FALLBACK_SOURCE_PATTERN", "flash-lite-preview")
+YOUTUBE_FALLBACK_SOURCE_PATTERN = os.getenv("YOUTUBE_FALLBACK_SOURCE_PATTERN", "flash-lite")
 YOUTUBE_FALLBACK_MODEL = os.getenv("YOUTUBE_FALLBACK_MODEL", "models/gemini-3-flash-preview")
 YOUTUBE_FALLBACK_TEMPERATURE = 1.0
 YOUTUBE_FINAL_FALLBACK_MODEL = os.getenv("YOUTUBE_FINAL_FALLBACK_MODEL", "models/gemini-2.5-flash")
+YOUTUBE_FINAL_FALLBACK_TEMPERATURE = float(os.getenv("YOUTUBE_FINAL_FALLBACK_TEMPERATURE", "0.0"))
 
 class YoutubeTranscriptLoaderWithLlm:
     """
@@ -45,14 +46,14 @@ class YoutubeTranscriptLoaderWithLlm:
         type (str): Loader type identifier ("youtube_gemini").
     """
 
-    def __init__(self, llm_api_key: str = None, model="models/gemini-3.1-flash-lite-preview", model_provider="google", markdown_output: bool = True, temp_dir: str = 'temp',
+    def __init__(self, llm_api_key: str = None, model="models/gemini-3.1-flash-lite", model_provider="google", markdown_output: bool = True, temp_dir: str = 'temp',
                  save_transcript_chunks: bool = False, timeout_minutes: int = None, **kwargs) -> None:
         """
         Initialize the YoutubeTranscriptLoaderWithLlm class with API key and configuration.
 
         Args:
             llm_api_key (str, optional): API key for the LLM used for processing.
-            model (str, optional): Name of the LLM model used for transcription (default: "models/gemini-3.1-flash-lite-preview").
+            model (str, optional): Name of the LLM model used for transcription (default: "models/gemini-3.1-flash-lite").
             model_provider (str, optional): Provider of the LLM model (default: "google").
             markdown_output (bool, optional): Whether to format the extracted text as Markdown (default: True).
             temp_dir (str, optional): Temporary directory to store intermediate transcript files (default: 'temp').
@@ -73,14 +74,31 @@ class YoutubeTranscriptLoaderWithLlm:
         self.fallback_model = YOUTUBE_FALLBACK_MODEL
         self.fallback_temperature = YOUTUBE_FALLBACK_TEMPERATURE
         self.final_fallback_model = YOUTUBE_FINAL_FALLBACK_MODEL
+        self.final_fallback_temperature = YOUTUBE_FINAL_FALLBACK_TEMPERATURE
 
     def should_fallback_temperature_retry(self, error: EmptyDocument, temperature: float) -> bool:
-        if error.code not in (997, 999, 996):
+        logger.info(
+            "Checking if error code %s qualifies for fallback retry. Current temperature: %s",
+            error.code,
+            temperature,
+        )
+        if error.code not in (997, 999, 996, 995):
             return False
         if self.fallback_model == self.model and temperature == self.fallback_temperature:
+            logger.info(
+                "Already attempted fallback retry with model %s and temperature %s",
+                self.fallback_model,
+                self.fallback_temperature,
+            )
             return False
         if self.fallback_source_pattern not in self.model:
             return False
+        logger.info(
+            "Error code %s qualifies for fallback retry with model %s and temperature %s",
+            error.code,
+            self.fallback_model,
+            self.fallback_temperature,
+        )
         return True
 
     def run_fallback(self, video_url: str, reason: str, fallback_model: str, fallback_temperature: float) -> dict:
@@ -107,10 +125,25 @@ class YoutubeTranscriptLoaderWithLlm:
         return result
 
     def should_final_fallback_model(self, error: EmptyDocument) -> bool:
-        if error.code not in (997, 999, 996):
+        logger.info(
+            "Checking if error code %s qualifies for final fallback model retry. Current model: %s, final fallback model: %s",
+            error.code,
+            self.model,
+            self.final_fallback_model,
+        )
+        if error.code not in (997, 999, 996, 995):
             return False
         if self.final_fallback_model == self.model:
+            logger.info(
+                "Already attempted final fallback model retry with model %s",
+                self.final_fallback_model,
+            )
             return False
+        logger.info(
+            "Error code %s qualifies for final fallback retry with model %s",
+            error.code,
+            self.final_fallback_model,
+        )
         return self.model == self.fallback_model
 
     def build_config(self, output_budget: int, prompt_template: str, temperature: float = 0.0) -> types.GenerateContentConfig:
@@ -251,10 +284,10 @@ class YoutubeTranscriptLoaderWithLlm:
             total_tokens = getattr(usage_metadata, "total_token_count", 0) or 0
 
             if response.usage_metadata:
-                print(f"Token in prompt: {prompt_tokens}")
-                print(f"Token in output: {completion_tokens}")
-                print(f"Token total: {total_tokens}")
-                print(f"Response text length: {len(response_text)}")
+                logger.info("Token in prompt: %s", prompt_tokens)
+                logger.info("Token in output: %s", completion_tokens)
+                logger.info("Token total: %s", total_tokens)
+                logger.info("Response text length: %s", len(response_text))
 
             if finish_reason and "RECITATION" in finish_reason:
                 raise EmptyDocument(
@@ -280,7 +313,17 @@ class YoutubeTranscriptLoaderWithLlm:
                 logger.info(message)
                 raise EmptyDocument(message=message, code=998)
 
-            result_dict = {"text": response_text if response_text and "no human speech detected" not in response_text.lower() else "",
+            no_human_speech_detected = (
+                response_text
+                and "no human speech detected" in response_text.lower()
+            )
+            if no_human_speech_detected:
+                logger.info(
+                    "Gemini YouTube response for %s was: no human speech detected",
+                    video_url,
+                )
+
+            result_dict = {"text": response_text if response_text and not no_human_speech_detected else "",
                            "completion_tokens": completion_tokens,
                            "prompt_tokens": prompt_tokens,
                            "completion_model": self.model,
@@ -293,6 +336,7 @@ class YoutubeTranscriptLoaderWithLlm:
             logger.info(f"Gemini - YouTube performed using {self.model} in {time_elapsed:.2f} seconds")
             return result_dict
         except EmptyDocument as e:
+            logger.info("EmptyDocument error occurred with code %s and message: %s", e.code, e.message)
             if self.should_fallback_temperature_retry(e, temperature):
                 return self.run_fallback(
                     video_url=video_url,
@@ -305,17 +349,45 @@ class YoutubeTranscriptLoaderWithLlm:
                     video_url=video_url,
                     reason=e.message,
                     fallback_model=self.final_fallback_model,
-                    fallback_temperature=self.fallback_temperature,
+                    fallback_temperature=self.final_fallback_temperature,
                 )
             raise
 
         except errors.ClientError as e:
-            if e.status == 'INVALID_ARGUMENT':
-                raise Exception(f"Invalid argument: {e.message}")
-            else:
+            logger.info(
+                "ClientError occurred with status %s, message: %s, details: %s",
+                e.status,
+                e.message,
+                getattr(e, "details", None),
+            )
+            if e.status != 'INVALID_ARGUMENT':
                 raise e
 
+            e_tmp = EmptyDocument(
+                message=(
+                    f"ClientError occurred with status {e.status}, message: {e.message}, "
+                    f"details: {getattr(e, 'details', None)} for video: {video_url}"
+                ),
+                code=995,
+            )
+            if self.should_fallback_temperature_retry(e_tmp, temperature):
+                return self.run_fallback(
+                    video_url=video_url,
+                    reason=e.message,
+                    fallback_model=self.fallback_model,
+                    fallback_temperature=self.fallback_temperature,
+                )
+            if self.should_final_fallback_model(e_tmp):
+                return self.run_fallback(
+                    video_url=video_url,
+                    reason=e.message,
+                    fallback_model=self.final_fallback_model,
+                    fallback_temperature=self.final_fallback_temperature,
+                )
+            raise Exception(f"Invalid argument: {e.message}; details={getattr(e, 'details', None)}")
+
         except errors.ServerError as e:
+            logger.info("ServerError occurred with status %s and message: %s", e.status, e.message)
             code = getattr(e, "code", None)
             status = getattr(e, "status", None)
             msg = str(getattr(e, "message", "")) or str(e)

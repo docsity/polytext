@@ -20,6 +20,23 @@ def repetition_ratio(items: list[str], min_occurrences: int = 2) -> float:
     return repeated_items / len(items)
 
 
+def has_consecutive_repetition(items: list[str], min_run_length: int = 3) -> bool:
+    previous = None
+    run_length = 0
+
+    for item in items:
+        if item == previous:
+            run_length += 1
+        else:
+            previous = item
+            run_length = 1
+
+        if run_length >= min_run_length:
+            return True
+
+    return False
+
+
 def tail_has_excessive_repetition(
     text: str,
     tail_lines: int,
@@ -30,10 +47,14 @@ def tail_has_excessive_repetition(
 
     lines = [normalize_text_line(line) for line in text.splitlines() if normalize_text_line(line)]
     tail = lines[-tail_lines:] if len(lines) > tail_lines else lines
+    if has_consecutive_repetition(tail):
+        return True
     if len(tail) >= 4 and repetition_ratio(tail) >= threshold:
         return True
 
     sentences = split_sentences("\n".join(tail))
+    if has_consecutive_repetition(sentences):
+        return True
     if len(sentences) >= 4 and repetition_ratio(sentences) >= threshold:
         return True
 
