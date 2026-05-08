@@ -30,7 +30,7 @@ def main():
         source=source,
         markdown_output=markdown_output,
         timeout_minutes=1,
-        include_image_descriptions=True
+        # include_image_descriptions=True # Non necessario esplicitarlo, controllato da env var OCR_INCLUDE_IMAGE_DESCRIPTIONS
     )
 
     # Define document data
