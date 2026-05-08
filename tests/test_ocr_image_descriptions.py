@@ -1,3 +1,4 @@
+import os
 import sys
 import types
 import unittest
@@ -45,7 +46,7 @@ class TestOCRImageDescriptions(unittest.TestCase):
         )
 
         self.assertTrue(prompt.startswith(OCR_TO_MARKDOWN_PROMPT.strip()))
-        self.assertIn("[Image description:", prompt)
+        self.assertIn("[[DESC:", prompt)
         self.assertIn(OCR_IMAGE_DESCRIPTION_INSTRUCTIONS.strip(), prompt)
 
     def test_image_description_instructions_preserve_document_language(self):
@@ -55,12 +56,36 @@ class TestOCRImageDescriptions(unittest.TestCase):
         )
 
         self.assertIn(
-            "Write each image description in the same language as the document",
+            "Each image description MUST be written in the same language as the document",
             prompt,
         )
 
     def test_base_loader_stores_include_image_descriptions(self):
         loader = BaseLoader(source="local", include_image_descriptions=True)
+
+        self.assertTrue(loader.include_image_descriptions)
+
+    def test_base_loader_defaults_image_descriptions_from_env(self):
+        with patch.dict(os.environ, {"OCR_INCLUDE_IMAGE_DESCRIPTIONS": "true"}):
+            loader = BaseLoader(source="local")
+
+        self.assertTrue(loader.include_image_descriptions)
+
+    def test_base_loader_explicit_false_overrides_image_description_env(self):
+        with patch.dict(os.environ, {"OCR_INCLUDE_IMAGE_DESCRIPTIONS": "true"}):
+            loader = BaseLoader(
+                source="local",
+                include_image_descriptions=False,
+            )
+
+        self.assertFalse(loader.include_image_descriptions)
+
+    def test_base_loader_explicit_true_overrides_image_description_env(self):
+        with patch.dict(os.environ, {"OCR_INCLUDE_IMAGE_DESCRIPTIONS": "false"}):
+            loader = BaseLoader(
+                source="local",
+                include_image_descriptions=True,
+            )
 
         self.assertTrue(loader.include_image_descriptions)
 
@@ -94,14 +119,14 @@ class TestOCRImageDescriptions(unittest.TestCase):
 
         prompt = converter._build_prompt_template()
 
-        self.assertIn("[Image description:", prompt)
+        self.assertIn("[[DESC:", prompt)
 
     def test_google_document_ocr_converter_builds_augmented_markdown_prompt(self):
         converter = DocumentOCRToTextConverter(include_image_descriptions=True)
 
         prompt = converter._build_prompt_template()
 
-        self.assertIn("[Image description:", prompt)
+        self.assertIn("[[DESC:", prompt)
 
     def test_google_ocr_fallback_preserves_include_image_descriptions(self):
         converter = OCRToTextConverter(include_image_descriptions=True)

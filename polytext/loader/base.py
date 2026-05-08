@@ -39,12 +39,20 @@ dotenv.load_dotenv()
 logger = logging.getLogger(__name__)
 
 MIN_DOC_TEXT_LENGTH_ACCEPTED = int(os.getenv("MIN_DOC_TEXT_LENGTH_ACCEPTED", "400"))
+OCR_INCLUDE_IMAGE_DESCRIPTIONS_ENV = "OCR_INCLUDE_IMAGE_DESCRIPTIONS"
+
+
+def _read_bool_env(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
 class BaseLoader:
     def __init__(self, markdown_output=True, llm_api_key=None, provider: str = "google", temp_dir: str = "temp",
                  ocr_model: str = "gpt-5-mini", timeout_minutes: int | None = None,
-                 include_image_descriptions: bool = False, **kwargs):
+                 include_image_descriptions: bool | None = None, **kwargs):
         """
         Initialize the BaseLoader with cloud storage and LLM configurations.
 
@@ -59,9 +67,9 @@ class BaseLoader:
             provider (str, optional): Provider of the model. Default to "google".
             ocr_model (str, optional): OCR model to use for text extraction from images. Defaults to "gpt-5-mini".
             timeout_minutes (int, optional): Timeout in minutes. Defaults to None.
-            include_image_descriptions (bool, optional): If True, OCR prompts include
-                brief functional descriptions for meaningful non-text images.
-                Defaults to False.
+            include_image_descriptions (bool | None, optional): If True, OCR prompts
+                include brief functional descriptions for meaningful non-text images.
+                If None, defaults from OCR_INCLUDE_IMAGE_DESCRIPTIONS. Defaults to None.
              **kwargs: Additional keyword arguments to pass to the underlying loader or extraction logic.
                 - target_size (int, optional): Target file size in bytes. Defaults to 1MB
                 - source (str): Source of the document. Must be either "cloud" or "local"
@@ -80,7 +88,11 @@ class BaseLoader:
         self.provider = provider
         self.ocr_model = ocr_model
         self.timeout_minutes = timeout_minutes
-        self.include_image_descriptions = include_image_descriptions
+        self.include_image_descriptions = (
+            _read_bool_env(OCR_INCLUDE_IMAGE_DESCRIPTIONS_ENV)
+            if include_image_descriptions is None
+            else include_image_descriptions
+        )
         self.kwargs = kwargs
         self.target_size = kwargs.get("target_size", 1)
         self.source = kwargs.get("source", "cloud")
