@@ -8,7 +8,7 @@ from polytext.converter.audio_to_text import (
     AUDIO_TO_MARKDOWN_PROMPT,
     AUDIO_TO_PLAIN_TEXT_PROMPT,
     AudioToTextConverter,
-    preprocess_audio_for_transcription,
+    normalize_no_human_speech_marker,
     transcribe_full_audio,
 )
 
@@ -115,42 +115,25 @@ class _ImmediateExecutor:
 
 
 class TestAudioTranscriptionModelMigration(unittest.TestCase):
-    @patch("polytext.converter.audio_to_text.ffmpeg")
-    def test_preprocess_audio_for_transcription_trims_leading_and_trailing_silence(self, mock_ffmpeg):
-        with tempfile.NamedTemporaryFile(suffix=".wav") as temp_audio:
-            fake_stream = MagicMock()
-            mock_ffmpeg.input.return_value.filter.return_value = fake_stream
-            fake_stream.filter.return_value = fake_stream
+    def test_normalize_no_human_speech_marker_returns_empty_for_marker_only(self):
+        cleaned_text, marker_only = normalize_no_human_speech_marker("no human speech detected")
 
-            output_path = preprocess_audio_for_transcription(temp_audio.name, bitrate_quality=7)
+        self.assertEqual(cleaned_text, "")
+        self.assertTrue(marker_only)
 
-        self.assertTrue(output_path.endswith(".mp3"))
-        self.assertEqual(mock_ffmpeg.input.call_args.args[0], temp_audio.name)
-        first_filter = mock_ffmpeg.input.return_value.filter.call_args_list[0]
-        self.assertEqual(first_filter.args[0], "silenceremove")
-        self.assertEqual(first_filter.kwargs["start_periods"], 1)
-        self.assertEqual(first_filter.kwargs["start_silence"], 0.3)
-        self.assertEqual(first_filter.kwargs["start_threshold"], "-50dB")
+    def test_normalize_no_human_speech_marker_removes_marker_from_mixed_text(self):
+        cleaned_text, marker_only = normalize_no_human_speech_marker(
+            "Testo reale\nno human speech detected\nAltro testo"
+        )
 
-        reverse_call = fake_stream.filter.call_args_list[0]
-        self.assertEqual(reverse_call.args[0], "areverse")
-
-        second_trim_call = fake_stream.filter.call_args_list[1]
-        self.assertEqual(second_trim_call.args[0], "silenceremove")
-
-        output_kwargs = fake_stream.output.call_args.kwargs
-        self.assertEqual(output_kwargs["q"], 7)
-        self.assertEqual(output_kwargs["acodec"], "libmp3lame")
-        self.assertEqual(output_kwargs["ac"], 1)
-        self.assertEqual(output_kwargs["ar"], 16000)
+        self.assertEqual(cleaned_text, "Testo reale\n\nAltro testo")
+        self.assertFalse(marker_only)
 
     @patch("polytext.converter.audio_to_text.TextMerger")
     @patch("polytext.converter.audio_to_text.AudioChunker")
     @patch.object(AudioToTextConverter, "process_chunk")
-    @patch("polytext.converter.audio_to_text.preprocess_audio_for_transcription")
-    def test_transcribe_full_audio_always_preprocesses_input_before_chunking(
+    def test_transcribe_full_audio_uses_original_input_for_chunking_when_no_conversion_needed(
         self,
-        mock_preprocess,
         mock_process_chunk,
         mock_chunker_cls,
         mock_text_merger_cls,
@@ -168,25 +151,27 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
             "prompt_tokens": 3,
         }
 
-        with tempfile.NamedTemporaryFile(suffix=".wav") as source_audio, tempfile.NamedTemporaryFile(suffix=".mp3") as processed_audio:
+        with tempfile.NamedTemporaryFile(suffix=".mp3") as source_audio:
             source_audio.write(b"fake-audio")
             source_audio.flush()
-            mock_preprocess.return_value = processed_audio.name
 
             converter = AudioToTextConverter()
             result = converter.transcribe_full_audio(source_audio.name)
 
         self.assertEqual(result["text"], "chunk transcript")
-        mock_preprocess.assert_called_once_with(source_audio.name, bitrate_quality=converter.bitrate_quality)
-        self.assertEqual(mock_chunker_cls.call_args.args[0], processed_audio.name)
+        self.assertEqual(mock_chunker_cls.call_args.args[0], source_audio.name)
 
     def test_audio_prompts_forbid_filling_silence(self):
-        self.assertIn("do not invent or infer speech", AUDIO_TO_MARKDOWN_PROMPT.lower())
-        self.assertIn("do not invent or infer speech", AUDIO_TO_PLAIN_TEXT_PROMPT.lower())
+        self.assertIn("transcribe only clear human speech", AUDIO_TO_MARKDOWN_PROMPT.lower())
+        self.assertIn("transcribe only clear human speech", AUDIO_TO_PLAIN_TEXT_PROMPT.lower())
+        self.assertIn("do not generate text during silence or background noise", AUDIO_TO_MARKDOWN_PROMPT.lower())
+        self.assertIn("do not generate text during silence or background noise", AUDIO_TO_PLAIN_TEXT_PROMPT.lower())
+        self.assertIn("no human speech detected", AUDIO_TO_MARKDOWN_PROMPT.lower())
+        self.assertIn("no human speech detected", AUDIO_TO_PLAIN_TEXT_PROMPT.lower())
 
     def test_default_audio_transcription_model_is_gemini_3_1_flash_lite_preview(self):
         converter = AudioToTextConverter()
-        self.assertEqual(converter.transcription_model, "gemini-3.1-flash-lite-preview")
+        self.assertEqual(converter.transcription_model, "gemini-3.1-flash-lite")
 
     def test_default_audio_max_llm_tokens_is_4250(self):
         converter = AudioToTextConverter()
@@ -215,7 +200,7 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
     @patch("polytext.converter.audio_to_text.os.path.getsize", return_value=21 * 1024 * 1024)
     def test_count_tokens_uses_selected_transcription_model_for_large_audio(self, _mock_getsize):
         fake_client = _FakeClient()
-        selected_model = "gemini-3.1-flash-lite-preview"
+        selected_model = "gemini-3.1-flash-lite"
 
         with patch("polytext.converter.audio_to_text.genai.Client", return_value=fake_client):
             converter = AudioToTextConverter(transcription_model=selected_model)
@@ -299,11 +284,11 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
         self.assertEqual(result["transcript"], "fallback transcript")
         self.assertEqual(
             fake_client.models.generate_content_models,
-            ["gemini-3.1-flash-lite-preview", "gemini-3-flash-preview"],
+            ["gemini-3.1-flash-lite", "gemini-3-flash-preview"],
         )
         self.assertEqual(fake_client.models.generate_content_temperatures, [0, 1.0])
         self.assertEqual(result["completion_model"], "gemini-3-flash-preview")
-        self.assertEqual(result["fallback_from_model"], "gemini-3.1-flash-lite-preview")
+        self.assertEqual(result["fallback_from_model"], "gemini-3.1-flash-lite")
         self.assertEqual(result["fallback_to_model"], "gemini-3-flash-preview")
         self.assertIn("recitation", result["fallback_reason"].lower())
 
@@ -326,7 +311,7 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
         self.assertEqual(result["transcript"], "fallback transcript")
         self.assertEqual(
             fake_client.models.generate_content_models,
-            ["gemini-3.1-flash-lite-preview", "gemini-3-flash-preview"],
+            ["gemini-3.1-flash-lite", "gemini-3-flash-preview"],
         )
         self.assertIn("max output tokens", result["fallback_reason"].lower())
 
@@ -350,7 +335,7 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
         self.assertEqual(result["transcript"], "fallback transcript")
         self.assertEqual(
             fake_client.models.generate_content_models,
-            ["gemini-3.1-flash-lite-preview", "gemini-3-flash-preview"],
+            ["gemini-3.1-flash-lite", "gemini-3-flash-preview"],
         )
         self.assertIn("repetitive tail", result["fallback_reason"].lower())
 
@@ -368,21 +353,49 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
             result = converter.transcribe_audio(temp_audio.name)
 
         self.assertEqual(result["transcript"], "healthy transcript")
-        self.assertEqual(fake_client.models.generate_content_models, ["gemini-3.1-flash-lite-preview"])
-        self.assertEqual(result["completion_model"], "gemini-3.1-flash-lite-preview")
+        self.assertEqual(fake_client.models.generate_content_models, ["gemini-3.1-flash-lite"])
+        self.assertEqual(result["completion_model"], "gemini-3.1-flash-lite")
         self.assertEqual(result["finish_reason"], "STOP")
         self.assertNotIn("fallback_from_model", result)
+
+    @patch("polytext.converter.audio_to_text.genai.Client")
+    def test_marker_only_response_becomes_empty_transcript(self, mock_client_cls):
+        fake_client = _FakeClient(
+            responses=[_make_response("no human speech detected", finish_reason="STOP")]
+        )
+        mock_client_cls.return_value = fake_client
+
+        converter = AudioToTextConverter()
+        with tempfile.NamedTemporaryFile(suffix=".mp3") as temp_audio:
+            temp_audio.write(b"fake-audio")
+            temp_audio.flush()
+            result = converter.transcribe_audio(temp_audio.name)
+
+        self.assertEqual(result["transcript"], "")
+
+    @patch("polytext.converter.audio_to_text.genai.Client")
+    def test_marker_is_removed_when_mixed_with_real_text(self, mock_client_cls):
+        fake_client = _FakeClient(
+            responses=[_make_response("Contenuto vero\nno human speech detected\nAltro contenuto", finish_reason="STOP")]
+        )
+        mock_client_cls.return_value = fake_client
+
+        converter = AudioToTextConverter()
+        with tempfile.NamedTemporaryFile(suffix=".mp3") as temp_audio:
+            temp_audio.write(b"fake-audio")
+            temp_audio.flush()
+            result = converter.transcribe_audio(temp_audio.name)
+
+        self.assertEqual(result["transcript"], "Contenuto vero\n\nAltro contenuto")
 
     @patch("polytext.converter.audio_to_text.as_completed", side_effect=lambda futures: list(futures))
     @patch("polytext.converter.audio_to_text.ThreadPoolExecutor", new=_ImmediateExecutor)
     @patch("polytext.converter.audio_to_text.TextMerger")
     @patch("polytext.converter.audio_to_text.AudioChunker")
-    @patch("polytext.converter.audio_to_text.preprocess_audio_for_transcription")
     @patch("polytext.converter.audio_to_text.genai.Client")
     def test_chunked_audio_retries_only_the_failing_chunk(
         self,
         mock_client_cls,
-        mock_preprocess,
         mock_chunker_cls,
         mock_text_merger_cls,
         _mock_as_completed,
@@ -410,7 +423,6 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
             for handle in (source_audio, chunk_one, chunk_two):
                 handle.write(b"fake-audio")
                 handle.flush()
-            mock_preprocess.return_value = source_audio.name
 
             fake_chunker.extract_chunks.return_value = [
                 {"file_path": chunk_one.name},
@@ -423,8 +435,8 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
         self.assertEqual(
             fake_client.models.generate_content_models,
             [
-                "gemini-3.1-flash-lite-preview",
-                "gemini-3.1-flash-lite-preview",
+                "gemini-3.1-flash-lite",
+                "gemini-3.1-flash-lite",
                 "gemini-3-flash-preview",
             ],
         )
@@ -437,10 +449,8 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
     @patch("polytext.converter.audio_to_text.ThreadPoolExecutor", new=_ImmediateExecutor)
     @patch("polytext.converter.audio_to_text.TextMerger")
     @patch("polytext.converter.audio_to_text.AudioChunker")
-    @patch("polytext.converter.audio_to_text.preprocess_audio_for_transcription")
     def test_transcribe_full_audio_uses_max_llm_tokens_for_chunking_when_output_budget_differs(
         self,
-        mock_preprocess,
         mock_chunker_cls,
         mock_text_merger_cls,
         _mock_as_completed,
@@ -465,7 +475,6 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
             with tempfile.NamedTemporaryFile(suffix=".mp3") as source_audio:
                 source_audio.write(b"fake-audio")
                 source_audio.flush()
-                mock_preprocess.return_value = source_audio.name
                 converter.transcribe_full_audio(source_audio.name)
 
         self.assertEqual(mock_chunker_cls.call_args.kwargs["max_llm_tokens"], 4250)

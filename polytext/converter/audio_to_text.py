@@ -5,6 +5,8 @@ import tempfile
 import time
 import mimetypes
 import uuid
+import re
+import ffmpeg
 from retry import retry
 from google import genai
 from google.genai import types
@@ -19,11 +21,6 @@ from ..processor.text_merger import TextMerger
 from .gemini_quality_guards import extract_finish_reason, tail_has_excessive_repetition
 
 logger = logging.getLogger(__name__)
-
-try:
-    import ffmpeg
-except ImportError:  # pragma: no cover - exercised only in environments without ffmpeg-python
-    ffmpeg = None
 
 SUPPORTED_MIME_TYPES = {
     'audio/x-aac', 'audio/flac', 'audio/mp3', 'audio/m4a', 'audio/mpeg',
@@ -46,17 +43,28 @@ INJECTION_GUARD_SYSTEM_INSTRUCTION = (
 AUDIO_MIN_OUTPUT_TOKENS = 500
 AUDIO_TAIL_REPETITION_LINES = int(os.getenv("AUDIO_TAIL_REPETITION_LINES", "200"))
 AUDIO_TAIL_REPETITION_THRESHOLD = float(os.getenv("AUDIO_TAIL_REPETITION_THRESHOLD", "0.35"))
-AUDIO_FALLBACK_SOURCE_PATTERN = os.getenv("AUDIO_FALLBACK_SOURCE_PATTERN", "flash-lite-preview")
+AUDIO_FALLBACK_SOURCE_PATTERN = os.getenv("AUDIO_FALLBACK_SOURCE_PATTERN", "flash-lite")
 AUDIO_FALLBACK_MODEL = os.getenv("AUDIO_FALLBACK_MODEL", "gemini-3-flash-preview")
 AUDIO_FALLBACK_TEMPERATURE = float(os.getenv("AUDIO_FALLBACK_TEMPERATURE", "1.0"))
 AUDIO_FINAL_FALLBACK_MODEL = os.getenv("AUDIO_FINAL_FALLBACK_MODEL", "gemini-2.0-flash")
 AUDIO_FILE_UPLOAD_THRESHOLD_BYTES = 20 * 1024 * 1024
+NO_HUMAN_SPEECH_MARKER = "no human speech detected"
 
 
-def _require_ffmpeg():
-    if ffmpeg is None:
-        raise ImportError("ffmpeg-python is required for audio preprocessing")
-    return ffmpeg
+def normalize_no_human_speech_marker(text: str) -> tuple[str, bool]:
+    if not text:
+        return "", False
+
+    marker_line_pattern = re.compile(r"(?im)^\s*no human speech detected\s*$")
+    non_empty_lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if non_empty_lines and all(line.lower() == NO_HUMAN_SPEECH_MARKER for line in non_empty_lines):
+        return "", True
+
+    cleaned_text = marker_line_pattern.sub("", text)
+    cleaned_text = re.sub(r"(?i)\bno human speech detected\b", "", cleaned_text)
+    cleaned_text = re.sub(r"\n{3,}", "\n\n", cleaned_text).strip()
+    return cleaned_text, False
+
 
 def compress_and_convert_audio(input_path: str, bitrate_quality: int = 9) -> str:
     """
@@ -82,10 +90,9 @@ def compress_and_convert_audio(input_path: str, bitrate_quality: int = 9) -> str
     os.close(fd)
 
     logger.info(f"Compressing audio to bitrate quality: {bitrate_quality}")
-    ffmpeg_module = _require_ffmpeg()
-    ffmpeg_module.input(input_path).output(
+    ffmpeg.input(input_path).output(
         temp_audio_path,
-        q=bitrate_quality, # Variable bitrate quality (0-9, 9 being lowest)
+        q=bitrate_quality,  # Variable bitrate quality (0-9, 9 being lowest)
         acodec='libmp3lame',
         ac=1,  # Convert to mono
         ar=16000,  # Lower sample rate
@@ -97,59 +104,6 @@ def compress_and_convert_audio(input_path: str, bitrate_quality: int = 9) -> str
     logger.info(f"Successfully converted and compressed audio: {temp_audio_path}")
     return temp_audio_path
 
-
-def preprocess_audio_for_transcription(
-        input_path: str,
-        bitrate_quality: int = 9,
-        silence_threshold: str = "-45dB",
-        min_silence_duration_seconds: float = 0.5,
-) -> str:
-    """
-    Trim silence only at the start/end of the audio and normalize it to a compact MP3.
-
-    Internal pauses are preserved. The resulting audio is mono, 16kHz, and ready for chunking.
-    """
-    fd, temp_audio_path = tempfile.mkstemp(suffix=".mp3")
-    os.close(fd)
-
-    ffmpeg_module = _require_ffmpeg()
-
-    logger.info(
-        "Preprocessing audio for transcription with boundary silence trimming: threshold=%s, min_silence=%ss",
-        silence_threshold,
-        min_silence_duration_seconds,
-    )
-
-    stream = ffmpeg_module.input(input_path)
-    stream = stream.filter(
-        "silenceremove",
-        start_periods=1,
-        start_duration=min_silence_duration_seconds,
-        start_silence=min_silence_duration_seconds,
-        start_threshold=silence_threshold,
-    )
-    stream = stream.filter("areverse")
-    stream = stream.filter(
-        "silenceremove",
-        start_periods=1,
-        start_duration=min_silence_duration_seconds,
-        start_silence=min_silence_duration_seconds,
-        start_threshold=silence_threshold,
-    )
-    stream = stream.filter("areverse")
-    stream.output(
-        temp_audio_path,
-        q=bitrate_quality,
-        acodec="libmp3lame",
-        ac=1,
-        ar=16000,
-        vn=None,
-        threads=0,
-        loglevel="error",
-    ).run(quiet=True, overwrite_output=True)
-
-    logger.info("Successfully preprocessed audio for transcription: %s", temp_audio_path)
-    return temp_audio_path
 
 def transcribe_full_audio(audio_file, markdown_output: bool = False,
                           llm_api_key: str = None,
@@ -183,16 +137,19 @@ def transcribe_full_audio(audio_file, markdown_output: bool = False,
                                      max_llm_tokens=max_llm_tokens, max_output_tokens=max_output_tokens)
     return converter.transcribe_full_audio(audio_file, save_transcript_chunks)
 
+
 class AudioToTextConverter:
-    def __init__(self, transcription_model: str ="gemini-3.1-flash-lite-preview", transcription_model_provider: str ="google",
-                 k: int =5, min_matches: int =3, markdown_output: bool =True, llm_api_key: str =None, max_llm_tokens: int =4250,
-                 max_output_tokens: int | None =None, temp_dir: str ="temp",
-                 bitrate_quality: int =9, timeout_minutes: int =None):
+    def __init__(self, transcription_model: str = "gemini-3.1-flash-lite",
+                 transcription_model_provider: str = "google",
+                 k: int = 5, min_matches: int = 3, markdown_output: bool = True, llm_api_key: str = None,
+                 max_llm_tokens: int = 4250,
+                 max_output_tokens: int | None = None, temp_dir: str = "temp",
+                 bitrate_quality: int = 9, timeout_minutes: int = None):
         """
         Initialize the AudioToTextConverter class with a specified transcription model and provider.
 
         Args:
-            transcription_model (str): Model name for transcription. Defaults to "gemini-3.1-flash-lite-preview".
+            transcription_model (str): Model name for transcription. Defaults to "gemini-3.1-flash-lite".
             transcription_model_provider (str): Provider of transcription service. Defaults to "google".
             k (int): Number of words to use when searching for overlap between chunks. Defaults to 5.
             min_matches (int): Minimum matching words for chunk merging. Defaults to 3.
@@ -466,8 +423,10 @@ class AudioToTextConverter:
                     code=997,
                 )
 
+            response_text, marker_only = normalize_no_human_speech_marker(response_text)
+
             response_dict = {
-                "transcript": response_text if "no human speech detected" not in response_text.lower() else "",
+                "transcript": "" if marker_only else response_text,
                 "completion_tokens": completion_tokens,
                 "prompt_tokens": prompt_tokens,
                 "completion_model": self.transcription_model,
@@ -533,18 +492,29 @@ class AudioToTextConverter:
         mime_type, _ = mimetypes.guess_type(audio_path)
         logger.info(f"Original MIME type: {mime_type}")
 
+        # Check if conversion and/or compression is needed
         needs_conversion = mime_type not in SUPPORTED_MIME_TYPES
-        needs_compression = file_size > AUDIO_FILE_UPLOAD_THRESHOLD_BYTES
-        logger.info(
-            "Audio preprocessing is always enabled before transcription (needs_conversion=%s, needs_compression=%s)",
-            needs_conversion,
-            needs_compression,
-        )
-        processed_audio_path = preprocess_audio_for_transcription(
-            audio_path,
-            bitrate_quality=self.bitrate_quality,
-        )
-        used_file = processed_audio_path
+        needs_compression = file_size > 20 * 1024 * 1024
+
+        # If you need at least one of the two, apply compress_and_convert_audio
+        if needs_conversion:  # or needs_compression:
+            logger.info("Audio file needs conversion, processing file...")
+            processed_audio_path = compress_and_convert_audio(audio_path)
+            used_file = processed_audio_path
+            logger.info(f"Audio file processed (conversion): {used_file}")
+        else:
+            used_file = audio_path
+            logger.info("Audio file is already in supported format")
+            # If you need at least one of the two, apply compress_and_convert_audio
+            if needs_conversion:  # or needs_compression:
+                logger.info("Audio file needs conversion, processing file...")
+                processed_audio_path = compress_and_convert_audio(input_path=audio_path,
+                                                                  bitrate_quality=self.bitrate_quality)
+                used_file = processed_audio_path
+                logger.info(f"Audio file processed (conversion): {used_file}")
+            else:
+                used_file = audio_path
+                logger.info("Audio file is already in supported format")
 
         # Create chunker and extract chunks
         logger.info("Creating AudioChunker instance...")
