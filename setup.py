@@ -51,7 +51,7 @@ def get_requirements(*requirements_file):
 
 setup(
     name='polytext',
-    version='0.2.0',
+    version='0.2.1',
     url='https://github.com/docsity/polytext',
     # download_url='https://github.com/pualien/py-polytext/archive/0.1.23.tar.gz',
     license='MIT',
