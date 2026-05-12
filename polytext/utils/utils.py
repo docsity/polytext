@@ -4,6 +4,7 @@ import re
 _EXTRA_SPACE_PATTERN = re.compile(r"[ \t]+")
 _MARKDOWN_HEADING_PATTERN = re.compile(r"^#+\s+")
 _SENTENCE_ENDING_PATTERN = re.compile(r'[.!?:;][)"\']*$')
+_INLINE_MARKDOWN_HEADING_PATTERN = re.compile(r'([.!?:;][)"\']*)\s+(#{1,6}\s+)')
 
 
 def remove_markdown_strip(text: str) -> str:
@@ -26,6 +27,7 @@ def clean_extracted_text_whitespace(text: str) -> str:
         return text
 
     normalized_text = text.replace("\r\n", "\n").replace("\r", "\n")
+    normalized_text = _INLINE_MARKDOWN_HEADING_PATTERN.sub(r"\1\n\2", normalized_text)
     cleaned_lines = []
 
     for raw_line in normalized_text.split("\n"):

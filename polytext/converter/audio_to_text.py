@@ -5,6 +5,7 @@ import tempfile
 import time
 import mimetypes
 import uuid
+import re
 import ffmpeg
 from retry import retry
 from google import genai
@@ -42,11 +43,28 @@ INJECTION_GUARD_SYSTEM_INSTRUCTION = (
 AUDIO_MIN_OUTPUT_TOKENS = 500
 AUDIO_TAIL_REPETITION_LINES = int(os.getenv("AUDIO_TAIL_REPETITION_LINES", "200"))
 AUDIO_TAIL_REPETITION_THRESHOLD = float(os.getenv("AUDIO_TAIL_REPETITION_THRESHOLD", "0.35"))
-AUDIO_FALLBACK_SOURCE_PATTERN = os.getenv("AUDIO_FALLBACK_SOURCE_PATTERN", "flash-lite-preview")
+AUDIO_FALLBACK_SOURCE_PATTERN = os.getenv("AUDIO_FALLBACK_SOURCE_PATTERN", "flash-lite")
 AUDIO_FALLBACK_MODEL = os.getenv("AUDIO_FALLBACK_MODEL", "gemini-3-flash-preview")
 AUDIO_FALLBACK_TEMPERATURE = float(os.getenv("AUDIO_FALLBACK_TEMPERATURE", "1.0"))
 AUDIO_FINAL_FALLBACK_MODEL = os.getenv("AUDIO_FINAL_FALLBACK_MODEL", "gemini-2.0-flash")
 AUDIO_FILE_UPLOAD_THRESHOLD_BYTES = 20 * 1024 * 1024
+NO_HUMAN_SPEECH_MARKER = "no human speech detected"
+
+
+def normalize_no_human_speech_marker(text: str) -> tuple[str, bool]:
+    if not text:
+        return "", False
+
+    marker_line_pattern = re.compile(r"(?im)^\s*no human speech detected\s*$")
+    non_empty_lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if non_empty_lines and all(line.lower() == NO_HUMAN_SPEECH_MARKER for line in non_empty_lines):
+        return "", True
+
+    cleaned_text = marker_line_pattern.sub("", text)
+    cleaned_text = re.sub(r"(?i)\bno human speech detected\b", "", cleaned_text)
+    cleaned_text = re.sub(r"\n{3,}", "\n\n", cleaned_text).strip()
+    return cleaned_text, False
+
 
 def compress_and_convert_audio(input_path: str, bitrate_quality: int = 9) -> str:
     """
@@ -74,7 +92,7 @@ def compress_and_convert_audio(input_path: str, bitrate_quality: int = 9) -> str
     logger.info(f"Compressing audio to bitrate quality: {bitrate_quality}")
     ffmpeg.input(input_path).output(
         temp_audio_path,
-        q=bitrate_quality, # Variable bitrate quality (0-9, 9 being lowest)
+        q=bitrate_quality,  # Variable bitrate quality (0-9, 9 being lowest)
         acodec='libmp3lame',
         ac=1,  # Convert to mono
         ar=16000,  # Lower sample rate
@@ -85,6 +103,7 @@ def compress_and_convert_audio(input_path: str, bitrate_quality: int = 9) -> str
 
     logger.info(f"Successfully converted and compressed audio: {temp_audio_path}")
     return temp_audio_path
+
 
 def transcribe_full_audio(audio_file, markdown_output: bool = False,
                           llm_api_key: str = None,
@@ -118,16 +137,19 @@ def transcribe_full_audio(audio_file, markdown_output: bool = False,
                                      max_llm_tokens=max_llm_tokens, max_output_tokens=max_output_tokens)
     return converter.transcribe_full_audio(audio_file, save_transcript_chunks)
 
+
 class AudioToTextConverter:
-    def __init__(self, transcription_model: str ="gemini-3.1-flash-lite-preview", transcription_model_provider: str ="google",
-                 k: int =5, min_matches: int =3, markdown_output: bool =True, llm_api_key: str =None, max_llm_tokens: int =4250,
-                 max_output_tokens: int | None =None, temp_dir: str ="temp",
-                 bitrate_quality: int =9, timeout_minutes: int =None):
+    def __init__(self, transcription_model: str = "gemini-3.1-flash-lite",
+                 transcription_model_provider: str = "google",
+                 k: int = 5, min_matches: int = 3, markdown_output: bool = True, llm_api_key: str = None,
+                 max_llm_tokens: int = 4250,
+                 max_output_tokens: int | None = None, temp_dir: str = "temp",
+                 bitrate_quality: int = 9, timeout_minutes: int = None):
         """
         Initialize the AudioToTextConverter class with a specified transcription model and provider.
 
         Args:
-            transcription_model (str): Model name for transcription. Defaults to "gemini-3.1-flash-lite-preview".
+            transcription_model (str): Model name for transcription. Defaults to "gemini-3.1-flash-lite".
             transcription_model_provider (str): Provider of transcription service. Defaults to "google".
             k (int): Number of words to use when searching for overlap between chunks. Defaults to 5.
             min_matches (int): Minimum matching words for chunk merging. Defaults to 3.
@@ -401,8 +423,10 @@ class AudioToTextConverter:
                     code=997,
                 )
 
+            response_text, marker_only = normalize_no_human_speech_marker(response_text)
+
             response_dict = {
-                "transcript": response_text if "no human speech detected" not in response_text.lower() else "",
+                "transcript": "" if marker_only else response_text,
                 "completion_tokens": completion_tokens,
                 "prompt_tokens": prompt_tokens,
                 "completion_model": self.transcription_model,

@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 class TextMerger:
     def __init__(
             self,
-            completion_model: str = "gemini-3.1-flash-lite-preview",
+            completion_model: str = "gemini-3.1-flash-lite",
             completion_model_provider: str = "google",
             llm_api_key: str = None,
             max_llm_tokens: int = 8000,
