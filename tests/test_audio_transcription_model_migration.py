@@ -4,7 +4,13 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from google.genai import errors as genai_errors
-from polytext.converter.audio_to_text import AudioToTextConverter, transcribe_full_audio
+from polytext.converter.audio_to_text import (
+    AUDIO_TO_MARKDOWN_PROMPT,
+    AUDIO_TO_PLAIN_TEXT_PROMPT,
+    AudioToTextConverter,
+    normalize_no_human_speech_marker,
+    transcribe_full_audio,
+)
 
 
 def _make_response(
@@ -109,9 +115,63 @@ class _ImmediateExecutor:
 
 
 class TestAudioTranscriptionModelMigration(unittest.TestCase):
+    def test_normalize_no_human_speech_marker_returns_empty_for_marker_only(self):
+        cleaned_text, marker_only = normalize_no_human_speech_marker("no human speech detected")
+
+        self.assertEqual(cleaned_text, "")
+        self.assertTrue(marker_only)
+
+    def test_normalize_no_human_speech_marker_removes_marker_from_mixed_text(self):
+        cleaned_text, marker_only = normalize_no_human_speech_marker(
+            "Testo reale\nno human speech detected\nAltro testo"
+        )
+
+        self.assertEqual(cleaned_text, "Testo reale\n\nAltro testo")
+        self.assertFalse(marker_only)
+
+    @patch("polytext.converter.audio_to_text.TextMerger")
+    @patch("polytext.converter.audio_to_text.AudioChunker")
+    @patch.object(AudioToTextConverter, "process_chunk")
+    def test_transcribe_full_audio_uses_original_input_for_chunking_when_no_conversion_needed(
+        self,
+        mock_process_chunk,
+        mock_chunker_cls,
+        mock_text_merger_cls,
+    ):
+        fake_chunker = MagicMock()
+        mock_chunker_cls.return_value = fake_chunker
+        fake_chunker.extract_chunks.return_value = [{"file_path": "/tmp/fake_chunk.mp3"}]
+        mock_process_chunk.return_value = (
+            0,
+            {"transcript": "chunk transcript", "completion_tokens": 1, "prompt_tokens": 1},
+        )
+        mock_text_merger_cls.return_value.merge_chunks_with_llm_sequential.return_value = {
+            "full_text_merged": "chunk transcript",
+            "completion_tokens": 2,
+            "prompt_tokens": 3,
+        }
+
+        with tempfile.NamedTemporaryFile(suffix=".mp3") as source_audio:
+            source_audio.write(b"fake-audio")
+            source_audio.flush()
+
+            converter = AudioToTextConverter()
+            result = converter.transcribe_full_audio(source_audio.name)
+
+        self.assertEqual(result["text"], "chunk transcript")
+        self.assertEqual(mock_chunker_cls.call_args.args[0], source_audio.name)
+
+    def test_audio_prompts_forbid_filling_silence(self):
+        self.assertIn("transcribe only clear human speech", AUDIO_TO_MARKDOWN_PROMPT.lower())
+        self.assertIn("transcribe only clear human speech", AUDIO_TO_PLAIN_TEXT_PROMPT.lower())
+        self.assertIn("do not generate text during silence or background noise", AUDIO_TO_MARKDOWN_PROMPT.lower())
+        self.assertIn("do not generate text during silence or background noise", AUDIO_TO_PLAIN_TEXT_PROMPT.lower())
+        self.assertIn("no human speech detected", AUDIO_TO_MARKDOWN_PROMPT.lower())
+        self.assertIn("no human speech detected", AUDIO_TO_PLAIN_TEXT_PROMPT.lower())
+
     def test_default_audio_transcription_model_is_gemini_3_1_flash_lite_preview(self):
         converter = AudioToTextConverter()
-        self.assertEqual(converter.transcription_model, "gemini-3.1-flash-lite-preview")
+        self.assertEqual(converter.transcription_model, "gemini-3.1-flash-lite")
 
     def test_default_audio_max_llm_tokens_is_4250(self):
         converter = AudioToTextConverter()
@@ -140,7 +200,7 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
     @patch("polytext.converter.audio_to_text.os.path.getsize", return_value=21 * 1024 * 1024)
     def test_count_tokens_uses_selected_transcription_model_for_large_audio(self, _mock_getsize):
         fake_client = _FakeClient()
-        selected_model = "gemini-3.1-flash-lite-preview"
+        selected_model = "gemini-3.1-flash-lite"
 
         with patch("polytext.converter.audio_to_text.genai.Client", return_value=fake_client):
             converter = AudioToTextConverter(transcription_model=selected_model)
@@ -224,11 +284,11 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
         self.assertEqual(result["transcript"], "fallback transcript")
         self.assertEqual(
             fake_client.models.generate_content_models,
-            ["gemini-3.1-flash-lite-preview", "gemini-3-flash-preview"],
+            ["gemini-3.1-flash-lite", "gemini-3-flash-preview"],
         )
         self.assertEqual(fake_client.models.generate_content_temperatures, [0, 1.0])
         self.assertEqual(result["completion_model"], "gemini-3-flash-preview")
-        self.assertEqual(result["fallback_from_model"], "gemini-3.1-flash-lite-preview")
+        self.assertEqual(result["fallback_from_model"], "gemini-3.1-flash-lite")
         self.assertEqual(result["fallback_to_model"], "gemini-3-flash-preview")
         self.assertIn("recitation", result["fallback_reason"].lower())
 
@@ -251,7 +311,7 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
         self.assertEqual(result["transcript"], "fallback transcript")
         self.assertEqual(
             fake_client.models.generate_content_models,
-            ["gemini-3.1-flash-lite-preview", "gemini-3-flash-preview"],
+            ["gemini-3.1-flash-lite", "gemini-3-flash-preview"],
         )
         self.assertIn("max output tokens", result["fallback_reason"].lower())
 
@@ -275,7 +335,7 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
         self.assertEqual(result["transcript"], "fallback transcript")
         self.assertEqual(
             fake_client.models.generate_content_models,
-            ["gemini-3.1-flash-lite-preview", "gemini-3-flash-preview"],
+            ["gemini-3.1-flash-lite", "gemini-3-flash-preview"],
         )
         self.assertIn("repetitive tail", result["fallback_reason"].lower())
 
@@ -293,10 +353,40 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
             result = converter.transcribe_audio(temp_audio.name)
 
         self.assertEqual(result["transcript"], "healthy transcript")
-        self.assertEqual(fake_client.models.generate_content_models, ["gemini-3.1-flash-lite-preview"])
-        self.assertEqual(result["completion_model"], "gemini-3.1-flash-lite-preview")
+        self.assertEqual(fake_client.models.generate_content_models, ["gemini-3.1-flash-lite"])
+        self.assertEqual(result["completion_model"], "gemini-3.1-flash-lite")
         self.assertEqual(result["finish_reason"], "STOP")
         self.assertNotIn("fallback_from_model", result)
+
+    @patch("polytext.converter.audio_to_text.genai.Client")
+    def test_marker_only_response_becomes_empty_transcript(self, mock_client_cls):
+        fake_client = _FakeClient(
+            responses=[_make_response("no human speech detected", finish_reason="STOP")]
+        )
+        mock_client_cls.return_value = fake_client
+
+        converter = AudioToTextConverter()
+        with tempfile.NamedTemporaryFile(suffix=".mp3") as temp_audio:
+            temp_audio.write(b"fake-audio")
+            temp_audio.flush()
+            result = converter.transcribe_audio(temp_audio.name)
+
+        self.assertEqual(result["transcript"], "")
+
+    @patch("polytext.converter.audio_to_text.genai.Client")
+    def test_marker_is_removed_when_mixed_with_real_text(self, mock_client_cls):
+        fake_client = _FakeClient(
+            responses=[_make_response("Contenuto vero\nno human speech detected\nAltro contenuto", finish_reason="STOP")]
+        )
+        mock_client_cls.return_value = fake_client
+
+        converter = AudioToTextConverter()
+        with tempfile.NamedTemporaryFile(suffix=".mp3") as temp_audio:
+            temp_audio.write(b"fake-audio")
+            temp_audio.flush()
+            result = converter.transcribe_audio(temp_audio.name)
+
+        self.assertEqual(result["transcript"], "Contenuto vero\n\nAltro contenuto")
 
     @patch("polytext.converter.audio_to_text.as_completed", side_effect=lambda futures: list(futures))
     @patch("polytext.converter.audio_to_text.ThreadPoolExecutor", new=_ImmediateExecutor)
@@ -345,8 +435,8 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
         self.assertEqual(
             fake_client.models.generate_content_models,
             [
-                "gemini-3.1-flash-lite-preview",
-                "gemini-3.1-flash-lite-preview",
+                "gemini-3.1-flash-lite",
+                "gemini-3.1-flash-lite",
                 "gemini-3-flash-preview",
             ],
         )

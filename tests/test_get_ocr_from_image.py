@@ -29,7 +29,8 @@ def main():
         target_size=target_size,
         source=source,
         markdown_output=markdown_output,
-        timeout_minutes=1
+        timeout_minutes=1,
+        # include_image_descriptions=True # Non necessario esplicitarlo, controllato da env var OCR_INCLUDE_IMAGE_DESCRIPTIONS
     )
 
     # Define document data
@@ -37,7 +38,7 @@ def main():
 
     # local_file_path = "/Users/marcodelgiudice/Projects/polytext/IMG_9695.jpg"
     # local_file_path = "/Users/marcodelgiudice/Projects/polytext/IMG_9701.jpg"
-    local_file_path = "/Users/marcodelgiudice/Projects/polytext/IMG_9702.jpg"
+    local_file_path = "/Users/marcodelgiudice/Projects/polytext/chimicaformula.png"
 
     try:
         start = time.time()
@@ -47,6 +48,8 @@ def main():
         )
         end = time.time()
         print("Time elapsed: ", end - start)
+
+        print(result_dict["text"])
 
         import ipdb; ipdb.set_trace()
 

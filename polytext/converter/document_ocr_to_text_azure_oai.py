@@ -18,7 +18,11 @@ from openai import (
     InternalServerError,
 )
 
-from ..prompts.ocr import OCR_TO_MARKDOWN_PROMPT, OCR_TO_PLAIN_TEXT_PROMPT
+from ..prompts.ocr import (
+    OCR_TO_MARKDOWN_PROMPT,
+    OCR_TO_PLAIN_TEXT_PROMPT,
+    build_ocr_prompt,
+)
 from ..exceptions.base import EmptyDocument, ExceededMaxPages
 
 logger = logging.getLogger(__name__)
@@ -95,6 +99,7 @@ def get_document_ocr(
     page_range=None,
     timeout_minutes=None,
     ocr_model="gpt-5-mini",  # Azure deployment name
+    include_image_descriptions: bool = False,
 ):
     """
     Convenience function to OCR a document (PDF) using Azure OpenAI vision.
@@ -106,6 +111,7 @@ def get_document_ocr(
         target_size=target_size,
         page_range=page_range,
         timeout_minutes=timeout_minutes,
+        include_image_descriptions=include_image_descriptions,
     )
     return converter.get_document_ocr(document_for_ocr)
 
@@ -127,6 +133,7 @@ class DocumentOCRToTextConverter:
         azure_api_version=None,     # your resource-supported API version
         max_tokens=4096,            # avoid truncation
         max_workers=None,           # ThreadPoolExecutor workers (None = default)
+        include_image_descriptions: bool = False,
     ):
         if ocr_model is None:
             ocr_model = "gpt-4.1-mini"
@@ -139,6 +146,7 @@ class DocumentOCRToTextConverter:
         self.timeout_minutes = timeout_minutes
         self.max_tokens = max_tokens
         self.max_workers = max_workers
+        self.include_image_descriptions = include_image_descriptions
 
         # Azure config
         self.azure_endpoint = azure_endpoint or os.getenv("AZURE_OPENAI_ENDPOINT")
@@ -153,6 +161,13 @@ class DocumentOCRToTextConverter:
             raise ValueError("Missing Azure endpoint. Set azure_endpoint or AZURE_OPENAI_ENDPOINT.")
         if not self.azure_api_version:
             raise ValueError("Missing Azure API version. Set azure_api_version or AZURE_OPENAI_API_VERSION.")
+
+    def _build_prompt_template(self) -> str:
+        base_prompt = OCR_TO_MARKDOWN_PROMPT if self.markdown_output else OCR_TO_PLAIN_TEXT_PROMPT
+        return build_ocr_prompt(
+            base_prompt,
+            include_image_descriptions=self.include_image_descriptions,
+        )
 
     def _build_client(self) -> AzureOpenAI:
         azure_api_key = self.llm_api_key or os.getenv("AZURE_OPENAI_API_KEY")
@@ -189,7 +204,7 @@ class DocumentOCRToTextConverter:
         temp_file_for_ocr = None
         start_time = time.time()
 
-        prompt_template = OCR_TO_MARKDOWN_PROMPT if self.markdown_output else OCR_TO_PLAIN_TEXT_PROMPT
+        prompt_template = self._build_prompt_template()
         logger.info("Using prompt for %s format", "markdown" if self.markdown_output else "plain text")
 
         client = self._build_client()

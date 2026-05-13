@@ -54,7 +54,7 @@ class TextToMdConverter:
             overlap_chars: int = 500,
             k: int = 5,
             min_matches: int = 3,
-            model: str = "gemini-3.1-flash-lite-preview",
+            model: str = "gemini-3.1-flash-lite",
             model_provider: str = "google",
     ) -> None:
         """

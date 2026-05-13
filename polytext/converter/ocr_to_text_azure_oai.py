@@ -18,7 +18,11 @@ from openai import (
     InternalServerError,
 )
 
-from ..prompts.ocr import OCR_TO_MARKDOWN_PROMPT, OCR_TO_PLAIN_TEXT_PROMPT
+from ..prompts.ocr import (
+    OCR_TO_MARKDOWN_PROMPT,
+    OCR_TO_PLAIN_TEXT_PROMPT,
+    build_ocr_prompt,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +90,14 @@ def compress_and_convert_image(input_path: str, target_size=1) -> str:
         raise RuntimeError(f"FFmpeg error during image processing: {e}") from e
 
 
-def get_ocr(file_for_ocr, markdown_output=False, llm_api_key=None, target_size=1, timeout_minutes=None):
+def get_ocr(
+    file_for_ocr,
+    markdown_output=False,
+    llm_api_key=None,
+    target_size=1,
+    timeout_minutes=None,
+    include_image_descriptions: bool = False,
+):
     """
     Convenience function to extract text from an image file using OCR (Azure OpenAI),
     optionally formatted as Markdown.
@@ -96,6 +107,7 @@ def get_ocr(file_for_ocr, markdown_output=False, llm_api_key=None, target_size=1
         llm_api_key=llm_api_key,
         target_size=target_size,
         timeout_minutes=timeout_minutes,
+        include_image_descriptions=include_image_descriptions,
     )
     return converter.get_ocr(file_for_ocr)
 
@@ -114,6 +126,7 @@ class OCRToTextConverter:
         azure_endpoint=None,       # e.g. https://<resource>.openai.azure.com
         azure_api_version=None,    # e.g. "2024-10-21" (use your resource-supported version)
         max_tokens=4096,           # avoid truncation
+        include_image_descriptions: bool = False,
     ):
         self.ocr_model = ocr_model
         self.ocr_model_provider = ocr_model_provider
@@ -122,6 +135,7 @@ class OCRToTextConverter:
         self.target_size = target_size
         self.timeout_minutes = timeout_minutes
         self.max_tokens = max_tokens
+        self.include_image_descriptions = include_image_descriptions
 
         # Azure config
         self.azure_endpoint = azure_endpoint or os.getenv("AZURE_OPENAI_ENDPOINT")
@@ -136,6 +150,13 @@ class OCRToTextConverter:
             raise ValueError("Missing Azure endpoint. Set azure_endpoint or AZURE_OPENAI_ENDPOINT.")
         if not self.azure_api_version:
             raise ValueError("Missing Azure API version. Set azure_api_version or AZURE_OPENAI_API_VERSION.")
+
+    def _build_prompt_template(self) -> str:
+        base_prompt = OCR_TO_MARKDOWN_PROMPT if self.markdown_output else OCR_TO_PLAIN_TEXT_PROMPT
+        return build_ocr_prompt(
+            base_prompt,
+            include_image_descriptions=self.include_image_descriptions,
+        )
 
     @retry(
         (
@@ -158,7 +179,7 @@ class OCRToTextConverter:
         temp_file_for_ocr = None
         start_time = time.time()
 
-        prompt_template = OCR_TO_MARKDOWN_PROMPT if self.markdown_output else OCR_TO_PLAIN_TEXT_PROMPT
+        prompt_template = self._build_prompt_template()
         logger.info("Using prompt for %s format", "markdown" if self.markdown_output else "plain text")
 
         # Build Azure client
