@@ -317,6 +317,14 @@ class BaseLoader:
                 return YoutubeTranscriptLoaderWithLlm(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, timeout_minutes=self.timeout_minutes, **kwargs)
             else:
                 return HtmlLoader(markdown_output=self.markdown_output)
+        if file_extension in [".md", ".markdown"] or (
+                mime_type and mime_type.startswith("text/markdown")
+        ):
+            return MarkdownLoader(
+                markdown_output=self.markdown_output,
+                temp_dir=self.temp_dir,
+                **kwargs,
+            )
         elif mime_type:
             if file_extension in [".pdf", ".xlsx", ".docx", ".txt", ".csv", ".odt", ".pptx", ".xls", ".doc", ".ppt", ".rtf"]:
                 return DocumentLoader(markdown_output=self.markdown_output, temp_dir=self.temp_dir, timeout_minutes=self.timeout_minutes, **kwargs)
