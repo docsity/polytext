@@ -317,6 +317,7 @@ class BaseLoader:
                 return YoutubeTranscriptLoaderWithLlm(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, timeout_minutes=self.timeout_minutes, **kwargs)
             else:
                 return HtmlLoader(markdown_output=self.markdown_output)
+        # Handle markdown files based on extension or MIME type
         if file_extension in [".md", ".markdown"] or (
                 mime_type and mime_type.startswith("text/markdown")
         ):
