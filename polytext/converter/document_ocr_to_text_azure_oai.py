@@ -308,7 +308,7 @@ class DocumentOCRToTextConverter:
             pdf = fitz.open(document_for_ocr)
             total_pages = len(pdf)
             if total_pages == 0:
-                raise EmptyDocument(message="The document has no pages.", code=997)
+                raise EmptyDocument(message="The document has no pages.", code=998)
 
             start_page, end_page = self.validate_page_range(total_pages)
 

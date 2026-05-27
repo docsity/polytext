@@ -384,7 +384,7 @@ class YoutubeTranscriptLoaderWithLlm:
                     fallback_model=self.final_fallback_model,
                     fallback_temperature=self.final_fallback_temperature,
                 )
-            raise Exception(f"Invalid argument: {e.message}; details={getattr(e, 'details', None)}")
+            raise e_tmp from e
 
         except errors.ServerError as e:
             logger.info("ServerError occurred with status %s and message: %s", e.status, e.message)
