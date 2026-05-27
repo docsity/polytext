@@ -96,6 +96,7 @@ def compress_and_convert_image(input_path: str, target_size=1):
         return temp_image_path
 
     except Exception as e:
+        logger.exception("FFmpeg error during image processing for %s", input_path)
         raise RuntimeError(f"FFmpeg error during image processing: {e}") from e
 
 def get_ocr(
@@ -383,7 +384,11 @@ class OCRToTextConverter:
                 # Determine mimetype
                 mime_type, _ = mimetypes.guess_type(temp_file_for_ocr)
                 if mime_type is None:
-                    raise ValueError("Image format not recognized")
+                    try:
+                        raise ValueError("Image format not recognized")
+                    except ValueError:
+                        logger.exception("Unsupported image format for %s", temp_file_for_ocr)
+                        raise
 
                 response = client.models.generate_content(
                     model=self.ocr_model,

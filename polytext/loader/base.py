@@ -363,7 +363,11 @@ class BaseLoader:
                     **kwargs,
                 )
             else:
-                raise ValueError(f"Unsupported MIME type: {mime_type}")
+                try:
+                    raise ValueError(f"Unsupported MIME type: {mime_type}")
+                except ValueError:
+                    logger.exception("Unsupported media type while initializing loader: %s", mime_type)
+                    raise
 
         elif self.validate_user_text(text=input):
             return PlainTextLoader(

@@ -88,6 +88,7 @@ def compress_and_convert_image(input_path: str, target_size=1) -> str:
         return temp_image_path
 
     except Exception as e:
+        logger.exception("FFmpeg error during image processing for %s", input_path)
         raise RuntimeError(f"FFmpeg error during image processing: {e}") from e
 
 
@@ -233,7 +234,11 @@ class DocumentOCRToTextConverter:
 
             mime_type, _ = mimetypes.guess_type(temp_file_for_ocr)
             if mime_type is None:
-                raise ValueError("Image format not recognized")
+                try:
+                    raise ValueError("Image format not recognized")
+                except ValueError:
+                    logger.exception("Unsupported image format for %s", temp_file_for_ocr)
+                    raise
 
             with open(temp_file_for_ocr, "rb") as f:
                 image_b64 = base64.b64encode(f.read()).decode("utf-8")
