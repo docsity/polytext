@@ -4,7 +4,11 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from polytext.converter.document_ocr_to_text import DocumentOCRToTextConverter
+from polytext.converter.document_ocr_to_text_azure_oai import (
+    DocumentOCRToTextConverter as AzureDocumentOCRToTextConverter,
+)
 from polytext.converter.ocr_to_text import OCRToTextConverter
+from polytext.exceptions import EmptyDocument
 
 
 def _make_response(
@@ -208,11 +212,12 @@ class TestOcrFallbacks(unittest.TestCase):
         )
         mock_client_cls.return_value = fake_client
 
-        converter = OCRToTextConverter(ocr_model="gemini-3.1-flash-lite-preview")
-        with tempfile.NamedTemporaryFile(suffix=".png") as temp_image:
-            temp_image.write(b"fake-image")
-            temp_image.flush()
-            result = converter.get_ocr(temp_image.name)
+        with patch("polytext.converter.ocr_to_text.OCR_FINAL_FALLBACK_MODEL", "gemini-2.0-flash"):
+            converter = OCRToTextConverter(ocr_model="gemini-3.1-flash-lite-preview")
+            with tempfile.NamedTemporaryFile(suffix=".png") as temp_image:
+                temp_image.write(b"fake-image")
+                temp_image.flush()
+                result = converter.get_ocr(temp_image.name)
 
         self.assertEqual(result["text"], "final fallback text")
         self.assertEqual(
@@ -262,6 +267,24 @@ class TestOcrFallbacks(unittest.TestCase):
             ],
         )
         self.assertEqual(fake_client.models.generate_content_temperatures, [0.0, 0.0, 1.0])
+
+    @patch("fitz.open")
+    def test_azure_document_ocr_no_pages_is_empty_or_too_short(self, mock_fitz_open):
+        mock_fitz_open.return_value = _FakePdf([])
+
+        converter = AzureDocumentOCRToTextConverter(
+            azure_endpoint="https://example.openai.azure.com",
+            azure_api_version="2024-10-21",
+        )
+
+        with tempfile.NamedTemporaryFile(suffix=".pdf") as temp_pdf:
+            temp_pdf.write(b"%PDF-1.4\n")
+            temp_pdf.flush()
+            with self.assertRaises(EmptyDocument) as error_context:
+                converter.get_document_ocr(temp_pdf.name)
+
+        self.assertEqual(error_context.exception.code, 998)
+        self.assertEqual(error_context.exception.message, "The document has no pages.")
 
 
 if __name__ == "__main__":
