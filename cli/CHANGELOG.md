@@ -1,5 +1,20 @@
-1.0.17 (unreleased)
+
+1.0.20 (28/05/2026 17:00)
 -------------------------
+- added logger.exception for not handled errors
+
+1.0.19 (19/05/2026 09:00)
+-------------------------
+- migrate to gemini-3.1-flash-lite, add normalize no human speech detected
+- update audio prompt for multiline headings and silent audio cleanup
+
+1.0.18 (21/04/2026 11:00)
+-------------------------
+- moved guardrail methods and implemented model fallback in ocr and document_ocr
+
+1.0.17 (04/12/2025 10:00)
+-------------------------
+- fix polytext for youtube video 
 
 1.0.16 (06/10/2025 13:00)
 -------------------------
