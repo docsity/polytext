@@ -1,4 +1,7 @@
 
+1.0.21 (unreleased)
+-------------------------
+
 1.0.20 (28/05/2026 17:00)
 -------------------------
 - added logger.exception for not handled errors
