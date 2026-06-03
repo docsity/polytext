@@ -38,7 +38,7 @@ def main():
 
     # local_file_path = "/Users/marcodelgiudice/Projects/polytext/IMG_9695.jpg"
     # local_file_path = "/Users/marcodelgiudice/Projects/polytext/IMG_9701.jpg"
-    local_file_path = "/Users/marcodelgiudice/Projects/polytext/chimicaformula.png"
+    local_file_path = "/Users/marcodelgiudice/Projects/polytext/gm1.png"
 
     try:
         start = time.time()

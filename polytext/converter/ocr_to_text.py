@@ -33,7 +33,7 @@ OCR_TAIL_REPETITION_THRESHOLD = float(os.getenv("OCR_TAIL_REPETITION_THRESHOLD",
 OCR_FALLBACK_SOURCE_PATTERN = os.getenv("OCR_FALLBACK_SOURCE_PATTERN", "flash-lite-preview")
 OCR_FALLBACK_MODEL = os.getenv("OCR_FALLBACK_MODEL", "gemini-3-flash-preview")
 OCR_FALLBACK_TEMPERATURE = float(os.getenv("OCR_FALLBACK_TEMPERATURE", "1.0"))
-OCR_FINAL_FALLBACK_MODEL = os.getenv("OCR_FINAL_FALLBACK_MODEL", "gemini-2.0-flash")
+OCR_FINAL_FALLBACK_MODEL = os.getenv("OCR_FINAL_FALLBACK_MODEL", "gemini-3.5-flash")
 
 
 def compress_and_convert_image(input_path: str, target_size=1):

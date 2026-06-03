@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from polytext.exceptions import EmptyDocument, LoaderError
 from polytext.loader.base import BaseLoader
@@ -43,19 +43,21 @@ class TestBaseLoaderErrorMapping(unittest.TestCase):
                     )
                 )
 
-                with patch("polytext.loader.base.logger.exception") as mock_exception:
-                    with self.assertRaises(LoaderError) as error_context:
-                        loader.get_text(["dummy.txt"])
+                sentry_sdk = Mock()
+                with patch("polytext.loader.base.logger.info") as mock_info:
+                    with patch("polytext.loader.base.logger.exception") as mock_exception:
+                        with patch.dict("sys.modules", {"sentry_sdk": sentry_sdk}):
+                            with self.assertRaises(LoaderError) as error_context:
+                                loader.get_text(["dummy.txt"])
 
                 error = error_context.exception
                 self.assertEqual(error.status, 422)
                 self.assertEqual(error.code, expected_loader_code)
                 self.assertEqual(error.message, f"diagnostic failure {empty_document_code}")
-                mock_exception.assert_called_once()
-                self.assertIn("Raising LoaderError", mock_exception.call_args.args[0])
-                self.assertEqual(mock_exception.call_args.args[1], expected_loader_code)
-                self.assertEqual(mock_exception.call_args.args[2], empty_document_code)
-                self.assertEqual(mock_exception.call_args.args[3], f"diagnostic failure {empty_document_code}")
+                mock_info.assert_not_called()
+                mock_exception.assert_not_called()
+                sentry_sdk.capture_exception.assert_called_once()
+                self.assertIs(sentry_sdk.capture_exception.call_args.args[0], error.__cause__)
 
     def test_empty_or_too_short_documents_still_return_empty_response(self):
         loader = _FakeBaseLoader(

@@ -55,6 +55,18 @@ def _read_bool_env(name: str, default: bool = False) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
+def _capture_exception_for_sentry(error: Exception) -> None:
+    try:
+        import sentry_sdk
+    except ImportError:
+        return
+
+    try:
+        sentry_sdk.capture_exception(error)
+    except Exception:
+        return
+
+
 class BaseLoader:
     def __init__(self, markdown_output=True, llm_api_key=None, provider: str = "google", temp_dir: str = "temp",
                  ocr_model: str = "gpt-5-mini", timeout_minutes: int | None = None,
@@ -153,19 +165,14 @@ class BaseLoader:
         try:
             response = self.run_loader_class(loader_class=loader_class, input_list=input_list)
         except EmptyDocument as e:
-            logger.info(f"Empty document encountered: {e.message}")
             if e.code in LLM_OUTPUT_ERROR_CODES:
-                logger.exception(
-                    "Raising LoaderError: status=422 code=%s original_empty_document_code=%s message=%s",
-                    LLM_OUTPUT_ERROR_CODES[e.code],
-                    e.code,
-                    e.message,
-                )
+                _capture_exception_for_sentry(e)
                 raise LoaderError(
                     message=e.message,
                     status=422,
                     code=LLM_OUTPUT_ERROR_CODES[e.code],
                 ) from e
+            logger.info(f"Empty document encountered: {e.message}")
             if self.fallback_ocr:
                 loader_class = self.init_loader_class(input=first_file_url, storage_client=storage_client,
                                                       llm_api_key=self.llm_api_key, is_document_fallback=True, **kwargs)
