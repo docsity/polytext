@@ -32,9 +32,9 @@ url = 'https://www.youtube.com/watch?v=L4as3tks4Js'  # basement alberto angela  
 
 # url = 'https://www.youtube.com/watch?v=UabBYexBD4k'  # INM RAG 11 minuti, completato in 26 secondi con successo con gemini-3.1-flash-lite
 
-url = 'https://www.youtube.com/watch?v=96jN2OCOfLs'  # Vibe coding 30 minuti, completato in 150 secondi con successo con gemini-3-flash-preview (160k token in input, 7k in output), 3.1-flash-lite ha raggiunto i max tokens in output (50k) probabile repetition
+#url = 'https://www.youtube.com/watch?v=96jN2OCOfLs'  # Vibe coding 30 minuti, completato in 150 secondi con successo con gemini-3-flash-preview (160k token in input, 7k in output), 3.1-flash-lite ha raggiunto i max tokens in output (50k) probabile repetition
 
-# url = 'https://www.youtube.com/watch?v=HGfsGvmRaaw'  # barbero2 50 minuti, fallito, RECITATION in tutti e 3 i modelli (275k token in input)
+url = 'https://www.youtube.com/watch?v=HGfsGvmRaaw'  # barbero2 50 minuti, fallito, RECITATION in tutti e 3 i modelli (275k token in input)
 
 # url = 'https://www.youtube.com/watch?v=CM2CkNU9xR0'  # google antigravity 27 minuti, completato in 39 secondi con successo con gemini-3.1-flash-lite (146k token in input, 6k token in output)
 
