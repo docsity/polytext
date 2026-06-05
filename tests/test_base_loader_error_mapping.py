@@ -25,6 +25,21 @@ class _FakeBaseLoader(BaseLoader):
         return _FailingLoader(self.error)
 
 
+class _FallbackFailingBaseLoader(BaseLoader):
+    def __init__(self, initial_error, fallback_error, **kwargs):
+        super().__init__(**kwargs)
+        self.initial_error = initial_error
+        self.fallback_error = fallback_error
+
+    def initiate_storage(self, input):
+        return {}
+
+    def init_loader_class(self, input, storage_client, llm_api_key, is_document_fallback=False, **kwargs):
+        if is_document_fallback:
+            return _FailingLoader(self.fallback_error)
+        return _FailingLoader(self.initial_error)
+
+
 class TestBaseLoaderErrorMapping(unittest.TestCase):
     def test_llm_output_empty_document_codes_are_raised_as_loader_errors(self):
         cases = [
@@ -59,7 +74,7 @@ class TestBaseLoaderErrorMapping(unittest.TestCase):
                 sentry_sdk.capture_exception.assert_called_once()
                 self.assertIs(sentry_sdk.capture_exception.call_args.args[0], error.__cause__)
 
-    def test_empty_or_too_short_documents_still_return_empty_response(self):
+    def test_empty_or_too_short_documents_are_raised_as_loader_errors(self):
         loader = _FakeBaseLoader(
             EmptyDocument(
                 message="Document text with less than 400 characters",
@@ -67,14 +82,47 @@ class TestBaseLoaderErrorMapping(unittest.TestCase):
             )
         )
 
-        with patch("polytext.loader.base.logger.exception") as mock_exception:
-            response = loader.get_text(["empty.txt"])
+        sentry_sdk = Mock()
+        with patch("polytext.loader.base.logger.info") as mock_info:
+            with patch("polytext.loader.base.logger.exception") as mock_exception:
+                with patch.dict("sys.modules", {"sentry_sdk": sentry_sdk}):
+                    with self.assertRaises(LoaderError) as error_context:
+                        loader.get_text(["empty.txt"])
 
-        self.assertEqual(response["text"], "")
-        self.assertEqual(response["completion_tokens"], 0)
-        self.assertEqual(response["prompt_tokens"], 0)
-        self.assertEqual(response["output_list"][0]["input"], "empty.txt")
+        error = error_context.exception
+        self.assertEqual(error.status, 422)
+        self.assertEqual(error.code, "NO_TEXT_DETECTED")
+        self.assertEqual(error.message, "No text detected")
+        mock_info.assert_not_called()
         mock_exception.assert_not_called()
+        sentry_sdk.capture_exception.assert_not_called()
+
+    def test_empty_document_after_fallback_ocr_is_raised_as_loader_error(self):
+        loader = _FallbackFailingBaseLoader(
+            initial_error=EmptyDocument(
+                message="No text detected",
+                code=998,
+            ),
+            fallback_error=EmptyDocument(
+                message="No text extracted from OCR fallback",
+            ),
+            fallback_ocr=True,
+        )
+
+        sentry_sdk = Mock()
+        with patch("polytext.loader.base.logger.info") as mock_info:
+            with patch("polytext.loader.base.logger.exception") as mock_exception:
+                with patch.dict("sys.modules", {"sentry_sdk": sentry_sdk}):
+                    with self.assertRaises(LoaderError) as error_context:
+                        loader.get_text(["empty.pdf"])
+
+        error = error_context.exception
+        self.assertEqual(error.status, 422)
+        self.assertEqual(error.code, "NO_TEXT_DETECTED")
+        self.assertEqual(error.message, "No text detected")
+        mock_info.assert_not_called()
+        mock_exception.assert_not_called()
+        sentry_sdk.capture_exception.assert_not_called()
 
     def test_conversion_error_is_raised_as_loader_error(self):
         conversion_error = ConversionError("LibreOffice failed")

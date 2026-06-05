@@ -46,6 +46,10 @@ LLM_OUTPUT_ERROR_CODES = {
     997: "REPETITIVE_OUTPUT",
     999: "MAX_TOKENS",
 }
+EMPTY_DOCUMENT_LOADER_ERROR_CODES = {
+    **LLM_OUTPUT_ERROR_CODES,
+    998: "NO_TEXT_DETECTED",
+}
 
 
 def _read_bool_env(name: str, default: bool = False) -> bool:
@@ -65,6 +69,20 @@ def _capture_exception_for_sentry(error: Exception) -> None:
         sentry_sdk.capture_exception(error)
     except Exception:
         return
+
+
+def _raise_empty_document_loader_error(error: EmptyDocument) -> None:
+    loader_error_code = EMPTY_DOCUMENT_LOADER_ERROR_CODES.get(error.code, "NO_TEXT_DETECTED")
+    message = error.message
+    if loader_error_code == "NO_TEXT_DETECTED":
+        message = "No text detected"
+    else:
+        _capture_exception_for_sentry(error)
+    raise LoaderError(
+        message=message,
+        status=422,
+        code=loader_error_code,
+    ) from error
 
 
 class BaseLoader:
@@ -166,22 +184,16 @@ class BaseLoader:
             response = self.run_loader_class(loader_class=loader_class, input_list=input_list)
         except EmptyDocument as e:
             if e.code in LLM_OUTPUT_ERROR_CODES:
-                _capture_exception_for_sentry(e)
-                raise LoaderError(
-                    message=e.message,
-                    status=422,
-                    code=LLM_OUTPUT_ERROR_CODES[e.code],
-                ) from e
-            logger.info(f"Empty document encountered: {e.message}")
+                _raise_empty_document_loader_error(e)
             if self.fallback_ocr:
                 loader_class = self.init_loader_class(input=first_file_url, storage_client=storage_client,
                                                       llm_api_key=self.llm_api_key, is_document_fallback=True, **kwargs)
-                response = self.run_loader_class(loader_class=loader_class, input_list=input_list)
+                try:
+                    response = self.run_loader_class(loader_class=loader_class, input_list=input_list)
+                except EmptyDocument as fallback_error:
+                    _raise_empty_document_loader_error(fallback_error)
             else:
-                response = {"text": "", "completion_tokens": 0, "prompt_tokens": 0, "output_list": [
-                    {"text": "", "completion_tokens": 0, "prompt_tokens": 0, "completion_model": "not provided",
-                     "completion_model_provider": "not provided", "text_chunks": "not provided", "type": "document",
-                     "input": first_file_url}]}
+                _raise_empty_document_loader_error(e)
         except ConversionError as e:
             _capture_exception_for_sentry(e)
             raise LoaderError(
