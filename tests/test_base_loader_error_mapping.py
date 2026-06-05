@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import Mock, patch
 
-from polytext.exceptions import EmptyDocument, LoaderError
+from polytext.exceptions import ConversionError, EmptyDocument, LoaderError
 from polytext.loader.base import BaseLoader
 
 
@@ -75,6 +75,25 @@ class TestBaseLoaderErrorMapping(unittest.TestCase):
         self.assertEqual(response["prompt_tokens"], 0)
         self.assertEqual(response["output_list"][0]["input"], "empty.txt")
         mock_exception.assert_not_called()
+
+    def test_conversion_error_is_raised_as_loader_error(self):
+        conversion_error = ConversionError("LibreOffice failed")
+        loader = _FakeBaseLoader(conversion_error)
+
+        sentry_sdk = Mock()
+        with patch("polytext.loader.base.logger.info") as mock_info:
+            with patch("polytext.loader.base.logger.exception") as mock_exception:
+                with patch.dict("sys.modules", {"sentry_sdk": sentry_sdk}):
+                    with self.assertRaises(LoaderError) as error_context:
+                        loader.get_text(["document.docx"])
+
+        error = error_context.exception
+        self.assertEqual(error.status, 422)
+        self.assertEqual(error.code, "CONVERSION_ERROR")
+        self.assertEqual(error.message, "LibreOffice failed")
+        mock_info.assert_not_called()
+        mock_exception.assert_not_called()
+        sentry_sdk.capture_exception.assert_called_once_with(conversion_error)
 
 
 if __name__ == "__main__":

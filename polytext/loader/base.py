@@ -25,7 +25,7 @@ from ..loader import (
     XmlXbrlLoader,
     NotebookLoader
 )
-from ..exceptions import EmptyDocument, LoaderTimeoutError, LoaderError
+from ..exceptions import ConversionError, EmptyDocument, LoaderTimeoutError, LoaderError
 from ..utils.utils import clean_extracted_text_whitespace, remove_markdown_strip
 
 # External imports
@@ -182,6 +182,13 @@ class BaseLoader:
                     {"text": "", "completion_tokens": 0, "prompt_tokens": 0, "completion_model": "not provided",
                      "completion_model_provider": "not provided", "text_chunks": "not provided", "type": "document",
                      "input": first_file_url}]}
+        except ConversionError as e:
+            _capture_exception_for_sentry(e)
+            raise LoaderError(
+                message=e.message,
+                status=422,
+                code="CONVERSION_ERROR",
+            ) from e
         except LoaderTimeoutError:
             raise LoaderError(message="timeout gemini", status=504, code="TIMEOUT")
         except (httpx.ReadTimeout,
