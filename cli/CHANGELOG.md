@@ -1,4 +1,7 @@
 
+1.0.22 (unreleased)
+-------------------------
+
 1.0.21 (08/06/2026 16:00)
 -------------------------
 - Added NO_TEXT_DETECTED to LoaderError instead of empty string
