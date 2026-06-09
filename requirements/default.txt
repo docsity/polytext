@@ -6,6 +6,7 @@ pycryptodome==3.23.0
 # markdown to pdf
 weasyprint==65.1
 markdown==3.8
+markdown-to-json==2.1.2
 
 # docx
 python-docx==1.1.2

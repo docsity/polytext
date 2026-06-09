@@ -33,6 +33,8 @@ import boto3
 from google.cloud import storage
 from google.genai import errors as genai_errors
 
+from ..converter.beautiful_text import BeautifulTextConverter
+
 
 dotenv.load_dotenv()
 
@@ -189,6 +191,59 @@ class BaseLoader:
                 raise LoaderError(message="forbidden", status=403, code="FORBIDDEN")
             raise
 
+        return response
+
+    def get_beautiful_text(self, input_list: list[str], **kwargs):
+        if not isinstance(input_list, list) or not all(isinstance(item, str) for item in input_list):
+            raise TypeError("Parameter 'input' must be a list of strings.")
+        if not input_list:
+            raise ValueError("Input list is empty.")
+        if len(input_list) != 1:
+            raise ValueError("get_beautiful_text expects exactly one input.")
+
+        kwargs = {**self.kwargs, **kwargs}
+        raw_result = self.extract_raw_text_for_beautiful_text(input_value=input_list[0], **kwargs)
+
+        converter = BeautifulTextConverter(llm_api_key=self.llm_api_key)
+        cleanup_result = converter.convert(
+            raw_text=raw_result["text"],
+            save_transcript_chunks=kwargs.get("save_transcript_chunks", self.save_transcript_chunks),
+            active_chapters=kwargs.get("active_chapters", False),
+        )
+
+        total_completion_tokens = raw_result.get("completion_tokens", 0) + cleanup_result.get("completion_tokens", 0)
+        total_prompt_tokens = raw_result.get("prompt_tokens", 0) + cleanup_result.get("prompt_tokens", 0)
+
+        result_item = {
+            "text": cleanup_result["text"],
+            "completion_tokens": total_completion_tokens,
+            "prompt_tokens": total_prompt_tokens,
+            "completion_model": cleanup_result.get("completion_model", "not provided"),
+            "completion_model_provider": cleanup_result.get("completion_model_provider", "not provided"),
+            "text_chunks": cleanup_result.get("text_chunks", "not provided"),
+            "type": raw_result.get("type", "text"),
+            "input": input_list[0],
+        }
+        if "markdown_json" in cleanup_result:
+            result_item["markdown_json"] = cleanup_result["markdown_json"]
+        if "chapters" in cleanup_result:
+            result_item["chapters"] = cleanup_result["chapters"]
+
+        response = {
+            "text": result_item["text"],
+            "completion_tokens": result_item["completion_tokens"],
+            "prompt_tokens": result_item["prompt_tokens"],
+            "completion_model": result_item["completion_model"],
+            "completion_model_provider": result_item["completion_model_provider"],
+            "text_chunks": result_item["text_chunks"],
+            "type": result_item["type"],
+            "input": result_item["input"],
+            "output_list": [result_item],
+        }
+        if "markdown_json" in result_item:
+            response["markdown_json"] = result_item["markdown_json"]
+        if "chapters" in result_item:
+            response["chapters"] = result_item["chapters"]
         return response
 
     def initiate_storage(self, input: str) -> dict:
@@ -460,6 +515,114 @@ class BaseLoader:
         if p.is_absolute() or (p.parts and p.parts[0] in (".", "..")) or "/" in s or "\\" in s:
             return True
         return False
+
+    @staticmethod
+    def is_remote_input(s: str) -> bool:
+        return s.startswith(("s3://", "gcs://", "http://", "https://", "www.", "www.youtube"))
+
+    @staticmethod
+    def is_text_file_extension(path_value: str) -> bool:
+        return Path(path_value).suffix.lower() in {".txt", ".text", ".md", ".markdown"}
+
+    @staticmethod
+    def is_beautiful_text_supported_file_extension(path_value: str) -> bool:
+        return Path(path_value).suffix.lower() in {
+            ".txt",
+            ".text",
+            ".md",
+            ".markdown",
+            ".pdf",
+            ".xlsx",
+            ".docx",
+            ".csv",
+            ".odt",
+            ".pptx",
+            ".xls",
+            ".doc",
+            ".ppt",
+            ".rtf",
+            ".ipynb",
+            ".xml",
+            ".xbrl",
+        }
+
+    def extract_raw_text_for_beautiful_text(self, input_value: str, **kwargs) -> dict:
+        cleaned_input = input_value.strip()
+
+        if "\n" in cleaned_input or (not self.is_local_path(cleaned_input) and not self.is_remote_input(cleaned_input)):
+            return {
+                "text": cleaned_input,
+                "completion_tokens": 0,
+                "prompt_tokens": 0,
+                "completion_model": "not provided",
+                "completion_model_provider": "not provided",
+                "text_chunks": "not provided",
+                "type": "text",
+                "input": input_value,
+            }
+
+        local_path = Path(cleaned_input)
+
+        if local_path.exists():
+            if local_path.is_file() and self.is_text_file_extension(cleaned_input):
+                return {
+                    "text": local_path.read_text(encoding="utf-8"),
+                    "completion_tokens": 0,
+                    "prompt_tokens": 0,
+                    "completion_model": "not provided",
+                    "completion_model_provider": "not provided",
+                    "text_chunks": "not provided",
+                    "type": "text",
+                    "input": input_value,
+                }
+
+        if self.is_local_path(cleaned_input) and not self.is_remote_input(cleaned_input):
+            if not local_path.exists():
+                raise FileNotFoundError(f"Input not found or format not recognized: {input_value}")
+
+            if not self.is_beautiful_text_supported_file_extension(cleaned_input):
+                raise ValueError(
+                    "get_beautiful_text supports only text or document inputs such as txt, md, pdf, docx, xlsx, csv, ipynb, xml, or xbrl."
+                )
+
+        if self.is_remote_input(cleaned_input):
+            if cleaned_input.startswith(("http://", "https://", "www.", "www.youtube")):
+                raise ValueError(
+                    "get_beautiful_text does not support web pages, YouTube, audio, video, or image URLs. Pass text directly or a text/document file path."
+                )
+
+            if not self.is_beautiful_text_supported_file_extension(cleaned_input):
+                raise ValueError(
+                    "get_beautiful_text supports only text or document file inputs such as txt, md, pdf, docx, xlsx, csv, ipynb, xml, or xbrl."
+                )
+
+        storage_client = self.initiate_storage(input=input_value)
+        loader_class = self.init_loader_class(
+            input=input_value,
+            storage_client=storage_client,
+            llm_api_key=self.llm_api_key,
+            **kwargs,
+        )
+
+        unsupported_loader_types = (AudioLoader, VideoLoader, OCRLoader, HtmlLoader, YoutubeTranscriptLoaderWithLlm)
+        if isinstance(loader_class, unsupported_loader_types):
+            raise ValueError(
+                "get_beautiful_text supports only text or document inputs, not audio, video, image, HTML, or YouTube sources."
+            )
+
+        extracted = self.run_loader_class(loader_class=loader_class, input_list=[input_value])
+        output_item = extracted.get("output_list", [{}])[0]
+
+        return {
+            "text": extracted.get("text", ""),
+            "completion_tokens": extracted.get("completion_tokens", 0),
+            "prompt_tokens": extracted.get("prompt_tokens", 0),
+            "completion_model": output_item.get("completion_model", "not provided"),
+            "completion_model_provider": output_item.get("completion_model_provider", "not provided"),
+            "text_chunks": output_item.get("text_chunks", "not provided"),
+            "type": output_item.get("type", "not provided"),
+            "input": output_item.get("input", input_value),
+        }
 
     def validate_user_text(self, text: str) -> bool:
         """
