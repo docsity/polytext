@@ -51,7 +51,7 @@ def get_requirements(*requirements_file):
 
 setup(
     name='polytext',
-    version='0.2.1',
+    version='0.2.5',
     url='https://github.com/docsity/polytext',
     # download_url='https://github.com/pualien/py-polytext/archive/0.1.23.tar.gz',
     license='MIT',
@@ -65,10 +65,11 @@ setup(
     },
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
-    python_requires='>=3.12',
+    python_requires='>=3.11',
     classifiers=[
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
+        "Programming Language :: Python :: 3.11",
         "Programming Language :: Python :: 3.12",
         "Programming Language :: Python :: 3.13",
         "Topic :: Software Development :: Libraries :: Application Frameworks",

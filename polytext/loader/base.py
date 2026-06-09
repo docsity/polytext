@@ -25,7 +25,7 @@ from ..loader import (
     XmlXbrlLoader,
     NotebookLoader
 )
-from ..exceptions import EmptyDocument, LoaderTimeoutError, LoaderError
+from ..exceptions import ConversionError, EmptyDocument, LoaderTimeoutError, LoaderError
 from ..utils.utils import clean_extracted_text_whitespace, remove_markdown_strip
 
 # External imports
@@ -42,6 +42,16 @@ logger = logging.getLogger(__name__)
 
 MIN_DOC_TEXT_LENGTH_ACCEPTED = int(os.getenv("MIN_DOC_TEXT_LENGTH_ACCEPTED", "400"))
 OCR_INCLUDE_IMAGE_DESCRIPTIONS_ENV = "OCR_INCLUDE_IMAGE_DESCRIPTIONS"
+LLM_OUTPUT_ERROR_CODES = {
+    995: "INVALID_ARGUMENT",
+    996: "RECITATION",
+    997: "REPETITIVE_OUTPUT",
+    999: "MAX_TOKENS",
+}
+EMPTY_DOCUMENT_LOADER_ERROR_CODES = {
+    **LLM_OUTPUT_ERROR_CODES,
+    998: "NO_TEXT_DETECTED",
+}
 
 
 def _read_bool_env(name: str, default: bool = False) -> bool:
@@ -49,6 +59,32 @@ def _read_bool_env(name: str, default: bool = False) -> bool:
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _capture_exception_for_sentry(error: Exception) -> None:
+    try:
+        import sentry_sdk
+    except ImportError:
+        return
+
+    try:
+        sentry_sdk.capture_exception(error)
+    except Exception:
+        return
+
+
+def _raise_empty_document_loader_error(error: EmptyDocument) -> None:
+    loader_error_code = EMPTY_DOCUMENT_LOADER_ERROR_CODES.get(error.code, "NO_TEXT_DETECTED")
+    message = error.message
+    if loader_error_code == "NO_TEXT_DETECTED":
+        message = "No text detected"
+    else:
+        _capture_exception_for_sentry(error)
+    raise LoaderError(
+        message=message,
+        status=422,
+        code=loader_error_code,
+    ) from error
 
 
 class BaseLoader:
@@ -149,16 +185,24 @@ class BaseLoader:
         try:
             response = self.run_loader_class(loader_class=loader_class, input_list=input_list)
         except EmptyDocument as e:
-            logger.info(f"Empty document encountered: {e.message}")
+            if e.code in LLM_OUTPUT_ERROR_CODES:
+                _raise_empty_document_loader_error(e)
             if self.fallback_ocr:
                 loader_class = self.init_loader_class(input=first_file_url, storage_client=storage_client,
                                                       llm_api_key=self.llm_api_key, is_document_fallback=True, **kwargs)
-                response = self.run_loader_class(loader_class=loader_class, input_list=input_list)
+                try:
+                    response = self.run_loader_class(loader_class=loader_class, input_list=input_list)
+                except EmptyDocument as fallback_error:
+                    _raise_empty_document_loader_error(fallback_error)
             else:
-                response = {"text": "", "completion_tokens": 0, "prompt_tokens": 0, "output_list": [
-                    {"text": "", "completion_tokens": 0, "prompt_tokens": 0, "completion_model": "not provided",
-                     "completion_model_provider": "not provided", "text_chunks": "not provided", "type": "document",
-                     "input": first_file_url}]}
+                _raise_empty_document_loader_error(e)
+        except ConversionError as e:
+            _capture_exception_for_sentry(e)
+            raise LoaderError(
+                message=e.message,
+                status=422,
+                code="CONVERSION_ERROR",
+            ) from e
         except LoaderTimeoutError:
             raise LoaderError(message="timeout gemini", status=504, code="TIMEOUT")
         except (httpx.ReadTimeout,
@@ -372,6 +416,15 @@ class BaseLoader:
                 return YoutubeTranscriptLoaderWithLlm(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, timeout_minutes=self.timeout_minutes, **kwargs)
             else:
                 return HtmlLoader(markdown_output=self.markdown_output)
+        # Handle markdown files based on extension or MIME type
+        if file_extension in [".md", ".markdown"] or (
+                mime_type and mime_type.startswith("text/markdown")
+        ):
+            return MarkdownLoader(
+                markdown_output=self.markdown_output,
+                temp_dir=self.temp_dir,
+                **kwargs,
+            )
         elif mime_type:
             if file_extension in [".pdf", ".xlsx", ".docx", ".txt", ".csv", ".odt", ".pptx", ".xls", ".doc", ".ppt", ".rtf"]:
                 return DocumentLoader(markdown_output=self.markdown_output, temp_dir=self.temp_dir, timeout_minutes=self.timeout_minutes, **kwargs)
@@ -391,7 +444,11 @@ class BaseLoader:
                     **kwargs,
                 )
             else:
-                raise ValueError(f"Unsupported MIME type: {mime_type}")
+                try:
+                    raise ValueError(f"Unsupported MIME type: {mime_type}")
+                except ValueError:
+                    logger.exception("Unsupported media type while initializing loader: %s", mime_type)
+                    raise
 
         elif self.validate_user_text(text=input):
             return PlainTextLoader(

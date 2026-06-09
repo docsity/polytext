@@ -35,7 +35,7 @@ pip install polytext
 
 | Requirement | Notes                                                                           | macOS (Homebrew) | Ubuntu / Debian |
 |-------------|---------------------------------------------------------------------------------|------------------|-----------------|
-| **Python**  | ✔️ Tested on **3.12**<br> Older versions may fail to locate WeasyPrint’s dylibs | `brew install python@3.12` | `sudo apt install python3.12` |
+| **Python**  | Supported on **3.11 – 3.13**<br> WeasyPrint still requires its native libraries | `brew install python@3.11` | `sudo apt install python3.11` |
 | **WeasyPrint – native stack** | installs Pango, Cairo, etc.                                                     | `brew install weasyprint` | `sudo apt install weasyprint` |
 | **LibreOffice** | used for Office → PDF conversion                                                | `brew install --cask libreoffice` | `sudo apt install libreoffice` |
 

@@ -7,7 +7,7 @@ readme = "README.md"
 build = "setup.py"
 
 [tool.poetry.dependencies]
-python = ">=3.12,<3.14"
+python = ">=3.11,<3.14"
 pybind11 = "^2.12"
 
 [build-system]

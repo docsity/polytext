@@ -127,11 +127,24 @@ class DocumentConverter:
         ]
 
         try:
-            # Suppress Java runtime warnings by redirecting stderr
-            subprocess.check_call(command, stderr=subprocess.DEVNULL)
+            subprocess.run(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=True,
+            )
             logger.info(f"Conversion successful: '{output_file}'")
         except subprocess.CalledProcessError as e:
+            output_parts = []
+            if e.stdout:
+                output_parts.append(f"stdout: {e.stdout.strip()}")
+            if e.stderr:
+                output_parts.append(f"stderr: {e.stderr.strip()}")
+            details = "\n".join(output_parts)
             error_msg = f"Error during conversion: {e}"
+            if details:
+                error_msg = f"{error_msg}\n{details}"
             logger.info(error_msg)
             raise ConversionError(error_msg, e)
 

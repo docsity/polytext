@@ -33,7 +33,7 @@ def main():
     # Define document data
     file_path = "gcs://opit-da-test-ml-ai-store-bucket/learning_resources/course_id=406/module_id=2658/id=31427/8434.mp4"
 
-    local_file_path = "/Users/marcodelgiudice/Projects/polytext/audio_8_barbero_0_5_ore.m4a"
+    local_file_path = "/Users/marcodelgiudice/Downloads/mq0264a5-5a073da227de0ee462bd6de8731d586a1dcc635f.pdf"
 
     # Call get_text method
     start = time.time()

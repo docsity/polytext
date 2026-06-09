@@ -46,7 +46,7 @@ AUDIO_TAIL_REPETITION_THRESHOLD = float(os.getenv("AUDIO_TAIL_REPETITION_THRESHO
 AUDIO_FALLBACK_SOURCE_PATTERN = os.getenv("AUDIO_FALLBACK_SOURCE_PATTERN", "flash-lite")
 AUDIO_FALLBACK_MODEL = os.getenv("AUDIO_FALLBACK_MODEL", "gemini-3-flash-preview")
 AUDIO_FALLBACK_TEMPERATURE = float(os.getenv("AUDIO_FALLBACK_TEMPERATURE", "1.0"))
-AUDIO_FINAL_FALLBACK_MODEL = os.getenv("AUDIO_FINAL_FALLBACK_MODEL", "gemini-2.0-flash")
+AUDIO_FINAL_FALLBACK_MODEL = os.getenv("AUDIO_FINAL_FALLBACK_MODEL", "gemini-3.5-flash")
 AUDIO_FILE_UPLOAD_THRESHOLD_BYTES = 20 * 1024 * 1024
 NO_HUMAN_SPEECH_MARKER = "no human speech detected"
 
@@ -90,16 +90,22 @@ def compress_and_convert_audio(input_path: str, bitrate_quality: int = 9) -> str
     os.close(fd)
 
     logger.info(f"Compressing audio to bitrate quality: {bitrate_quality}")
-    ffmpeg.input(input_path).output(
-        temp_audio_path,
-        q=bitrate_quality,  # Variable bitrate quality (0-9, 9 being lowest)
-        acodec='libmp3lame',
-        ac=1,  # Convert to mono
-        ar=16000,  # Lower sample rate
-        vn=None,
-        threads=0,  # Use maximum available threads
-        loglevel='error',  # Reduce logging overhead
-    ).run(quiet=True, overwrite_output=True)
+    try:
+        ffmpeg.input(input_path).output(
+            temp_audio_path,
+            q=bitrate_quality,  # Variable bitrate quality (0-9, 9 being lowest)
+            acodec='libmp3lame',
+            ac=1,  # Convert to mono
+            ar=16000,  # Lower sample rate
+            vn=None,
+            threads=0,  # Use maximum available threads
+            loglevel='error',  # Reduce logging overhead
+        ).run(quiet=True, overwrite_output=True)
+    except Exception:
+        logger.exception("FFmpeg error during audio processing for %s", input_path)
+        if os.path.exists(temp_audio_path):
+            os.unlink(temp_audio_path)
+        raise
 
     logger.info(f"Successfully converted and compressed audio: {temp_audio_path}")
     return temp_audio_path
@@ -313,7 +319,11 @@ class AudioToTextConverter:
 
         mime_type, _ = mimetypes.guess_type(audio_file)
         if mime_type is None:
-            raise ValueError("Audio format not recognized")
+            try:
+                raise ValueError("Audio format not recognized")
+            except ValueError:
+                logger.exception("Unsupported audio format for %s", audio_file)
+                raise
 
         return client.models.generate_content(
             model=self.transcription_model,
