@@ -268,8 +268,6 @@ class BaseLoader:
             "type": raw_result.get("type", "text"),
             "input": input_list[0],
         }
-        if "markdown_json" in cleanup_result:
-            result_item["markdown_json"] = cleanup_result["markdown_json"]
         if "chapters" in cleanup_result:
             result_item["chapters"] = cleanup_result["chapters"]
 
@@ -284,8 +282,6 @@ class BaseLoader:
             "input": result_item["input"],
             "output_list": [result_item],
         }
-        if "markdown_json" in result_item:
-            response["markdown_json"] = result_item["markdown_json"]
         if "chapters" in result_item:
             response["chapters"] = result_item["chapters"]
         return response

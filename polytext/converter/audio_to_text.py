@@ -66,6 +66,29 @@ def normalize_no_human_speech_marker(text: str) -> tuple[str, bool]:
     return cleaned_text, False
 
 
+def add_line_break_after_each_sentence(text: str) -> str:
+    if not text:
+        return text
+
+    lines = text.splitlines()
+    formatted_lines = []
+
+    for line in lines:
+        stripped_line = line.strip()
+        if not stripped_line:
+            formatted_lines.append("")
+            continue
+        if re.match(r"^#{1,6}\s+", stripped_line):
+            formatted_lines.append(stripped_line)
+            continue
+
+        normalized_line = re.sub(r"\s+", " ", stripped_line)
+        normalized_line = re.sub(r"([.!?])\s+", r"\1\n", normalized_line)
+        formatted_lines.append(normalized_line)
+
+    return "\n".join(formatted_lines).strip()
+
+
 def compress_and_convert_audio(input_path: str, bitrate_quality: int = 9) -> str:
     """
     Compress and convert an audio file to MP3 using ffmpeg.
@@ -434,6 +457,8 @@ class AudioToTextConverter:
                 )
 
             response_text, marker_only = normalize_no_human_speech_marker(response_text)
+            if not marker_only:
+                response_text = self.format_audio_output_text(response_text)
 
             response_dict = {
                 "transcript": "" if marker_only else response_text,
@@ -472,6 +497,9 @@ class AudioToTextConverter:
         logger.info(f"Transcribing chunk {index + 1}...")
         transcript_dict = self.transcribe_audio(chunk["file_path"])
         return index, transcript_dict
+
+    def format_audio_output_text(self, text: str) -> str:
+        return add_line_break_after_each_sentence(text)
 
     def transcribe_full_audio(self,
             audio_path: str, save_transcript_chunks: bool = False) -> dict:
@@ -565,7 +593,7 @@ class AudioToTextConverter:
         full_text_merged_dict = text_merger.merge_chunks_with_llm_sequential(chunks=transcript_chunks)
 
         result_dict = {
-            "text": full_text_merged_dict["full_text_merged"],
+            "text": self.format_audio_output_text(full_text_merged_dict["full_text_merged"]),
             "completion_tokens": completion_tokens + full_text_merged_dict["completion_tokens"],
             "prompt_tokens": prompt_tokens + full_text_merged_dict["prompt_tokens"],
             "completion_model": self.transcription_model,
@@ -586,7 +614,7 @@ class AudioToTextConverter:
                 if key in chunk_results[0]:
                     result_dict[key] = chunk_results[0][key]
         if save_transcript_chunks:
-            result_dict["text_chunks"] = transcript_chunks
+            result_dict["text_chunks"] = [self.format_audio_output_text(chunk) for chunk in transcript_chunks]
             result_dict["chunk_results"] = chunk_results
 
         # Clean up temporary files
