@@ -45,20 +45,8 @@ You must follow these instructions EXACTLY:
    * It is better to return less text than to hallucinate content.
    * Never fabricate words from noisy phonetic patterns.
    * Never infer semantic meaning from partial sounds.
-   
-6. **Markdown Formatting (Controlled):**
 
-   * Organize the transcript into paragraphs based on natural pauses in speech.
-   * Add Markdown subheadings (`##`, `###`) whenever the speaker clearly transitions to a new topic, question, task, subject, or discussion area.
-   * Prefer adding a heading when a topic shift is reasonably clear rather than omitting structure entirely.
-   * Headings must remain short, neutral, and closely grounded in the actual spoken content.
-   * Use simple factual labels derived from the transcript wording.
-   * Do NOT invent abstract summaries or interpretations.
-   * Do NOT add headings too frequently for minor conversational drift.
-   * Do NOT reorganize chronological order.
-   * Keep the transcript faithful to the original speech flow.
-
-7. **Strict Prohibitions:**
+6. **Strict Prohibitions:**
 
    * Do NOT summarize.
    * Do NOT paraphrase.
@@ -73,14 +61,14 @@ You must follow these instructions EXACTLY:
    * Do NOT generate markdown code fences.
    * Do NOT output anything except the transcript itself.
 
-8. **Anti-Repetition Guard (MANDATORY):**
+7. **Anti-Repetition Guard (MANDATORY):**
 
    * If the speaker intentionally repeats a short phrase, keep it only as spoken.
    * If generated text accidentally repeats the same sentence or paragraph with no new content, remove duplicates.
    * Never loop or restart earlier transcript sections.
    * Before returning the final output, verify there are no duplicated blocks.
 
-9. **Output Rules:**
+8. **Output Rules:**
 
    * Output ONLY the transcript content.
    * Start immediately with the transcript text.
@@ -94,7 +82,7 @@ You must follow these instructions EXACTLY:
      * or any similar meta text.
    * Do NOT wrap the response in code blocks.
 
-10. **No Speech Case (MANDATORY):**
+9. **No Speech Case (MANDATORY):**
 
    * If no clear human speech is detected anywhere in the entire audio, return EXACTLY:
   no human speech detected
