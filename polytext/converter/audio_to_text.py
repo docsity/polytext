@@ -15,7 +15,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from google.api_core import exceptions as google_exceptions
 
 from ..exceptions import EmptyDocument
-from ..prompts.transcription import AUDIO_TO_MARKDOWN_PROMPT, AUDIO_TO_PLAIN_TEXT_PROMPT
+from ..prompts.transcription import AUDIO_TO_MARKDOWN_PROMPT, AUDIO_TO_MARKDOWN_PROMPT_IS_RAW, AUDIO_TO_PLAIN_TEXT_PROMPT
 from ..processor.audio_chunker import AudioChunker
 from ..processor.text_merger import TextMerger
 from .gemini_quality_guards import extract_finish_reason, tail_has_excessive_repetition
@@ -173,7 +173,7 @@ class AudioToTextConverter:
                  k: int = 5, min_matches: int = 3, markdown_output: bool = True, llm_api_key: str = None,
                  max_llm_tokens: int = 4250,
                  max_output_tokens: int | None = None, temp_dir: str = "temp",
-                 bitrate_quality: int = 9, timeout_minutes: int = None):
+                 bitrate_quality: int = 9, timeout_minutes: int = None, is_output_audio_raw: bool  = True):
         """
         Initialize the AudioToTextConverter class with a specified transcription model and provider.
 
@@ -211,6 +211,7 @@ class AudioToTextConverter:
         self.fallback_model = AUDIO_FALLBACK_MODEL
         self.fallback_temperature = AUDIO_FALLBACK_TEMPERATURE
         self.final_fallback_model = AUDIO_FINAL_FALLBACK_MODEL
+        self.is_output_audio_raw = is_output_audio_raw
 
         # Set up custom temp directory
         self.temp_dir = os.path.abspath(temp_dir)
@@ -398,9 +399,13 @@ class AudioToTextConverter:
         start_time = time.time()
 
         if self.markdown_output:
-            logger.info("Using prompt for markdown format")
             # Convert the text to Markdown format
-            prompt_template = AUDIO_TO_MARKDOWN_PROMPT
+            if self.is_output_audio_raw:
+                logger.info("Using prompt for markdown raw audio output")
+                prompt_template = AUDIO_TO_MARKDOWN_PROMPT_IS_RAW
+            else:
+                logger.info("Using prompt for markdown format (no raw)")
+                prompt_template = AUDIO_TO_MARKDOWN_PROMPT
         else:
             logger.info("Using prompt for plain text format")
             # Convert the text to plain text format

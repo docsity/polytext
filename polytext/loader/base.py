@@ -137,6 +137,7 @@ class BaseLoader:
         self.fallback_ocr = kwargs.get("fallback_ocr", False)
         self.save_transcript_chunks = kwargs.get("save_transcript_chunks", False)
         self.bitrate_quality = kwargs.get("bitrate_quality", 9)
+        self.is_output_audio_raw = kwargs.get("is_output_audio_raw", True)
 
 
     def get_text(self, input_list: list[str], **kwargs):
