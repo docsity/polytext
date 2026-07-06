@@ -20,6 +20,8 @@ from ..prompts.transcription import (
     AUDIO_TO_MARKDOWN_NON_LITERAL_FALLBACK_PROMPT,
     AUDIO_TO_MARKDOWN_PROMPT,
     AUDIO_TO_PLAIN_TEXT_PROMPT,
+    AUDIO_TO_MARKDOWN_RAW_NON_LITERAL_FALLBACK_PROMPT,
+    AUDIO_TO_MARKDOWN_PROMPT_IS_RAW,
 )
 from ..processor.audio_chunker import AudioChunker
 from ..processor.text_merger import TextMerger
@@ -162,7 +164,8 @@ def transcribe_full_audio(audio_file, markdown_output: bool = False,
                           save_transcript_chunks: bool = False, bitrate_quality=9,
                           timeout_minutes: int = None,
                           max_llm_tokens: int = 4250,
-                          max_output_tokens: int | None = None) -> dict:
+                          max_output_tokens: int | None = None,
+                          is_output_audio_raw: bool = True) -> dict:
     """
     Convenience function to transcribe an audio file into text, optionally formatted as Markdown.
 
@@ -180,13 +183,16 @@ def transcribe_full_audio(audio_file, markdown_output: bool = False,
         timeout_minutes (int, optional): Number of minutes to wait for a response. Defaults to None.
         max_llm_tokens (int, optional): Token budget used for audio chunk sizing. Defaults to 4250.
         max_output_tokens (int | None, optional): Maximum Gemini output tokens. Defaults to `max_llm_tokens`.
+        is_output_audio_raw (bool, optional): If True, use the raw Markdown audio prompt.
+            If False, use the formatted Markdown audio prompt. Defaults to True.
 
     Returns:
         str: The transcribed text from the audio file.
     """
     converter = AudioToTextConverter(markdown_output=markdown_output, llm_api_key=llm_api_key,
                                      bitrate_quality=bitrate_quality, timeout_minutes=timeout_minutes,
-                                     max_llm_tokens=max_llm_tokens, max_output_tokens=max_output_tokens)
+                                     max_llm_tokens=max_llm_tokens, max_output_tokens=max_output_tokens,
+                                     is_output_audio_raw=is_output_audio_raw)
     return converter.transcribe_full_audio(audio_file, save_transcript_chunks)
 
 
@@ -198,7 +204,8 @@ class AudioToTextConverter:
                  max_output_tokens: int | None = None, temp_dir: str = "temp",
                  bitrate_quality: int = 9, timeout_minutes: int = None,
                  fallback_stage: int = 0,
-                 prompt_variant: str = AUDIO_PROMPT_VARIANT_DEFAULT):
+                 prompt_variant: str = AUDIO_PROMPT_VARIANT_DEFAULT,
+                 is_output_audio_raw: bool  = True):
         """
         Initialize the AudioToTextConverter class with a specified transcription model and provider.
 
@@ -219,6 +226,8 @@ class AudioToTextConverter:
                 Defaults to 0.
             prompt_variant (str, optional): Prompt variant used by this attempt.
                 Defaults to "default".
+            is_output_audio_raw (bool, optional): If True, use the raw Markdown audio prompt.
+                If False, use the formatted Markdown audio prompt. Defaults to True.
 
         Raises:
             OSError: If temp directory creation fails
@@ -242,6 +251,7 @@ class AudioToTextConverter:
         self.fallback_model = AUDIO_FALLBACK_MODEL
         self.fallback_temperature = AUDIO_FALLBACK_TEMPERATURE
         self.final_fallback_model = AUDIO_FINAL_FALLBACK_MODEL
+        self.is_output_audio_raw = is_output_audio_raw
 
         # Set up custom temp directory
         self.temp_dir = os.path.abspath(temp_dir)
@@ -250,7 +260,11 @@ class AudioToTextConverter:
 
     def _build_prompt_template(self) -> str:
         if self.markdown_output and self.prompt_variant == AUDIO_PROMPT_VARIANT_NON_LITERAL_FALLBACK:
+            if self.is_output_audio_raw:
+                return AUDIO_TO_MARKDOWN_RAW_NON_LITERAL_FALLBACK_PROMPT
             return AUDIO_TO_MARKDOWN_NON_LITERAL_FALLBACK_PROMPT
+        if self.markdown_output and self.is_output_audio_raw:
+            return AUDIO_TO_MARKDOWN_PROMPT_IS_RAW
         if self.markdown_output:
             return AUDIO_TO_MARKDOWN_PROMPT
         return AUDIO_TO_PLAIN_TEXT_PROMPT
@@ -318,6 +332,7 @@ class AudioToTextConverter:
             timeout_minutes=self.timeout_minutes,
             fallback_stage=fallback_stage,
             prompt_variant=resolved_prompt_variant,
+            is_output_audio_raw=self.is_output_audio_raw,
         )
         result = fallback_converter.transcribe_audio(
             audio_file=audio_file,
@@ -463,7 +478,11 @@ class AudioToTextConverter:
 
         prompt_template = self._build_prompt_template()
         if self.markdown_output:
-            logger.info("Using prompt for markdown format with variant %s", self.prompt_variant)
+            logger.info(
+                "Using prompt for markdown format with variant %s and raw output %s",
+                self.prompt_variant,
+                self.is_output_audio_raw,
+            )
         else:
             logger.info("Using prompt for plain text format with variant %s", self.prompt_variant)
 

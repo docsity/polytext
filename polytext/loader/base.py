@@ -143,6 +143,7 @@ class BaseLoader:
         self.aws_role_session_name = kwargs.get("aws_role_session_name")
         self.gcp_id_token_audience = kwargs.get("gcp_id_token_audience")
         self.aws_sts_duration_seconds = kwargs.get("aws_sts_duration_seconds")
+        self.is_output_audio_raw = kwargs.get("is_output_audio_raw", True)
 
 
     def get_text(self, input_list: list[str], **kwargs):
@@ -437,9 +438,11 @@ class BaseLoader:
             if file_extension in [".pdf", ".xlsx", ".docx", ".txt", ".csv", ".odt", ".pptx", ".xls", ".doc", ".ppt", ".rtf"]:
                 return DocumentLoader(markdown_output=self.markdown_output, temp_dir=self.temp_dir, timeout_minutes=self.timeout_minutes, **kwargs)
             elif mime_type.startswith("audio/"):
-                return AudioLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, timeout_minutes=self.timeout_minutes, **kwargs)
+                audio_kwargs = {**kwargs, "is_output_audio_raw": self.is_output_audio_raw}
+                return AudioLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, timeout_minutes=self.timeout_minutes, **audio_kwargs)
             elif mime_type.startswith("video/"):
-                return VideoLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, timeout_minutes=self.timeout_minutes, **kwargs)
+                video_kwargs = {**kwargs, "is_output_audio_raw": self.is_output_audio_raw}
+                return VideoLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, timeout_minutes=self.timeout_minutes, **video_kwargs)
             elif mime_type.startswith("image/"):
                 return OCRLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, timeout_minutes=self.timeout_minutes, include_image_descriptions=self.include_image_descriptions, **kwargs)
             elif mime_type.startswith("text/markdown"):

@@ -8,11 +8,16 @@ from google.genai import errors as genai_errors
 from polytext.converter.audio_to_text import (
     AUDIO_TO_MARKDOWN_PROMPT,
     AUDIO_TO_MARKDOWN_NON_LITERAL_FALLBACK_PROMPT,
+    AUDIO_TO_MARKDOWN_RAW_NON_LITERAL_FALLBACK_PROMPT,
+    AUDIO_TO_MARKDOWN_PROMPT_IS_RAW,
     AUDIO_TO_PLAIN_TEXT_PROMPT,
     AudioToTextConverter,
     normalize_no_human_speech_marker,
     transcribe_full_audio,
 )
+from polytext.loader import BaseLoader
+from polytext.loader.audio import AudioLoader
+from polytext.loader.video import VideoLoader
 
 
 def _make_response(
@@ -189,6 +194,14 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
         self.assertIn("no human speech detected", AUDIO_TO_MARKDOWN_PROMPT.lower())
         self.assertIn("no human speech detected", AUDIO_TO_PLAIN_TEXT_PROMPT.lower())
 
+    def test_raw_non_literal_fallback_prompt_preserves_raw_transcript_shape(self):
+        prompt = AUDIO_TO_MARKDOWN_RAW_NON_LITERAL_FALLBACK_PROMPT.lower()
+
+        self.assertIn("do not add markdown headings", prompt)
+        self.assertIn("do not use bullet", prompt)
+        self.assertIn("do not reorganize", prompt)
+        self.assertIn("raw transcript", prompt)
+
     def test_default_audio_transcription_model_is_gemini_3_1_flash_lite_preview(self):
         converter = AudioToTextConverter()
         self.assertEqual(converter.transcription_model, "gemini-3.1-flash-lite")
@@ -201,6 +214,32 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
         converter = AudioToTextConverter()
         self.assertEqual(converter.max_output_tokens, 4250)
         self.assertEqual(converter.max_output_tokens, converter.max_llm_tokens)
+
+    def test_base_loader_passes_audio_raw_output_flag_to_audio_loader(self):
+        loader = BaseLoader(source="local", is_output_audio_raw=False)
+
+        audio_loader = loader.init_loader_class(
+            input="/tmp/example.mp3",
+            storage_client={},
+            llm_api_key=None,
+            source="local",
+        )
+
+        self.assertIsInstance(audio_loader, AudioLoader)
+        self.assertFalse(audio_loader.is_output_audio_raw)
+
+    def test_base_loader_passes_audio_raw_output_flag_to_video_loader(self):
+        loader = BaseLoader(source="local", is_output_audio_raw=False)
+
+        video_loader = loader.init_loader_class(
+            input="/tmp/example.mp4",
+            storage_client={},
+            llm_api_key=None,
+            source="local",
+        )
+
+        self.assertIsInstance(video_loader, VideoLoader)
+        self.assertFalse(video_loader.is_output_audio_raw)
 
     @patch("polytext.converter.audio_to_text.AudioToTextConverter")
     def test_transcribe_full_audio_accepts_separate_chunk_and_output_budgets(self, mock_converter_cls):
@@ -327,7 +366,7 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
         self.assertEqual(fake_client.models.generate_content_temperatures, [0, 0])
         self.assertEqual(
             fake_client.models.generate_content_prompts,
-            [AUDIO_TO_MARKDOWN_PROMPT, AUDIO_TO_MARKDOWN_NON_LITERAL_FALLBACK_PROMPT],
+            [AUDIO_TO_MARKDOWN_PROMPT_IS_RAW, AUDIO_TO_MARKDOWN_RAW_NON_LITERAL_FALLBACK_PROMPT],
         )
         self.assertEqual(result["completion_model"], "gemini-3.1-flash-lite")
         self.assertEqual(result["fallback_from_model"], "gemini-3.1-flash-lite")
@@ -387,6 +426,28 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
         self.assertIn("repetitive tail", result["fallback_reason"].lower())
 
     @patch("polytext.converter.audio_to_text.genai.Client")
+    def test_formatted_audio_uses_formatted_non_literal_fallback_prompt(self, mock_client_cls):
+        fake_client = _FakeClient(
+            responses=[
+                _make_response("first attempt", finish_reason="RECITATION"),
+                _make_response("prompt fallback transcript", finish_reason="STOP"),
+            ]
+        )
+        mock_client_cls.return_value = fake_client
+
+        converter = AudioToTextConverter(is_output_audio_raw=False)
+        with tempfile.NamedTemporaryFile(suffix=".mp3") as temp_audio:
+            temp_audio.write(b"fake-audio")
+            temp_audio.flush()
+            result = converter.transcribe_audio(temp_audio.name)
+
+        self.assertEqual(result["transcript"], "prompt fallback transcript")
+        self.assertEqual(
+            fake_client.models.generate_content_prompts,
+            [AUDIO_TO_MARKDOWN_PROMPT, AUDIO_TO_MARKDOWN_NON_LITERAL_FALLBACK_PROMPT],
+        )
+
+    @patch("polytext.converter.audio_to_text.genai.Client")
     def test_audio_uses_model_fallback_after_non_literal_prompt_still_fails(self, mock_client_cls):
         fake_client = _FakeClient(
             responses=[
@@ -416,9 +477,9 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
         self.assertEqual(
             fake_client.models.generate_content_prompts,
             [
-                AUDIO_TO_MARKDOWN_PROMPT,
-                AUDIO_TO_MARKDOWN_NON_LITERAL_FALLBACK_PROMPT,
-                AUDIO_TO_MARKDOWN_NON_LITERAL_FALLBACK_PROMPT,
+                AUDIO_TO_MARKDOWN_PROMPT_IS_RAW,
+                AUDIO_TO_MARKDOWN_RAW_NON_LITERAL_FALLBACK_PROMPT,
+                AUDIO_TO_MARKDOWN_RAW_NON_LITERAL_FALLBACK_PROMPT,
             ],
         )
         self.assertEqual(result["completion_model"], "gemini-3-flash-preview")
