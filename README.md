@@ -125,6 +125,40 @@ result = loader.get_text(input_list=["https://www.domain-name.com/path"])
 print(result["text"])
 ```
 
+### S3 authentication
+
+By default, Polytext uses the standard boto3 credential chain when loading `s3://` inputs
+(environment variables, AWS profiles, IAM roles, and other boto3-supported providers).
+
+For runtimes that need to assume an AWS role through Google OIDC, STS web identity
+authentication can be enabled explicitly:
+
+```python
+from polytext.loader.base import BaseLoader
+
+loader = BaseLoader(
+    aws_auth_mode="sts_web_identity",
+    aws_role_arn="arn:aws:iam::111122223333:role/ExampleRole",
+    aws_region="eu-central-1",
+    aws_role_session_name="polytext-session",
+    gcp_id_token_audience="example-gcp-audience",
+)
+```
+
+The same configuration can also come from environment variables:
+
+```bash
+POLYTEXT_AWS_AUTH_MODE=sts_web_identity
+AWS_ROLE_ARN=arn:aws:iam::111122223333:role/ExampleRole
+AWS_REGION=eu-central-1
+AWS_ROLE_SESSION_NAME=polytext-session
+GCP_ID_TOKEN_AUDIENCE=example-gcp-audience
+GOOGLE_APPLICATION_CREDENTIALS=/absolute/path/to/service_account.json
+```
+
+Polytext uses the temporary STS credentials only to create the S3 client. It does not
+export them to `os.environ` and does not reset boto3's global session.
+
 ## License
 
 MIT Licence

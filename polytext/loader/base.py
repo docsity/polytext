@@ -29,11 +29,11 @@ from ..exceptions import ConversionError, EmptyDocument, LoaderTimeoutError, Loa
 from ..utils.utils import clean_extracted_text_whitespace, remove_markdown_strip
 
 # External imports
-import boto3
 from google.cloud import storage
 from google.genai import errors as genai_errors
 
 from ..converter.beautiful_text import BeautifulTextConverter
+from .aws_auth import create_s3_client
 
 
 dotenv.load_dotenv()
@@ -137,6 +137,12 @@ class BaseLoader:
         self.fallback_ocr = kwargs.get("fallback_ocr", False)
         self.save_transcript_chunks = kwargs.get("save_transcript_chunks", False)
         self.bitrate_quality = kwargs.get("bitrate_quality", 9)
+        self.aws_auth_mode = kwargs.get("aws_auth_mode")
+        self.aws_role_arn = kwargs.get("aws_role_arn")
+        self.aws_region = kwargs.get("aws_region")
+        self.aws_role_session_name = kwargs.get("aws_role_session_name")
+        self.gcp_id_token_audience = kwargs.get("gcp_id_token_audience")
+        self.aws_sts_duration_seconds = kwargs.get("aws_sts_duration_seconds")
 
 
     def get_text(self, input_list: list[str], **kwargs):
@@ -312,8 +318,14 @@ class BaseLoader:
 
         if input.startswith("s3://"):
             logger.info(f"Initiating S3 initialization for {input}")
-            # Initialize S3 client
-            s3_client = boto3.client("s3")
+            s3_client = create_s3_client(
+                auth_mode=self.aws_auth_mode,
+                role_arn=self.aws_role_arn,
+                region_name=self.aws_region,
+                role_session_name=self.aws_role_session_name,
+                web_identity_token_audience=self.gcp_id_token_audience,
+                duration_seconds=self.aws_sts_duration_seconds,
+            )
             s3_path = input.replace("s3://", "")
             parts = s3_path.split("/", 1)
 

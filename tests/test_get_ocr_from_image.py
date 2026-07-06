@@ -19,7 +19,7 @@ logging.basicConfig(level=logging.INFO,
 def main():
     markdown_output = True
     target_size = 1
-    source = "local"
+    source = "cloud"
 
     # Initialize OCRLoader with GCS client and bucket
     ocr_loader = BaseLoader(
@@ -34,17 +34,17 @@ def main():
     )
 
     # Define document data
-    file_url = ""
+    file_url = "s3://example-bucket/uploads/image/example.jpg"
 
     # local_file_path = "/Users/marcodelgiudice/Projects/polytext/IMG_9695.jpg"
     # local_file_path = "/Users/marcodelgiudice/Projects/polytext/IMG_9701.jpg"
-    local_file_path = "/Users/marcodelgiudice/Projects/polytext/gm1.png"
+    # local_file_path = "/Users/marcodelgiudice/Projects/polytext/svevo.png"
 
     try:
         start = time.time()
         # Call get_text method
         result_dict = ocr_loader.get_text(
-            input_list=[local_file_path],
+            input_list=[file_url],
         )
         end = time.time()
         print("Time elapsed: ", end - start)
