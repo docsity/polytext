@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 from google.genai import errors as genai_errors
 from polytext.converter.audio_to_text import (
     AUDIO_TO_MARKDOWN_PROMPT,
+    AUDIO_TO_MARKDOWN_NON_LITERAL_FALLBACK_PROMPT,
     AUDIO_TO_PLAIN_TEXT_PROMPT,
     AudioToTextConverter,
     normalize_no_human_speech_marker,
@@ -51,6 +52,7 @@ class _FakeModels:
         self.generate_content_contents = None
         self.generate_content_models = []
         self.generate_content_temperatures = []
+        self.generate_content_prompts = []
         self.responses = list(responses or [])
 
     def count_tokens(self, model, contents):
@@ -63,6 +65,7 @@ class _FakeModels:
         self.generate_content_contents = contents
         self.generate_content_models.append(model)
         self.generate_content_temperatures.append(getattr(config, "temperature", None))
+        self.generate_content_prompts.append(contents[0])
         if self.responses:
             return self.responses.pop(0)
         return _make_response()
@@ -301,11 +304,11 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
         self.assertEqual(fake_client.models.generate_content_calls, 2)
 
     @patch("polytext.converter.audio_to_text.genai.Client")
-    def test_recitation_retries_with_fallback_model(self, mock_client_cls):
+    def test_recitation_retries_with_non_literal_prompt_before_fallback_model(self, mock_client_cls):
         fake_client = _FakeClient(
             responses=[
                 _make_response("first attempt", finish_reason="RECITATION"),
-                _make_response("fallback transcript", finish_reason="STOP"),
+                _make_response("prompt fallback transcript", finish_reason="STOP"),
             ]
         )
         mock_client_cls.return_value = fake_client
@@ -316,23 +319,30 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
             temp_audio.flush()
             result = converter.transcribe_audio(temp_audio.name)
 
-        self.assertEqual(result["transcript"], "fallback transcript")
+        self.assertEqual(result["transcript"], "prompt fallback transcript")
         self.assertEqual(
             fake_client.models.generate_content_models,
-            ["gemini-3.1-flash-lite", "gemini-3-flash-preview"],
+            ["gemini-3.1-flash-lite", "gemini-3.1-flash-lite"],
         )
-        self.assertEqual(fake_client.models.generate_content_temperatures, [0, 1.0])
-        self.assertEqual(result["completion_model"], "gemini-3-flash-preview")
+        self.assertEqual(fake_client.models.generate_content_temperatures, [0, 0])
+        self.assertEqual(
+            fake_client.models.generate_content_prompts,
+            [AUDIO_TO_MARKDOWN_PROMPT, AUDIO_TO_MARKDOWN_NON_LITERAL_FALLBACK_PROMPT],
+        )
+        self.assertEqual(result["completion_model"], "gemini-3.1-flash-lite")
         self.assertEqual(result["fallback_from_model"], "gemini-3.1-flash-lite")
-        self.assertEqual(result["fallback_to_model"], "gemini-3-flash-preview")
+        self.assertEqual(result["fallback_to_model"], "gemini-3.1-flash-lite")
+        self.assertEqual(result["prompt_variant"], "non_literal_fallback")
+        self.assertEqual(result["fallback_from_prompt_variant"], "default")
+        self.assertEqual(result["fallback_to_prompt_variant"], "non_literal_fallback")
         self.assertIn("recitation", result["fallback_reason"].lower())
 
     @patch("polytext.converter.audio_to_text.genai.Client")
-    def test_max_tokens_retries_with_fallback_model(self, mock_client_cls):
+    def test_max_tokens_retries_with_non_literal_prompt_before_fallback_model(self, mock_client_cls):
         fake_client = _FakeClient(
             responses=[
                 _make_response("first attempt", finish_reason="MAX_TOKENS"),
-                _make_response("fallback transcript", finish_reason="STOP"),
+                _make_response("prompt fallback transcript", finish_reason="STOP"),
             ]
         )
         mock_client_cls.return_value = fake_client
@@ -343,20 +353,21 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
             temp_audio.flush()
             result = converter.transcribe_audio(temp_audio.name)
 
-        self.assertEqual(result["transcript"], "fallback transcript")
+        self.assertEqual(result["transcript"], "prompt fallback transcript")
         self.assertEqual(
             fake_client.models.generate_content_models,
-            ["gemini-3.1-flash-lite", "gemini-3-flash-preview"],
+            ["gemini-3.1-flash-lite", "gemini-3.1-flash-lite"],
         )
+        self.assertEqual(result["prompt_variant"], "non_literal_fallback")
         self.assertIn("max output tokens", result["fallback_reason"].lower())
 
     @patch("polytext.converter.audio_to_text.genai.Client")
-    def test_repetitive_tail_retries_with_fallback_model(self, mock_client_cls):
+    def test_repetitive_tail_retries_with_non_literal_prompt_before_fallback_model(self, mock_client_cls):
         repetitive_transcript = "\n".join(["Repeated tail line."] * 6)
         fake_client = _FakeClient(
             responses=[
                 _make_response(repetitive_transcript, finish_reason="STOP"),
-                _make_response("fallback transcript", finish_reason="STOP"),
+                _make_response("prompt fallback transcript", finish_reason="STOP"),
             ]
         )
         mock_client_cls.return_value = fake_client
@@ -367,12 +378,53 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
             temp_audio.flush()
             result = converter.transcribe_audio(temp_audio.name)
 
-        self.assertEqual(result["transcript"], "fallback transcript")
+        self.assertEqual(result["transcript"], "prompt fallback transcript")
         self.assertEqual(
             fake_client.models.generate_content_models,
-            ["gemini-3.1-flash-lite", "gemini-3-flash-preview"],
+            ["gemini-3.1-flash-lite", "gemini-3.1-flash-lite"],
         )
+        self.assertEqual(result["prompt_variant"], "non_literal_fallback")
         self.assertIn("repetitive tail", result["fallback_reason"].lower())
+
+    @patch("polytext.converter.audio_to_text.genai.Client")
+    def test_audio_uses_model_fallback_after_non_literal_prompt_still_fails(self, mock_client_cls):
+        fake_client = _FakeClient(
+            responses=[
+                _make_response("first attempt", finish_reason="MAX_TOKENS"),
+                _make_response("second attempt", finish_reason="RECITATION"),
+                _make_response("model fallback transcript", finish_reason="STOP"),
+            ]
+        )
+        mock_client_cls.return_value = fake_client
+
+        converter = AudioToTextConverter()
+        with tempfile.NamedTemporaryFile(suffix=".mp3") as temp_audio:
+            temp_audio.write(b"fake-audio")
+            temp_audio.flush()
+            result = converter.transcribe_audio(temp_audio.name)
+
+        self.assertEqual(result["transcript"], "model fallback transcript")
+        self.assertEqual(
+            fake_client.models.generate_content_models,
+            [
+                "gemini-3.1-flash-lite",
+                "gemini-3.1-flash-lite",
+                "gemini-3-flash-preview",
+            ],
+        )
+        self.assertEqual(fake_client.models.generate_content_temperatures, [0, 0, 1.0])
+        self.assertEqual(
+            fake_client.models.generate_content_prompts,
+            [
+                AUDIO_TO_MARKDOWN_PROMPT,
+                AUDIO_TO_MARKDOWN_NON_LITERAL_FALLBACK_PROMPT,
+                AUDIO_TO_MARKDOWN_NON_LITERAL_FALLBACK_PROMPT,
+            ],
+        )
+        self.assertEqual(result["completion_model"], "gemini-3-flash-preview")
+        self.assertEqual(result["fallback_from_model"], "gemini-3.1-flash-lite")
+        self.assertEqual(result["fallback_to_model"], "gemini-3-flash-preview")
+        self.assertEqual(result["prompt_variant"], "non_literal_fallback")
 
     @patch("polytext.converter.audio_to_text.genai.Client")
     def test_healthy_transcript_does_not_retry_with_fallback(self, mock_client_cls):
@@ -472,7 +524,7 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
             [
                 "gemini-3.1-flash-lite",
                 "gemini-3.1-flash-lite",
-                "gemini-3-flash-preview",
+                "gemini-3.1-flash-lite",
             ],
         )
         self.assertEqual(
