@@ -6,6 +6,7 @@ import time
 import mimetypes
 import uuid
 import re
+import shutil
 import ffmpeg
 from retry import retry
 from google import genai
@@ -15,7 +16,13 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from google.api_core import exceptions as google_exceptions
 
 from ..exceptions import EmptyDocument
-from ..prompts.transcription import AUDIO_TO_MARKDOWN_PROMPT, AUDIO_TO_PLAIN_TEXT_PROMPT
+from ..prompts.transcription import (
+    AUDIO_TO_MARKDOWN_NON_LITERAL_FALLBACK_PROMPT,
+    AUDIO_TO_MARKDOWN_PROMPT,
+    AUDIO_TO_PLAIN_TEXT_PROMPT,
+    AUDIO_TO_MARKDOWN_RAW_NON_LITERAL_FALLBACK_PROMPT,
+    AUDIO_TO_MARKDOWN_PROMPT_IS_RAW,
+)
 from ..processor.audio_chunker import AudioChunker
 from ..processor.text_merger import TextMerger
 from .gemini_quality_guards import extract_finish_reason, tail_has_excessive_repetition
@@ -48,6 +55,9 @@ AUDIO_FALLBACK_MODEL = os.getenv("AUDIO_FALLBACK_MODEL", "gemini-3-flash-preview
 AUDIO_FALLBACK_TEMPERATURE = float(os.getenv("AUDIO_FALLBACK_TEMPERATURE", "1.0"))
 AUDIO_FINAL_FALLBACK_MODEL = os.getenv("AUDIO_FINAL_FALLBACK_MODEL", "gemini-3.5-flash")
 AUDIO_FILE_UPLOAD_THRESHOLD_BYTES = 20 * 1024 * 1024
+AUDIO_PROMPT_VARIANT_DEFAULT = "default"
+AUDIO_PROMPT_VARIANT_NON_LITERAL_FALLBACK = "non_literal_fallback"
+AUDIO_RETRIABLE_OUTPUT_ERROR_CODES = (996, 997, 999)
 NO_HUMAN_SPEECH_MARKER = "no human speech detected"
 
 
@@ -64,6 +74,44 @@ def normalize_no_human_speech_marker(text: str) -> tuple[str, bool]:
     cleaned_text = re.sub(r"(?i)\bno human speech detected\b", "", cleaned_text)
     cleaned_text = re.sub(r"\n{3,}", "\n\n", cleaned_text).strip()
     return cleaned_text, False
+
+
+def add_line_break_after_each_sentence(text: str) -> str:
+    if not text:
+        return text
+
+    lines = text.splitlines()
+    formatted_lines = []
+
+    for line in lines:
+        stripped_line = line.strip()
+        if not stripped_line:
+            formatted_lines.append("")
+            continue
+        if re.match(r"^#{1,6}\s+", stripped_line):
+            formatted_lines.append(stripped_line)
+            continue
+
+        normalized_line = re.sub(r"\s+", " ", stripped_line)
+        normalized_line = re.sub(r"([.!?])\s+", r"\1\n", normalized_line)
+        formatted_lines.append(normalized_line)
+
+    return "\n".join(formatted_lines).strip()
+
+
+def create_ascii_safe_upload_copy(audio_file: str) -> tuple[str, str | None]:
+    if os.path.basename(audio_file).isascii():
+        return audio_file, None
+
+    suffix = os.path.splitext(audio_file)[1]
+    if not suffix.isascii():
+        suffix = ""
+
+    fd, temp_upload_path = tempfile.mkstemp(prefix="audio-upload-", suffix=suffix)
+    os.close(fd)
+    if os.path.exists(audio_file):
+        shutil.copyfile(audio_file, temp_upload_path)
+    return temp_upload_path, temp_upload_path
 
 
 def compress_and_convert_audio(input_path: str, bitrate_quality: int = 9) -> str:
@@ -116,7 +164,8 @@ def transcribe_full_audio(audio_file, markdown_output: bool = False,
                           save_transcript_chunks: bool = False, bitrate_quality=9,
                           timeout_minutes: int = None,
                           max_llm_tokens: int = 4250,
-                          max_output_tokens: int | None = None) -> dict:
+                          max_output_tokens: int | None = None,
+                          is_output_audio_raw: bool = True) -> dict:
     """
     Convenience function to transcribe an audio file into text, optionally formatted as Markdown.
 
@@ -134,13 +183,16 @@ def transcribe_full_audio(audio_file, markdown_output: bool = False,
         timeout_minutes (int, optional): Number of minutes to wait for a response. Defaults to None.
         max_llm_tokens (int, optional): Token budget used for audio chunk sizing. Defaults to 4250.
         max_output_tokens (int | None, optional): Maximum Gemini output tokens. Defaults to `max_llm_tokens`.
+        is_output_audio_raw (bool, optional): If True, use the raw Markdown audio prompt.
+            If False, use the formatted Markdown audio prompt. Defaults to True.
 
     Returns:
         str: The transcribed text from the audio file.
     """
     converter = AudioToTextConverter(markdown_output=markdown_output, llm_api_key=llm_api_key,
                                      bitrate_quality=bitrate_quality, timeout_minutes=timeout_minutes,
-                                     max_llm_tokens=max_llm_tokens, max_output_tokens=max_output_tokens)
+                                     max_llm_tokens=max_llm_tokens, max_output_tokens=max_output_tokens,
+                                     is_output_audio_raw=is_output_audio_raw)
     return converter.transcribe_full_audio(audio_file, save_transcript_chunks)
 
 
@@ -150,7 +202,10 @@ class AudioToTextConverter:
                  k: int = 5, min_matches: int = 3, markdown_output: bool = True, llm_api_key: str = None,
                  max_llm_tokens: int = 4250,
                  max_output_tokens: int | None = None, temp_dir: str = "temp",
-                 bitrate_quality: int = 9, timeout_minutes: int = None):
+                 bitrate_quality: int = 9, timeout_minutes: int = None,
+                 fallback_stage: int = 0,
+                 prompt_variant: str = AUDIO_PROMPT_VARIANT_DEFAULT,
+                 is_output_audio_raw: bool  = True):
         """
         Initialize the AudioToTextConverter class with a specified transcription model and provider.
 
@@ -167,6 +222,12 @@ class AudioToTextConverter:
             temp_dir (str): Directory for temporary files. Defaults to "temp".
             bitrate_quality (int, optional): Variable bitrate quality from 0-9 (9 being lowest). Defaults to 9
             timeout_minutes (int): Number of minutes to wait for a response.
+            fallback_stage (int, optional): Internal retry stage used by fallback attempts.
+                Defaults to 0.
+            prompt_variant (str, optional): Prompt variant used by this attempt.
+                Defaults to "default".
+            is_output_audio_raw (bool, optional): If True, use the raw Markdown audio prompt.
+                If False, use the formatted Markdown audio prompt. Defaults to True.
 
         Raises:
             OSError: If temp directory creation fails
@@ -184,27 +245,56 @@ class AudioToTextConverter:
         self.chunked_audio = False
         self.bitrate_quality = bitrate_quality
         self.timeout_minutes = timeout_minutes
+        self.fallback_stage = fallback_stage
+        self.prompt_variant = prompt_variant
         self.fallback_source_pattern = AUDIO_FALLBACK_SOURCE_PATTERN
         self.fallback_model = AUDIO_FALLBACK_MODEL
         self.fallback_temperature = AUDIO_FALLBACK_TEMPERATURE
         self.final_fallback_model = AUDIO_FINAL_FALLBACK_MODEL
+        self.is_output_audio_raw = is_output_audio_raw
 
         # Set up custom temp directory
         self.temp_dir = os.path.abspath(temp_dir)
         os.makedirs(self.temp_dir, exist_ok=True)
         tempfile.tempdir = self.temp_dir
 
+    def _build_prompt_template(self) -> str:
+        if self.markdown_output and self.prompt_variant == AUDIO_PROMPT_VARIANT_NON_LITERAL_FALLBACK:
+            if self.is_output_audio_raw:
+                return AUDIO_TO_MARKDOWN_RAW_NON_LITERAL_FALLBACK_PROMPT
+            return AUDIO_TO_MARKDOWN_NON_LITERAL_FALLBACK_PROMPT
+        if self.markdown_output and self.is_output_audio_raw:
+            return AUDIO_TO_MARKDOWN_PROMPT_IS_RAW
+        if self.markdown_output:
+            return AUDIO_TO_MARKDOWN_PROMPT
+        return AUDIO_TO_PLAIN_TEXT_PROMPT
+
+    def should_prompt_fallback_retry(self, error: EmptyDocument) -> bool:
+        if self.fallback_stage != 0:
+            return False
+        if not self.markdown_output:
+            return False
+        if self.prompt_variant == AUDIO_PROMPT_VARIANT_NON_LITERAL_FALLBACK:
+            return False
+        return error.code in AUDIO_RETRIABLE_OUTPUT_ERROR_CODES
+
     def should_fallback_temperature_retry(self, error: EmptyDocument, temperature: float) -> bool:
-        if error.code not in (996, 997, 999):
+        expected_stage = 1 if self.markdown_output else 0
+        if self.fallback_stage != expected_stage:
+            return False
+        if error.code not in AUDIO_RETRIABLE_OUTPUT_ERROR_CODES:
             return False
         if self.fallback_model == self.transcription_model and temperature == self.fallback_temperature:
             return False
-        if self.fallback_source_pattern not in self.transcription_model:
-            return False
-        return True
+        if self.fallback_source_pattern and self.fallback_source_pattern in self.transcription_model:
+            return True
+        return self.transcription_model != self.fallback_model
 
     def should_final_fallback_model(self, error: EmptyDocument) -> bool:
-        if error.code not in (996, 997, 999):
+        expected_stage = 2 if self.markdown_output else 1
+        if self.fallback_stage != expected_stage:
+            return False
+        if error.code not in AUDIO_RETRIABLE_OUTPUT_ERROR_CODES:
             return False
         if self.final_fallback_model == self.transcription_model:
             return False
@@ -216,10 +306,14 @@ class AudioToTextConverter:
             reason: str,
             fallback_model: str,
             fallback_temperature: float,
+            fallback_stage: int,
+            prompt_variant: str | None = None,
     ) -> dict:
+        resolved_prompt_variant = prompt_variant or self.prompt_variant
         logger.info(
-            "Retrying audio transcript with fallback model %s and temperature %s for %s because %s",
+            "Retrying audio transcript with fallback model %s, prompt variant %s and temperature %s for %s because %s",
             fallback_model,
+            resolved_prompt_variant,
             fallback_temperature,
             audio_file,
             reason,
@@ -236,15 +330,20 @@ class AudioToTextConverter:
             temp_dir=self.temp_dir,
             bitrate_quality=self.bitrate_quality,
             timeout_minutes=self.timeout_minutes,
+            fallback_stage=fallback_stage,
+            prompt_variant=resolved_prompt_variant,
+            is_output_audio_raw=self.is_output_audio_raw,
         )
         result = fallback_converter.transcribe_audio(
             audio_file=audio_file,
             temperature=fallback_temperature,
         )
-        result["fallback_from_model"] = self.transcription_model
-        result["fallback_to_model"] = fallback_model
-        result["fallback_reason"] = reason
-        result["fallback_temperature"] = fallback_temperature
+        result.setdefault("fallback_from_model", self.transcription_model)
+        result.setdefault("fallback_to_model", fallback_model)
+        result.setdefault("fallback_reason", reason)
+        result.setdefault("fallback_temperature", fallback_temperature)
+        result.setdefault("fallback_from_prompt_variant", self.prompt_variant)
+        result.setdefault("fallback_to_prompt_variant", resolved_prompt_variant)
         return result
 
     def build_config(self, output_budget: int, temperature: float = 0.0) -> types.GenerateContentConfig:
@@ -295,7 +394,8 @@ class AudioToTextConverter:
         if file_size > AUDIO_FILE_UPLOAD_THRESHOLD_BYTES:
             logger.info("Audio file size exceeds 20MB, uploading file before transcription")
 
-            my_file = client.files.upload(file=audio_file)
+            upload_file, temp_upload_path = create_ascii_safe_upload_copy(audio_file)
+            my_file = client.files.upload(file=upload_file)
             try:
                 response = client.models.count_tokens(
                     model=self.transcription_model,
@@ -312,6 +412,8 @@ class AudioToTextConverter:
                 )
             finally:
                 client.files.delete(name=my_file.name)
+                if temp_upload_path and os.path.exists(temp_upload_path):
+                    os.remove(temp_upload_path)
 
         logger.info("Audio file size does not exceed 20MB")
         with open(audio_file, "rb") as f:
@@ -374,14 +476,15 @@ class AudioToTextConverter:
 
         start_time = time.time()
 
+        prompt_template = self._build_prompt_template()
         if self.markdown_output:
-            logger.info("Using prompt for markdown format")
-            # Convert the text to Markdown format
-            prompt_template = AUDIO_TO_MARKDOWN_PROMPT
+            logger.info(
+                "Using prompt for markdown format with variant %s and raw output %s",
+                self.prompt_variant,
+                self.is_output_audio_raw,
+            )
         else:
-            logger.info("Using prompt for plain text format")
-            # Convert the text to plain text format
-            prompt_template = AUDIO_TO_PLAIN_TEXT_PROMPT
+            logger.info("Using prompt for plain text format with variant %s", self.prompt_variant)
 
         if self.llm_api_key:
             logger.info("Using provided Google API key")
@@ -434,6 +537,8 @@ class AudioToTextConverter:
                 )
 
             response_text, marker_only = normalize_no_human_speech_marker(response_text)
+            if not marker_only:
+                response_text = self.format_audio_output_text(response_text)
 
             response_dict = {
                 "transcript": "" if marker_only else response_text,
@@ -444,6 +549,7 @@ class AudioToTextConverter:
                 "finish_reason": finish_reason,
                 "max_output_tokens": self.max_output_tokens,
                 "temperature": temperature,
+                "prompt_variant": self.prompt_variant,
             }
 
             logger.info(
@@ -451,12 +557,22 @@ class AudioToTextConverter:
             )
             return response_dict
         except EmptyDocument as e:
+            if self.should_prompt_fallback_retry(e):
+                return self.run_fallback(
+                    audio_file=audio_file,
+                    reason=e.message,
+                    fallback_model=self.transcription_model,
+                    fallback_temperature=temperature,
+                    fallback_stage=1,
+                    prompt_variant=AUDIO_PROMPT_VARIANT_NON_LITERAL_FALLBACK,
+                )
             if self.should_fallback_temperature_retry(e, temperature):
                 return self.run_fallback(
                     audio_file=audio_file,
                     reason=e.message,
                     fallback_model=self.fallback_model,
                     fallback_temperature=self.fallback_temperature,
+                    fallback_stage=2 if self.markdown_output else 1,
                 )
             if self.should_final_fallback_model(e):
                 return self.run_fallback(
@@ -464,6 +580,7 @@ class AudioToTextConverter:
                     reason=e.message,
                     fallback_model=self.final_fallback_model,
                     fallback_temperature=0.0,
+                    fallback_stage=3 if self.markdown_output else 2,
                 )
             raise
 
@@ -472,6 +589,9 @@ class AudioToTextConverter:
         logger.info(f"Transcribing chunk {index + 1}...")
         transcript_dict = self.transcribe_audio(chunk["file_path"])
         return index, transcript_dict
+
+    def format_audio_output_text(self, text: str) -> str:
+        return add_line_break_after_each_sentence(text)
 
     def transcribe_full_audio(self,
             audio_path: str, save_transcript_chunks: bool = False) -> dict:
@@ -565,7 +685,7 @@ class AudioToTextConverter:
         full_text_merged_dict = text_merger.merge_chunks_with_llm_sequential(chunks=transcript_chunks)
 
         result_dict = {
-            "text": full_text_merged_dict["full_text_merged"],
+            "text": self.format_audio_output_text(full_text_merged_dict["full_text_merged"]),
             "completion_tokens": completion_tokens + full_text_merged_dict["completion_tokens"],
             "prompt_tokens": prompt_tokens + full_text_merged_dict["prompt_tokens"],
             "completion_model": self.transcription_model,
@@ -582,11 +702,14 @@ class AudioToTextConverter:
                     "fallback_to_model",
                     "fallback_reason",
                     "fallback_temperature",
+                    "prompt_variant",
+                    "fallback_from_prompt_variant",
+                    "fallback_to_prompt_variant",
             ):
                 if key in chunk_results[0]:
                     result_dict[key] = chunk_results[0][key]
         if save_transcript_chunks:
-            result_dict["text_chunks"] = transcript_chunks
+            result_dict["text_chunks"] = [self.format_audio_output_text(chunk) for chunk in transcript_chunks]
             result_dict["chunk_results"] = chunk_results
 
         # Clean up temporary files
