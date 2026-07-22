@@ -1,4 +1,5 @@
 import unittest
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from polytext.exceptions import ConversionError, EmptyDocument, LoaderError
@@ -38,6 +39,24 @@ class _FallbackFailingBaseLoader(BaseLoader):
         if is_document_fallback:
             return _FailingLoader(self.fallback_error)
         return _FailingLoader(self.initial_error)
+
+
+class _BeautifulTextLoader(BaseLoader):
+    def __init__(self, raw_result=None, **kwargs):
+        super().__init__(**kwargs)
+        self.raw_result = raw_result or {
+            "text": "raw text",
+            "completion_tokens": 0,
+            "prompt_tokens": 0,
+            "completion_model": "not provided",
+            "completion_model_provider": "not provided",
+            "text_chunks": "not provided",
+            "type": "text",
+            "input": "dummy input",
+        }
+
+    def extract_raw_text_for_beautiful_text(self, input_value: str, **kwargs) -> dict:
+        return self.raw_result
 
 
 class TestBaseLoaderErrorMapping(unittest.TestCase):
@@ -142,6 +161,34 @@ class TestBaseLoaderErrorMapping(unittest.TestCase):
         mock_info.assert_not_called()
         mock_exception.assert_not_called()
         sentry_sdk.capture_exception.assert_called_once_with(conversion_error)
+
+    def test_beautiful_text_without_detected_chapters_is_raised_as_loader_error(self):
+        loader = _BeautifulTextLoader()
+        cleanup_result = {
+            "text": "Short text without headings.",
+            "completion_tokens": 1,
+            "prompt_tokens": 1,
+            "completion_model": "gemini-3.1-flash-lite",
+            "completion_model_provider": "google",
+            "text_chunks": "not provided",
+            "markdown_json": {"root": ["Short text without headings."]},
+            "chapters": [],
+        }
+
+        fake_converter_class = Mock()
+        fake_converter_class.return_value.convert.return_value = cleanup_result
+
+        with patch.dict(
+            "sys.modules",
+            {"polytext.converter.beautiful_text": SimpleNamespace(BeautifulTextConverter=fake_converter_class)},
+        ):
+            with self.assertRaises(LoaderError) as error_context:
+                loader.get_beautiful_text(["dummy input"], active_chapters=True)
+
+        error = error_context.exception
+        self.assertEqual(error.status, 422)
+        self.assertEqual(error.code, "NO_CHAPTERS_DETECTED")
+        self.assertEqual(error.message, "No chapters detected")
 
 
 if __name__ == "__main__":
