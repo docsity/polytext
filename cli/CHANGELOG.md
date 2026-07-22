@@ -1,7 +1,12 @@
 
-1.0.22 (unreleased)
+1.0.23 (unreleased)
 -------------------------
 - add fairCopy command
+
+1.0.22 (07/07/2026 17:00)
+-------------------------
+- add fallback to RECITATION error
+- add new line separation on plain trascription
 
 1.0.21 (08/06/2026 16:00)
 -------------------------

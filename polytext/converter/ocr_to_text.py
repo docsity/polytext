@@ -11,6 +11,7 @@ from google.genai import types
 from google.api_core import exceptions as google_exceptions
 
 from ..prompts.ocr import (
+    OCR_TO_MARKDOWN_NON_LITERAL_FALLBACK_PROMPT,
     OCR_TO_MARKDOWN_PROMPT,
     OCR_TO_PLAIN_TEXT_PROMPT,
     build_ocr_prompt,
@@ -34,6 +35,9 @@ OCR_FALLBACK_SOURCE_PATTERN = os.getenv("OCR_FALLBACK_SOURCE_PATTERN", "flash-li
 OCR_FALLBACK_MODEL = os.getenv("OCR_FALLBACK_MODEL", "gemini-3-flash-preview")
 OCR_FALLBACK_TEMPERATURE = float(os.getenv("OCR_FALLBACK_TEMPERATURE", "1.0"))
 OCR_FINAL_FALLBACK_MODEL = os.getenv("OCR_FINAL_FALLBACK_MODEL", "gemini-3.5-flash")
+OCR_PROMPT_VARIANT_DEFAULT = "default"
+OCR_PROMPT_VARIANT_NON_LITERAL_FALLBACK = "non_literal_fallback"
+OCR_RETRIABLE_OUTPUT_ERROR_CODES = (996, 997, 999)
 
 
 def compress_and_convert_image(input_path: str, target_size=1):
@@ -149,7 +153,8 @@ class OCRToTextConverter:
     def __init__(self, ocr_model="gemini-3.1-flash-lite", ocr_model_provider="google",
                 markdown_output=True, llm_api_key=None, target_size=1, temp_dir="temp",
                  timeout_minutes=None, fallback_stage: int = 0, max_output_tokens: int | None = None,
-                 include_image_descriptions: bool = False):
+                 include_image_descriptions: bool = False,
+                 prompt_variant: str = OCR_PROMPT_VARIANT_DEFAULT):
         """
         Initialize the OCRToTextConverter class with specified OCR model and formatting options.
 
@@ -171,6 +176,8 @@ class OCRToTextConverter:
             include_image_descriptions (bool, optional): If True, OCR prompts include
                 brief functional descriptions for meaningful non-text images.
                 Defaults to False.
+            prompt_variant (str, optional): Prompt variant used by this attempt.
+                Defaults to "default".
 
         Raises:
             OSError: If temp directory creation fails
@@ -183,6 +190,7 @@ class OCRToTextConverter:
         self.target_size = target_size
         self.timeout_minutes = timeout_minutes
         self.include_image_descriptions = include_image_descriptions
+        self.prompt_variant = prompt_variant
         requested_output_tokens = OCR_MAX_OUTPUT_TOKENS if max_output_tokens is None else max_output_tokens
         self.max_output_tokens = max(requested_output_tokens, OCR_MIN_OUTPUT_TOKENS)
         self.fallback_stage = fallback_stage
@@ -197,16 +205,31 @@ class OCRToTextConverter:
         tempfile.tempdir = self.temp_dir
 
     def _build_prompt_template(self) -> str:
-        base_prompt = OCR_TO_MARKDOWN_PROMPT if self.markdown_output else OCR_TO_PLAIN_TEXT_PROMPT
+        if self.markdown_output and self.prompt_variant == OCR_PROMPT_VARIANT_NON_LITERAL_FALLBACK:
+            base_prompt = OCR_TO_MARKDOWN_NON_LITERAL_FALLBACK_PROMPT
+        elif self.markdown_output:
+            base_prompt = OCR_TO_MARKDOWN_PROMPT
+        else:
+            base_prompt = OCR_TO_PLAIN_TEXT_PROMPT
         return build_ocr_prompt(
             base_prompt,
             include_image_descriptions=self.include_image_descriptions,
         )
 
-    def should_fallback_temperature_retry(self, error: EmptyDocument, temperature: float) -> bool:
+    def should_prompt_fallback_retry(self, error: EmptyDocument) -> bool:
         if self.fallback_stage != 0:
             return False
-        if error.code not in (996, 997, 999):
+        if not self.markdown_output:
+            return False
+        if self.prompt_variant == OCR_PROMPT_VARIANT_NON_LITERAL_FALLBACK:
+            return False
+        return error.code in OCR_RETRIABLE_OUTPUT_ERROR_CODES
+
+    def should_fallback_temperature_retry(self, error: EmptyDocument, temperature: float) -> bool:
+        expected_stage = 1 if self.markdown_output else 0
+        if self.fallback_stage != expected_stage:
+            return False
+        if error.code not in OCR_RETRIABLE_OUTPUT_ERROR_CODES:
             return False
         if self.fallback_model == self.ocr_model and temperature == self.fallback_temperature:
             return False
@@ -215,9 +238,10 @@ class OCRToTextConverter:
         return self.ocr_model != self.fallback_model
 
     def should_final_fallback_model(self, error: EmptyDocument) -> bool:
-        if self.fallback_stage != 1:
+        expected_stage = 2 if self.markdown_output else 1
+        if self.fallback_stage != expected_stage:
             return False
-        if error.code not in (996, 997, 999):
+        if error.code not in OCR_RETRIABLE_OUTPUT_ERROR_CODES:
             return False
         if self.final_fallback_model == self.ocr_model:
             return False
@@ -230,10 +254,13 @@ class OCRToTextConverter:
         fallback_model: str,
         fallback_temperature: float,
         fallback_stage: int,
+        prompt_variant: str | None = None,
     ) -> dict:
+        resolved_prompt_variant = prompt_variant or self.prompt_variant
         logger.info(
-            "Retrying OCR with fallback model %s and temperature %s for %s because %s",
+            "Retrying OCR with fallback model %s, prompt variant %s and temperature %s for %s because %s",
             fallback_model,
+            resolved_prompt_variant,
             fallback_temperature,
             file_for_ocr,
             reason,
@@ -249,6 +276,7 @@ class OCRToTextConverter:
             fallback_stage=fallback_stage,
             max_output_tokens=self.max_output_tokens,
             include_image_descriptions=self.include_image_descriptions,
+            prompt_variant=resolved_prompt_variant,
         )
         result = fallback_converter.get_ocr(
             file_for_ocr=file_for_ocr,
@@ -258,6 +286,8 @@ class OCRToTextConverter:
         result.setdefault("fallback_to_model", fallback_model)
         result.setdefault("fallback_reason", reason)
         result.setdefault("fallback_temperature", fallback_temperature)
+        result.setdefault("fallback_from_prompt_variant", self.prompt_variant)
+        result.setdefault("fallback_to_prompt_variant", resolved_prompt_variant)
         return result
 
     @retry(
@@ -308,6 +338,7 @@ class OCRToTextConverter:
         else:
             logger.info("Using prompt for plain text format")
         prompt_template = self._build_prompt_template()
+        logger.info(prompt_template)
 
         try:
             if self.llm_api_key:
@@ -442,18 +473,28 @@ class OCRToTextConverter:
                 "finish_reason": finish_reason,
                 "max_output_tokens": self.max_output_tokens,
                 "temperature": temperature,
+                "prompt_variant": self.prompt_variant,
             }
 
             logger.info(f"OCR performed using {self.ocr_model} in {time_elapsed:.2f} seconds")
             return final_ocr_dict
         except EmptyDocument as e:
+            if self.should_prompt_fallback_retry(e):
+                return self.run_fallback(
+                    file_for_ocr=file_for_ocr,
+                    reason=e.message,
+                    fallback_model=self.ocr_model,
+                    fallback_temperature=temperature,
+                    fallback_stage=1,
+                    prompt_variant=OCR_PROMPT_VARIANT_NON_LITERAL_FALLBACK,
+                )
             if self.should_fallback_temperature_retry(e, temperature):
                 return self.run_fallback(
                     file_for_ocr=file_for_ocr,
                     reason=e.message,
                     fallback_model=self.fallback_model,
                     fallback_temperature=self.fallback_temperature,
-                    fallback_stage=1,
+                    fallback_stage=2 if self.markdown_output else 1,
                 )
             if self.should_final_fallback_model(e):
                 return self.run_fallback(
@@ -461,7 +502,7 @@ class OCRToTextConverter:
                     reason=e.message,
                     fallback_model=self.final_fallback_model,
                     fallback_temperature=0.0,
-                    fallback_stage=2,
+                    fallback_stage=3 if self.markdown_output else 2,
                 )
             raise
 

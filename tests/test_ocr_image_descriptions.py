@@ -60,6 +60,17 @@ class TestOCRImageDescriptions(unittest.TestCase):
             prompt,
         )
 
+    def test_image_description_instructions_distinguish_embedded_images_from_input_container(self):
+        prompt = build_ocr_prompt(
+            OCR_TO_MARKDOWN_PROMPT,
+            include_image_descriptions=True,
+        )
+
+        self.assertIn("embedded visual content element", prompt)
+        self.assertIn("photo or illustration contained inside a book", prompt)
+        self.assertIn("DO NOT describe the input image as an object", prompt)
+        self.assertIn("If you are uncertain", prompt)
+
     def test_base_loader_stores_include_image_descriptions(self):
         loader = BaseLoader(source="local", include_image_descriptions=True)
 

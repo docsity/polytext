@@ -151,11 +151,11 @@ class TestOcrFallbacks(unittest.TestCase):
         self.assertEqual(fake_client.models.generate_content_configs[-1].max_output_tokens, 3000)
 
     @patch("polytext.converter.ocr_to_text.genai.Client")
-    def test_ocr_recitation_retries_with_fallback_model(self, mock_client_cls):
+    def test_ocr_recitation_retries_with_non_literal_prompt_before_fallback_model(self, mock_client_cls):
         fake_client = _FakeClient(
             responses=[
                 _make_response("first attempt", finish_reason="RECITATION"),
-                _make_response("fallback text", finish_reason="STOP"),
+                _make_response("prompt fallback text", finish_reason="STOP"),
             ]
         )
         mock_client_cls.return_value = fake_client
@@ -166,19 +166,22 @@ class TestOcrFallbacks(unittest.TestCase):
             temp_image.flush()
             result = converter.get_ocr(temp_image.name)
 
-        self.assertEqual(result["text"], "fallback text")
+        self.assertEqual(result["text"], "prompt fallback text")
         self.assertEqual(
             fake_client.models.generate_content_models,
-            ["gemini-3.1-flash-lite-preview", "gemini-3-flash-preview"],
+            ["gemini-3.1-flash-lite-preview", "gemini-3.1-flash-lite-preview"],
         )
-        self.assertEqual(fake_client.models.generate_content_temperatures, [0.0, 1.0])
-        self.assertEqual(result["completion_model"], "gemini-3-flash-preview")
+        self.assertEqual(fake_client.models.generate_content_temperatures, [0.0, 0.0])
+        self.assertEqual(result["completion_model"], "gemini-3.1-flash-lite-preview")
         self.assertEqual(result["fallback_from_model"], "gemini-3.1-flash-lite-preview")
-        self.assertEqual(result["fallback_to_model"], "gemini-3-flash-preview")
+        self.assertEqual(result["fallback_to_model"], "gemini-3.1-flash-lite-preview")
+        self.assertEqual(result["prompt_variant"], "non_literal_fallback")
+        self.assertEqual(result["fallback_from_prompt_variant"], "default")
+        self.assertEqual(result["fallback_to_prompt_variant"], "non_literal_fallback")
         self.assertIn("recitation", result["fallback_reason"].lower())
 
     @patch("polytext.converter.ocr_to_text.genai.Client")
-    def test_ocr_repetitive_tail_retries_with_fallback_model(self, mock_client_cls):
+    def test_ocr_repetitive_tail_retries_with_non_literal_prompt_before_fallback_model(self, mock_client_cls):
         repetitive_text = "\n".join(["Repeated OCR tail."] * 6)
         fake_client = _FakeClient(
             responses=[
@@ -197,16 +200,50 @@ class TestOcrFallbacks(unittest.TestCase):
         self.assertEqual(result["text"], "clean fallback text")
         self.assertEqual(
             fake_client.models.generate_content_models,
-            ["gemini-3.1-flash-lite-preview", "gemini-3-flash-preview"],
+            ["gemini-3.1-flash-lite-preview", "gemini-3.1-flash-lite-preview"],
         )
+        self.assertEqual(result["prompt_variant"], "non_literal_fallback")
         self.assertIn("repetitive tail", result["fallback_reason"].lower())
 
     @patch("polytext.converter.ocr_to_text.genai.Client")
-    def test_ocr_uses_final_fallback_after_fallback_model_still_fails(self, mock_client_cls):
+    def test_ocr_uses_model_fallback_after_non_literal_prompt_still_fails(self, mock_client_cls):
         fake_client = _FakeClient(
             responses=[
                 _make_response("first attempt", finish_reason="MAX_TOKENS"),
                 _make_response("second attempt", finish_reason="RECITATION"),
+                _make_response("model fallback text", finish_reason="STOP"),
+            ]
+        )
+        mock_client_cls.return_value = fake_client
+
+        converter = OCRToTextConverter(ocr_model="gemini-3.1-flash-lite-preview")
+        with tempfile.NamedTemporaryFile(suffix=".png") as temp_image:
+            temp_image.write(b"fake-image")
+            temp_image.flush()
+            result = converter.get_ocr(temp_image.name)
+
+        self.assertEqual(result["text"], "model fallback text")
+        self.assertEqual(
+            fake_client.models.generate_content_models,
+            [
+                "gemini-3.1-flash-lite-preview",
+                "gemini-3.1-flash-lite-preview",
+                "gemini-3-flash-preview",
+            ],
+        )
+        self.assertEqual(fake_client.models.generate_content_temperatures, [0.0, 0.0, 1.0])
+        self.assertEqual(result["completion_model"], "gemini-3-flash-preview")
+        self.assertEqual(result["fallback_from_model"], "gemini-3.1-flash-lite-preview")
+        self.assertEqual(result["fallback_to_model"], "gemini-3-flash-preview")
+        self.assertEqual(result["prompt_variant"], "non_literal_fallback")
+
+    @patch("polytext.converter.ocr_to_text.genai.Client")
+    def test_ocr_uses_final_fallback_after_model_fallback_still_fails(self, mock_client_cls):
+        fake_client = _FakeClient(
+            responses=[
+                _make_response("first attempt", finish_reason="MAX_TOKENS"),
+                _make_response("second attempt", finish_reason="RECITATION"),
+                _make_response("third attempt", finish_reason="MAX_TOKENS"),
                 _make_response("final fallback text", finish_reason="STOP"),
             ]
         )
@@ -224,14 +261,16 @@ class TestOcrFallbacks(unittest.TestCase):
             fake_client.models.generate_content_models,
             [
                 "gemini-3.1-flash-lite-preview",
+                "gemini-3.1-flash-lite-preview",
                 "gemini-3-flash-preview",
                 "gemini-2.0-flash",
             ],
         )
-        self.assertEqual(fake_client.models.generate_content_temperatures, [0.0, 1.0, 0.0])
+        self.assertEqual(fake_client.models.generate_content_temperatures, [0.0, 0.0, 1.0, 0.0])
         self.assertEqual(result["completion_model"], "gemini-2.0-flash")
         self.assertEqual(result["fallback_from_model"], "gemini-3-flash-preview")
         self.assertEqual(result["fallback_to_model"], "gemini-2.0-flash")
+        self.assertEqual(result["prompt_variant"], "non_literal_fallback")
 
     @patch("polytext.converter.document_ocr_to_text.genai.Client")
     @patch("concurrent.futures.as_completed", side_effect=_immediate_as_completed)
@@ -263,10 +302,10 @@ class TestOcrFallbacks(unittest.TestCase):
             [
                 "gemini-3.1-flash-lite-preview",
                 "gemini-3.1-flash-lite-preview",
-                "gemini-3-flash-preview",
+                "gemini-3.1-flash-lite-preview",
             ],
         )
-        self.assertEqual(fake_client.models.generate_content_temperatures, [0.0, 0.0, 1.0])
+        self.assertEqual(fake_client.models.generate_content_temperatures, [0.0, 0.0, 0.0])
 
     @patch("fitz.open")
     def test_azure_document_ocr_no_pages_is_empty_or_too_short(self, mock_fitz_open):
