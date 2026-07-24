@@ -259,9 +259,9 @@ class BaseLoader:
         cleanup_result = converter.convert(
             raw_text=raw_result["text"],
             save_transcript_chunks=kwargs.get("save_transcript_chunks", self.save_transcript_chunks),
-            active_chapters=kwargs.get("active_chapters", False),
+            active_chapters=kwargs.get("active_chapters", True),
         )
-        if kwargs.get("active_chapters", False) and not cleanup_result.get("chapters"):
+        if not cleanup_result.get("chapters"):
             raise LoaderError(
                 message="No chapters detected",
                 status=422,
@@ -271,7 +271,7 @@ class BaseLoader:
         total_completion_tokens = raw_result.get("completion_tokens", 0) + cleanup_result.get("completion_tokens", 0)
         total_prompt_tokens = raw_result.get("prompt_tokens", 0) + cleanup_result.get("prompt_tokens", 0)
 
-        result_item = {
+        response = {
             "text": cleanup_result["text"],
             "completion_tokens": total_completion_tokens,
             "prompt_tokens": total_prompt_tokens,
@@ -282,21 +282,8 @@ class BaseLoader:
             "input": input_list[0],
         }
         if "chapters" in cleanup_result:
-            result_item["chapters"] = cleanup_result["chapters"]
+            response["chapters"] = cleanup_result["chapters"]
 
-        response = {
-            "text": result_item["text"],
-            "completion_tokens": result_item["completion_tokens"],
-            "prompt_tokens": result_item["prompt_tokens"],
-            "completion_model": result_item["completion_model"],
-            "completion_model_provider": result_item["completion_model_provider"],
-            "text_chunks": result_item["text_chunks"],
-            "type": result_item["type"],
-            "input": result_item["input"],
-            "output_list": [result_item],
-        }
-        if "chapters" in result_item:
-            response["chapters"] = result_item["chapters"]
         return response
 
     def initiate_storage(self, input: str) -> dict:

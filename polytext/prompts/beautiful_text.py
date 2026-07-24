@@ -31,6 +31,9 @@ FORMATTING:
 - output Markdown only
 - use paragraphs to separate thematic blocks
 - add headings only when the speaker explicitly introduces a new topic
+- whenever possible, organize the output with Markdown headings that reflect the actual topic of the text
+- if the text is short, compact, or does not contain a clear topic shift, you must still add at least one short Markdown heading before the content
+- when only one heading is justified, use a single concise heading that faithfully names the topic without adding new information
 - use bullet lists or numbered lists only when the source explicitly enumerates items or when the sequence is clearly list-shaped
 - use emphasis sparingly and only when grounded in the original text
 - use **bold** for key information and important concepts, and *italics* for subtle emphasis or contextual terms in every chapter and paragraph whenever they improve readability and understanding
@@ -40,4 +43,5 @@ FORMATTING:
 FINAL CHECK:
 - every sentence in the output must be traceable to an equivalent sentence in the input
 - if a sentence cannot be grounded in the input, remove it
+- ensure the final Markdown always contains at least one heading, even for short inputs
 """
