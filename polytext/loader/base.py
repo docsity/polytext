@@ -259,8 +259,14 @@ class BaseLoader:
         cleanup_result = converter.convert(
             raw_text=raw_result["text"],
             save_transcript_chunks=kwargs.get("save_transcript_chunks", self.save_transcript_chunks),
-            active_chapters=kwargs.get("active_chapters", False),
+            active_chapters=kwargs.get("active_chapters", True),
         )
+        if not cleanup_result.get("chapters"):
+            raise LoaderError(
+                message="No chapters detected",
+                status=422,
+                code="NO_CHAPTERS_DETECTED",
+            )
 
         total_completion_tokens = raw_result.get("completion_tokens", 0) + cleanup_result.get("completion_tokens", 0)
         total_prompt_tokens = raw_result.get("prompt_tokens", 0) + cleanup_result.get("prompt_tokens", 0)

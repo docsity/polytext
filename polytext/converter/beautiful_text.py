@@ -156,7 +156,7 @@ class BeautifulTextConverter:
         finalize_nodes()
         return chapters
 
-    def convert(self, raw_text: str, save_transcript_chunks: bool = False, active_chapters: bool = False) -> dict:
+    def convert(self, raw_text: str, save_transcript_chunks: bool = False, active_chapters: bool = True) -> dict:
         cleaned_input = (raw_text or "").strip()
         if not cleaned_input:
             result = {
@@ -204,6 +204,6 @@ class BeautifulTextConverter:
             "text_chunks": cleaned_chunks if save_transcript_chunks else "not provided",
         }
         if active_chapters:
-            result["markdown_json"] = self._convert_markdown_to_json(final_text)
+            # result["markdown_json"] = self._convert_markdown_to_json(final_text)
             result["chapters"] = self._build_chapters(final_text)
         return result
