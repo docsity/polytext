@@ -46,6 +46,11 @@ FORMATTING:
 - if the text is short or has weak structure, add one minimal heading only
 - do not convert prose into bullet lists unless the speaker is explicitly enumerating points
 - use emphasis sparingly
+- you may add light Markdown emphasis to improve scanability, but only locally and without rewriting the sentence
+- use **bold** for clearly salient entities already present in the source, such as names, products, platforms, institutions, laws, or central concepts
+- use *italics* sparingly for contextual labels, foreign expressions, or technical terms when this remains clearly faithful to the source
+- do not apply emphasis to large portions of text
+- do not use emphasis as a substitute for rewriting, summarizing, or restructuring
 - do not add emphasis just to make the text nicer
 - do not add code fences or commentary
 
