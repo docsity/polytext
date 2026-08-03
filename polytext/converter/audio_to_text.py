@@ -93,10 +93,10 @@ def add_line_break_after_each_sentence(text: str) -> str:
             continue
 
         normalized_line = re.sub(r"\s+", " ", stripped_line)
-        normalized_line = re.sub(r"([.!?])\s+", r"\1\n", normalized_line)
+        normalized_line = re.sub(r"([.!?])\s+", r"\1\\n ", normalized_line)
         formatted_lines.append(normalized_line)
 
-    return "\n".join(formatted_lines).strip()
+    return "\\n ".join(formatted_lines).strip()
 
 
 def create_ascii_safe_upload_copy(audio_file: str) -> tuple[str, str | None]:

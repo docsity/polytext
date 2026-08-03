@@ -137,7 +137,7 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
 
         self.assertEqual(
             formatted,
-            "Prima frase.\nSeconda frase?\nTerza frase!\n## Titolo\nQuarta frase.\nQuinta frase.",
+            "Prima frase.\\n Seconda frase?\\n Terza frase!\\n ## Titolo\\n Quarta frase.\\n Quinta frase.",
         )
 
     def test_normalize_no_human_speech_marker_returns_empty_for_marker_only(self):
