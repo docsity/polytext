@@ -90,7 +90,9 @@ def _raise_empty_document_loader_error(error: EmptyDocument) -> None:
 class BaseLoader:
     def __init__(self, markdown_output=True, llm_api_key=None, provider: str = "google", temp_dir: str = "temp",
                  ocr_model: str = "gpt-5-mini", timeout_minutes: int | None = None,
-                 include_image_descriptions: bool | None = None, **kwargs):
+                 include_image_descriptions: bool | None = None,
+                 force_ocr: bool = False,
+                 **kwargs):
         """
         Initialize the BaseLoader with cloud storage and LLM configurations.
 
@@ -108,6 +110,8 @@ class BaseLoader:
             include_image_descriptions (bool | None, optional): If True, OCR prompts
                 include brief functional descriptions for meaningful non-text images.
                 If None, defaults from OCR_INCLUDE_IMAGE_DESCRIPTIONS. Defaults to None.
+            force_ocr (bool, optional): If True, supported document files are routed to
+                OCRLoader instead of the standard DocumentLoader. Defaults to False.
              **kwargs: Additional keyword arguments to pass to the underlying loader or extraction logic.
                 - target_size (int, optional): Target file size in bytes. Defaults to 1MB
                 - source (str): Source of the document. Must be either "cloud" or "local"
@@ -131,6 +135,7 @@ class BaseLoader:
             if include_image_descriptions is None
             else include_image_descriptions
         )
+        self.force_ocr = force_ocr
         self.kwargs = kwargs
         self.target_size = kwargs.get("target_size", 1)
         self.source = kwargs.get("source", "cloud")
@@ -442,6 +447,20 @@ class BaseLoader:
             )
         elif mime_type:
             if file_extension in [".pdf", ".xlsx", ".docx", ".txt", ".csv", ".odt", ".pptx", ".xls", ".doc", ".ppt", ".rtf"]:
+                if self.force_ocr:
+
+                    return DocumentOCRLoader(
+                        llm_api_key=llm_api_key,
+                        markdown_output=self.markdown_output,
+                        temp_dir=self.temp_dir,
+                        timeout_minutes=self.timeout_minutes,
+                        ocr_provider=self.provider,
+                        ocr_model=self.ocr_model,
+                        include_image_descriptions=self.include_image_descriptions,
+                        allow_partial_ocr_failures=True,
+                        **kwargs,
+                    )
+
                 return DocumentLoader(markdown_output=self.markdown_output, temp_dir=self.temp_dir, timeout_minutes=self.timeout_minutes, **kwargs)
             elif mime_type.startswith("audio/"):
                 audio_kwargs = {**kwargs, "is_output_audio_raw": self.is_output_audio_raw}
