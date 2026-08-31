@@ -13,6 +13,7 @@ from google.api_core import exceptions as google_exceptions
 from ..prompts.ocr import (
     OCR_TO_MARKDOWN_NON_LITERAL_FALLBACK_PROMPT,
     OCR_TO_MARKDOWN_PROMPT,
+    OCR_TO_PLAIN_TEXT_NON_LITERAL_FALLBACK_PROMPT,
     OCR_TO_PLAIN_TEXT_PROMPT,
     build_ocr_prompt,
 )
@@ -34,7 +35,7 @@ OCR_TAIL_REPETITION_THRESHOLD = float(os.getenv("OCR_TAIL_REPETITION_THRESHOLD",
 OCR_FALLBACK_SOURCE_PATTERN = os.getenv("OCR_FALLBACK_SOURCE_PATTERN", "flash-lite-preview")
 OCR_FALLBACK_MODEL = os.getenv("OCR_FALLBACK_MODEL", "gemini-3-flash-preview")
 OCR_FALLBACK_TEMPERATURE = float(os.getenv("OCR_FALLBACK_TEMPERATURE", "1.0"))
-OCR_FINAL_FALLBACK_MODEL = os.getenv("OCR_FINAL_FALLBACK_MODEL", "gemini-3.6-flash")
+OCR_FINAL_FALLBACK_MODEL = os.getenv("OCR_FINAL_FALLBACK_MODEL", "gemini-3.5-flash")
 OCR_PROMPT_VARIANT_DEFAULT = "default"
 OCR_PROMPT_VARIANT_NON_LITERAL_FALLBACK = "non_literal_fallback"
 OCR_RETRIABLE_OUTPUT_ERROR_CODES = (996, 997, 999)
@@ -222,6 +223,8 @@ class DocumentOCRToTextConverter:
     def _build_prompt_template(self) -> str:
         if self.markdown_output and self.prompt_variant == OCR_PROMPT_VARIANT_NON_LITERAL_FALLBACK:
             base_prompt = OCR_TO_MARKDOWN_NON_LITERAL_FALLBACK_PROMPT
+        elif not self.markdown_output and self.prompt_variant == OCR_PROMPT_VARIANT_NON_LITERAL_FALLBACK:
+            base_prompt = OCR_TO_PLAIN_TEXT_NON_LITERAL_FALLBACK_PROMPT
         elif self.markdown_output:
             base_prompt = OCR_TO_MARKDOWN_PROMPT
         else:
@@ -233,8 +236,6 @@ class DocumentOCRToTextConverter:
 
     def should_prompt_fallback_retry(self, error: EmptyDocument) -> bool:
         if self.fallback_stage != 0:
-            return False
-        if not self.markdown_output:
             return False
         if self.prompt_variant == OCR_PROMPT_VARIANT_NON_LITERAL_FALLBACK:
             return False
@@ -570,6 +571,7 @@ class DocumentOCRToTextConverter:
                         "completion_model_provider": self.ocr_model_provider,
                         "text_chunks": "not provided",
                         "page_error": True,
+                        "page_error_reason": error.message,
                     }
                 return page_num, ocr_result
 
@@ -603,11 +605,17 @@ class DocumentOCRToTextConverter:
             all_text = []
             total_completion_tokens = 0
             total_prompt_tokens = 0
+            failed_pages = []
 
-            for _, ocr_result in results:
+            for page_num, ocr_result in results:
                 all_text.append(f"{ocr_result['text']}\n")
                 total_completion_tokens += ocr_result['completion_tokens']
                 total_prompt_tokens += ocr_result['prompt_tokens']
+                if ocr_result.get("page_error"):
+                    failed_pages.append({
+                        "page": page_num + 1,
+                        "reason": ocr_result.get("page_error_reason", "unknown"),
+                    })
 
             pdf.close()
 
@@ -618,6 +626,8 @@ class DocumentOCRToTextConverter:
                 "completion_model": self.ocr_model,
                 "completion_model_provider": self.ocr_model_provider,
                 "text_chunks": "not provided",
+                "ocr_failed_pages": [item["page"] for item in failed_pages],
+                "ocr_failed_pages_detail": failed_pages,
             }
 
             return final_result_dict

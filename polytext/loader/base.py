@@ -416,8 +416,7 @@ class BaseLoader:
             if path_without_query:
                 _, file_extension = os.path.splitext(path_without_query)
         else:  # If is local file path (without schema)
-            if os.path.exists(input):
-                _, file_extension = os.path.splitext(input)
+            _, file_extension = os.path.splitext(input)
 
         if file_extension:
             file_extension = file_extension.lower()
@@ -447,9 +446,11 @@ class BaseLoader:
             )
         elif mime_type:
             if file_extension in [".pdf", ".xlsx", ".docx", ".txt", ".csv", ".odt", ".pptx", ".xls", ".doc", ".ppt", ".rtf"]:
+                document_kwargs = {k: v for k, v in kwargs.items() if k != "source"}
                 if self.force_ocr:
 
                     return DocumentOCRLoader(
+                        source=self.source,
                         llm_api_key=llm_api_key,
                         markdown_output=self.markdown_output,
                         temp_dir=self.temp_dir,
@@ -458,10 +459,16 @@ class BaseLoader:
                         ocr_model=self.ocr_model,
                         include_image_descriptions=self.include_image_descriptions,
                         allow_partial_ocr_failures=True,
-                        **kwargs,
+                        **document_kwargs,
                     )
 
-                return DocumentLoader(markdown_output=self.markdown_output, temp_dir=self.temp_dir, timeout_minutes=self.timeout_minutes, **kwargs)
+                return DocumentLoader(
+                    source=self.source,
+                    markdown_output=self.markdown_output,
+                    temp_dir=self.temp_dir,
+                    timeout_minutes=self.timeout_minutes,
+                    **document_kwargs,
+                )
             elif mime_type.startswith("audio/"):
                 audio_kwargs = {**kwargs, "is_output_audio_raw": self.is_output_audio_raw}
                 return AudioLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, timeout_minutes=self.timeout_minutes, **audio_kwargs)
@@ -590,14 +597,18 @@ class BaseLoader:
 
         result_dict["text"] = clean_extracted_text_whitespace(remove_markdown_strip(result_dict["text"]))
 
-        result_dict = {
+        final_result = {
             "text": result_dict["text"],
             "completion_tokens": result_dict["completion_tokens"],
             "prompt_tokens": result_dict["prompt_tokens"],
             "output_list": [result_dict],
         }
 
-        return result_dict
+        for metadata_key in ("ocr_failed_pages", "ocr_failed_pages_detail"):
+            if metadata_key in result_dict:
+                final_result[metadata_key] = result_dict[metadata_key]
+
+        return final_result
 
 # Helper methods
     @staticmethod

@@ -13,6 +13,7 @@ from google.api_core import exceptions as google_exceptions
 from ..prompts.ocr import (
     OCR_TO_MARKDOWN_NON_LITERAL_FALLBACK_PROMPT,
     OCR_TO_MARKDOWN_PROMPT,
+    OCR_TO_PLAIN_TEXT_NON_LITERAL_FALLBACK_PROMPT,
     OCR_TO_PLAIN_TEXT_PROMPT,
     build_ocr_prompt,
 )
@@ -207,6 +208,8 @@ class OCRToTextConverter:
     def _build_prompt_template(self) -> str:
         if self.markdown_output and self.prompt_variant == OCR_PROMPT_VARIANT_NON_LITERAL_FALLBACK:
             base_prompt = OCR_TO_MARKDOWN_NON_LITERAL_FALLBACK_PROMPT
+        elif not self.markdown_output and self.prompt_variant == OCR_PROMPT_VARIANT_NON_LITERAL_FALLBACK:
+            base_prompt = OCR_TO_PLAIN_TEXT_NON_LITERAL_FALLBACK_PROMPT
         elif self.markdown_output:
             base_prompt = OCR_TO_MARKDOWN_PROMPT
         else:
@@ -218,8 +221,6 @@ class OCRToTextConverter:
 
     def should_prompt_fallback_retry(self, error: EmptyDocument) -> bool:
         if self.fallback_stage != 0:
-            return False
-        if not self.markdown_output:
             return False
         if self.prompt_variant == OCR_PROMPT_VARIANT_NON_LITERAL_FALLBACK:
             return False

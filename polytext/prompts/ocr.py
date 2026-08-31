@@ -28,6 +28,15 @@ Maintain paragraph breaks and formatting.
 Your output must be a plain text.
 """
 
+OCR_TO_PLAIN_TEXT_NON_LITERAL_FALLBACK_PROMPT = """
+Rephrase and reorganize the text content in a coherent plain text structure.
+Do not transcribe the text verbatim, but preserve the meaning of the original content without omitting anything, even apparently minor details.
+Pay special attention to tables, columns, headers, and any structured content.
+Maintain paragraph breaks and formatting.
+Your output must be a plain text.
+In case no readable text is present, write exactly "no readable text present".
+"""
+
 OCR_IMAGE_DESCRIPTION_INSTRUCTIONS = """
 Image description instructions:
 
