@@ -51,9 +51,9 @@ AUDIO_MIN_OUTPUT_TOKENS = 500
 AUDIO_TAIL_REPETITION_LINES = int(os.getenv("AUDIO_TAIL_REPETITION_LINES", "200"))
 AUDIO_TAIL_REPETITION_THRESHOLD = float(os.getenv("AUDIO_TAIL_REPETITION_THRESHOLD", "0.35"))
 AUDIO_FALLBACK_SOURCE_PATTERN = os.getenv("AUDIO_FALLBACK_SOURCE_PATTERN", "flash-lite")
-AUDIO_FALLBACK_MODEL = os.getenv("AUDIO_FALLBACK_MODEL", "gemini-3-flash-preview")
+AUDIO_FALLBACK_MODEL = os.getenv("AUDIO_FALLBACK_MODEL", "gemini-3.5-flash")
 AUDIO_FALLBACK_TEMPERATURE = float(os.getenv("AUDIO_FALLBACK_TEMPERATURE", "1.0"))
-AUDIO_FINAL_FALLBACK_MODEL = os.getenv("AUDIO_FINAL_FALLBACK_MODEL", "gemini-3.5-flash")
+AUDIO_FINAL_FALLBACK_MODEL = os.getenv("AUDIO_FINAL_FALLBACK_MODEL", "gemini-3.7-flash")
 AUDIO_FILE_UPLOAD_THRESHOLD_BYTES = 20 * 1024 * 1024
 AUDIO_PROMPT_VARIANT_DEFAULT = "default"
 AUDIO_PROMPT_VARIANT_NON_LITERAL_FALLBACK = "non_literal_fallback"
@@ -197,7 +197,7 @@ def transcribe_full_audio(audio_file, markdown_output: bool = False,
 
 
 class AudioToTextConverter:
-    def __init__(self, transcription_model: str = "gemini-3.1-flash-lite",
+    def __init__(self, transcription_model: str = "gemini-3.5-flash-lite",
                  transcription_model_provider: str = "google",
                  k: int = 5, min_matches: int = 3, markdown_output: bool = True, llm_api_key: str = None,
                  max_llm_tokens: int = 4250,
@@ -210,7 +210,7 @@ class AudioToTextConverter:
         Initialize the AudioToTextConverter class with a specified transcription model and provider.
 
         Args:
-            transcription_model (str): Model name for transcription. Defaults to "gemini-3.1-flash-lite".
+            transcription_model (str): Model name for transcription. Defaults to "gemini-3.5-flash-lite".
             transcription_model_provider (str): Provider of transcription service. Defaults to "google".
             k (int): Number of words to use when searching for overlap between chunks. Defaults to 5.
             min_matches (int): Minimum matching words for chunk merging. Defaults to 3.
@@ -349,7 +349,9 @@ class AudioToTextConverter:
     def build_config(self, output_budget: int, temperature: float = 0.0) -> types.GenerateContentConfig:
         return types.GenerateContentConfig(
             temperature=temperature,
-            thinking_config=types.ThinkingConfig(thinking_budget=0),
+            thinking_config=types.ThinkingConfig(
+                thinking_level=types.ThinkingLevel.MINIMAL,
+            ),
             max_output_tokens=output_budget,
             system_instruction=INJECTION_GUARD_SYSTEM_INSTRUCTION,
             tools=[],
@@ -448,7 +450,6 @@ class AudioToTextConverter:
                 google_exceptions.ServiceUnavailable,
                 google_exceptions.InternalServerError,
                 genai_errors.ServerError,
-                genai_errors.APIError,
         ),
         tries=8,
         delay=1,
@@ -680,7 +681,10 @@ class AudioToTextConverter:
                 completion_tokens += transcript_dict["completion_tokens"]
                 prompt_tokens += transcript_dict["prompt_tokens"]
 
-        text_merger = TextMerger(llm_api_key=self.llm_api_key)
+        text_merger = TextMerger(
+            completion_model=self.transcription_model,
+            llm_api_key=self.llm_api_key,
+        )
         # Merge all transcripts
         full_text_merged_dict = text_merger.merge_chunks_with_llm_sequential(chunks=transcript_chunks)
 

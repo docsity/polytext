@@ -13,6 +13,65 @@ from ..prompts.text_merging import TEXT_MERGE_PROMPT
 
 logger = logging.getLogger(__name__)
 
+
+def _empty_response_diagnostics(
+        response: Any,
+        model: str,
+        segment_1: str,
+        segment_2: str,
+        transcript_1: str,
+        transcript_2: str,
+) -> Dict[str, Any]:
+    candidates = []
+    for candidate in getattr(response, "candidates", None) or []:
+        parts = []
+        content = getattr(candidate, "content", None)
+        for part in getattr(content, "parts", None) or []:
+            parts.append({
+                "type": type(part).__name__,
+                "thought": bool(getattr(part, "thought", False)),
+                "has_text": bool(getattr(part, "text", None)),
+                "has_function_call": getattr(part, "function_call", None) is not None,
+                "has_inline_data": getattr(part, "inline_data", None) is not None,
+            })
+        candidates.append({
+            "finish_reason": str(getattr(candidate, "finish_reason", None)),
+            "safety_ratings": str(getattr(candidate, "safety_ratings", None)),
+            "parts": parts,
+        })
+
+    usage_metadata = getattr(response, "usage_metadata", None)
+    return {
+        "model": model,
+        "merge_inputs": {
+            "segment_1": {
+                "char_count": len(segment_1),
+                "word_count": len(segment_1.split()),
+                "is_empty": not bool(segment_1.strip()),
+            },
+            "segment_2": {
+                "char_count": len(segment_2),
+                "word_count": len(segment_2.split()),
+                "is_empty": not bool(segment_2.strip()),
+            },
+        },
+        "source_transcripts": {
+            "transcript_1_char_count": len(transcript_1),
+            "transcript_1_tail": transcript_1[-1000:],
+            "transcript_2_char_count": len(transcript_2),
+            "transcript_2_head": transcript_2[:1000],
+        },
+        "candidate_count": len(candidates),
+        "candidates": candidates,
+        "prompt_feedback": str(getattr(response, "prompt_feedback", None)),
+        "usage_metadata": {
+            "prompt_token_count": getattr(usage_metadata, "prompt_token_count", None),
+            "candidates_token_count": getattr(usage_metadata, "candidates_token_count", None),
+            "thoughts_token_count": getattr(usage_metadata, "thoughts_token_count", None),
+            "total_token_count": getattr(usage_metadata, "total_token_count", None),
+        },
+    }
+
 class TextMerger:
     def __init__(
             self,
@@ -256,6 +315,19 @@ class TextMerger:
                 contents=prompt,
                 config=config
             )
+
+            if response.text is None:
+                logger.warning(
+                    "Gemini merge returned no text. Diagnostics: %s",
+                    _empty_response_diagnostics(
+                        response,
+                        self.completion_model,
+                        end_text_1,
+                        start_text_2,
+                        text1,
+                        text2,
+                    ),
+                )
 
             logger.info(f"Completion tokens: {response.usage_metadata.candidates_token_count}")
             logger.info(f"Prompt tokens: {response.usage_metadata.prompt_token_count}")

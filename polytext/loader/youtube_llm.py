@@ -23,9 +23,9 @@ YOUTUBE_MIN_OUTPUT_TOKENS = 500
 YOUTUBE_TAIL_REPETITION_LINES = int(os.getenv("YOUTUBE_TAIL_REPETITION_LINES", "200"))
 YOUTUBE_TAIL_REPETITION_THRESHOLD = float(os.getenv("YOUTUBE_TAIL_REPETITION_THRESHOLD", "0.35"))
 YOUTUBE_FALLBACK_SOURCE_PATTERN = os.getenv("YOUTUBE_FALLBACK_SOURCE_PATTERN", "flash-lite")
-YOUTUBE_FALLBACK_MODEL = os.getenv("YOUTUBE_FALLBACK_MODEL", "models/gemini-3-flash-preview")
+YOUTUBE_FALLBACK_MODEL = os.getenv("YOUTUBE_FALLBACK_MODEL", "models/gemini-3.5-flash")
 YOUTUBE_FALLBACK_TEMPERATURE = 1.0
-YOUTUBE_FINAL_FALLBACK_MODEL = os.getenv("YOUTUBE_FINAL_FALLBACK_MODEL", "models/gemini-2.5-flash")
+YOUTUBE_FINAL_FALLBACK_MODEL = os.getenv("YOUTUBE_FINAL_FALLBACK_MODEL", "models/gemini-3.7-flash")
 YOUTUBE_FINAL_FALLBACK_TEMPERATURE = float(os.getenv("YOUTUBE_FINAL_FALLBACK_TEMPERATURE", "0.0"))
 
 class YoutubeTranscriptLoaderWithLlm:
@@ -46,14 +46,14 @@ class YoutubeTranscriptLoaderWithLlm:
         type (str): Loader type identifier ("youtube_gemini").
     """
 
-    def __init__(self, llm_api_key: str = None, model="models/gemini-3.1-flash-lite", model_provider="google", markdown_output: bool = True, temp_dir: str = 'temp',
+    def __init__(self, llm_api_key: str = None, model="models/gemini-3.5-flash-lite", model_provider="google", markdown_output: bool = True, temp_dir: str = 'temp',
                  save_transcript_chunks: bool = False, timeout_minutes: int = None, **kwargs) -> None:
         """
         Initialize the YoutubeTranscriptLoaderWithLlm class with API key and configuration.
 
         Args:
             llm_api_key (str, optional): API key for the LLM used for processing.
-            model (str, optional): Name of the LLM model used for transcription (default: "models/gemini-3.1-flash-lite").
+            model (str, optional): Name of the LLM model used for transcription (default: "models/gemini-3.5-flash-lite").
             model_provider (str, optional): Provider of the LLM model (default: "google").
             markdown_output (bool, optional): Whether to format the extracted text as Markdown (default: True).
             temp_dir (str, optional): Temporary directory to store intermediate transcript files (default: 'temp').
@@ -172,7 +172,7 @@ class YoutubeTranscriptLoaderWithLlm:
                 if self.timeout_minutes is not None else None
             ),
             thinking_config=types.ThinkingConfig(
-                thinking_budget=0,
+                thinking_level=types.ThinkingLevel.MINIMAL,
             ),
             temperature=temperature,
             max_output_tokens=output_budget,
@@ -186,7 +186,6 @@ class YoutubeTranscriptLoaderWithLlm:
                 google_exceptions.ServiceUnavailable,
                 google_exceptions.InternalServerError,
                 errors.ServerError,
-                errors.APIError,
         ),
         tries=8,
         delay=1,
@@ -360,31 +359,31 @@ class YoutubeTranscriptLoaderWithLlm:
                 e.message,
                 getattr(e, "details", None),
             )
-            if e.status != 'INVALID_ARGUMENT':
-                raise e
+            if e.status != "INVALID_ARGUMENT":
+                raise
 
-            e_tmp = EmptyDocument(
+            fallback_error = EmptyDocument(
                 message=(
                     f"ClientError occurred with status {e.status}, message: {e.message}, "
                     f"details: {getattr(e, 'details', None)} for video: {video_url}"
                 ),
                 code=995,
             )
-            if self.should_fallback_temperature_retry(e_tmp, temperature):
+            if self.should_fallback_temperature_retry(fallback_error, temperature):
                 return self.run_fallback(
                     video_url=video_url,
                     reason=e.message,
                     fallback_model=self.fallback_model,
                     fallback_temperature=self.fallback_temperature,
                 )
-            if self.should_final_fallback_model(e_tmp):
+            if self.should_final_fallback_model(fallback_error):
                 return self.run_fallback(
                     video_url=video_url,
                     reason=e.message,
                     fallback_model=self.final_fallback_model,
                     fallback_temperature=self.final_fallback_temperature,
                 )
-            raise e_tmp from e
+            raise fallback_error from e
 
         except errors.ServerError as e:
             logger.info("ServerError occurred with status %s and message: %s", e.status, e.message)
