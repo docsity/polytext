@@ -48,10 +48,13 @@ INJECTION_GUARD_SYSTEM_INSTRUCTION = (
 )
 
 AUDIO_MIN_OUTPUT_TOKENS = 500
+GEMINI_3_7_AUDIO_MIN_OUTPUT_TOKENS = int(
+    os.getenv("GEMINI_3_7_AUDIO_MIN_OUTPUT_TOKENS", "6500")
+)
 AUDIO_TAIL_REPETITION_LINES = int(os.getenv("AUDIO_TAIL_REPETITION_LINES", "200"))
 AUDIO_TAIL_REPETITION_THRESHOLD = float(os.getenv("AUDIO_TAIL_REPETITION_THRESHOLD", "0.35"))
 AUDIO_FALLBACK_SOURCE_PATTERN = os.getenv("AUDIO_FALLBACK_SOURCE_PATTERN", "flash-lite")
-AUDIO_FALLBACK_MODEL = os.getenv("AUDIO_FALLBACK_MODEL", "gemini-3.5-flash")
+AUDIO_FALLBACK_MODEL = os.getenv("AUDIO_FALLBACK_MODEL", "gemini-3.6-flash")
 AUDIO_FALLBACK_TEMPERATURE = float(os.getenv("AUDIO_FALLBACK_TEMPERATURE", "1.0"))
 AUDIO_FINAL_FALLBACK_MODEL = os.getenv("AUDIO_FINAL_FALLBACK_MODEL", "gemini-3.7-flash")
 AUDIO_FILE_UPLOAD_THRESHOLD_BYTES = 20 * 1024 * 1024
@@ -248,7 +251,12 @@ class AudioToTextConverter:
         self.llm_api_key = llm_api_key
         self.max_llm_tokens = max(max_llm_tokens, AUDIO_MIN_OUTPUT_TOKENS)
         requested_output_tokens = self.max_llm_tokens if max_output_tokens is None else max_output_tokens
-        self.max_output_tokens = max(requested_output_tokens, AUDIO_MIN_OUTPUT_TOKENS)
+        minimum_output_tokens = (
+            GEMINI_3_7_AUDIO_MIN_OUTPUT_TOKENS
+            if transcription_model == "gemini-3.7-flash"
+            else AUDIO_MIN_OUTPUT_TOKENS
+        )
+        self.max_output_tokens = max(requested_output_tokens, minimum_output_tokens)
         self.chunked_audio = False
         self.bitrate_quality = bitrate_quality
         self.timeout_minutes = timeout_minutes
@@ -354,10 +362,17 @@ class AudioToTextConverter:
         return result
 
     def build_config(self, output_budget: int, temperature: float = 0.0) -> types.GenerateContentConfig:
+        config_kwargs = {}
+        if self.transcription_model not in ("gemini-3.6-flash", "gemini-3.7-flash"):
+            config_kwargs["temperature"] = temperature
+
         return types.GenerateContentConfig(
-            temperature=temperature,
             thinking_config=types.ThinkingConfig(
-                thinking_level=types.ThinkingLevel.MINIMAL,
+                thinking_level=(
+                    types.ThinkingLevel.LOW
+                    if self.transcription_model == "gemini-3.7-flash"
+                    else types.ThinkingLevel.MINIMAL
+                ),
             ),
             max_output_tokens=output_budget,
             system_instruction=INJECTION_GUARD_SYSTEM_INSTRUCTION,
@@ -385,6 +400,7 @@ class AudioToTextConverter:
                 types.HttpOptions(timeout=self.timeout_minutes * 60_000)
                 if self.timeout_minutes is not None else None
             ),
+            **config_kwargs,
         )
 
     def generate_transcription_response(
@@ -522,9 +538,13 @@ class AudioToTextConverter:
             usage_metadata = getattr(response, "usage_metadata", None)
             completion_tokens = getattr(usage_metadata, "candidates_token_count", 0) or 0
             prompt_tokens = getattr(usage_metadata, "prompt_token_count", 0) or 0
+            thoughts_tokens = getattr(usage_metadata, "thoughts_token_count", 0) or 0
+            total_tokens = getattr(usage_metadata, "total_token_count", 0) or 0
 
             logger.info(f"Completion tokens: {completion_tokens}")
             logger.info(f"Prompt tokens: {prompt_tokens}")
+            logger.info("Thinking tokens: %s", thoughts_tokens)
+            logger.info("Total tokens: %s", total_tokens)
 
             if finish_reason and "RECITATION" in finish_reason:
                 raise EmptyDocument(

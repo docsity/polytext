@@ -25,6 +25,7 @@ def _make_response(
     finish_reason=None,
     completion_tokens=11,
     prompt_tokens=7,
+    thoughts_tokens=0,
 ):
     return SimpleNamespace(
         text=text,
@@ -32,7 +33,8 @@ def _make_response(
         usage_metadata=SimpleNamespace(
             candidates_token_count=completion_tokens,
             prompt_token_count=prompt_tokens,
-            total_token_count=completion_tokens + prompt_tokens,
+            thoughts_token_count=thoughts_tokens,
+            total_token_count=completion_tokens + prompt_tokens + thoughts_tokens,
         ),
     )
 
@@ -57,6 +59,7 @@ class _FakeModels:
         self.generate_content_contents = None
         self.generate_content_models = []
         self.generate_content_temperatures = []
+        self.generate_content_max_output_tokens = []
         self.generate_content_prompts = []
         self.responses = list(responses or [])
 
@@ -70,6 +73,7 @@ class _FakeModels:
         self.generate_content_contents = contents
         self.generate_content_models.append(model)
         self.generate_content_temperatures.append(getattr(config, "temperature", None))
+        self.generate_content_max_output_tokens.append(config.max_output_tokens)
         self.generate_content_prompts.append(contents[0])
         if self.responses:
             return self.responses.pop(0)
@@ -265,7 +269,7 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
     def test_default_audio_transcription_model_is_gemini_3_5_flash_lite(self):
         converter = AudioToTextConverter()
         self.assertEqual(converter.transcription_model, "gemini-3.5-flash-lite")
-        self.assertEqual(converter.fallback_model, "gemini-3.5-flash")
+        self.assertEqual(converter.fallback_model, "gemini-3.6-flash")
         self.assertEqual(converter.final_fallback_model, "gemini-3.7-flash")
 
     def test_audio_config_uses_minimal_thinking_level(self):
@@ -273,6 +277,35 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
 
         self.assertEqual(config.thinking_config.thinking_level.value, "MINIMAL")
         self.assertIsNone(config.thinking_config.thinking_budget)
+
+    def test_audio_config_adapts_to_newer_flash_models(self):
+        flash_36_config = AudioToTextConverter(
+            transcription_model="gemini-3.6-flash"
+        ).build_config(output_budget=500, temperature=1.0)
+        flash_37_config = AudioToTextConverter(
+            transcription_model="gemini-3.7-flash"
+        ).build_config(output_budget=500, temperature=1.0)
+
+        self.assertEqual(flash_36_config.thinking_config.thinking_level.value, "MINIMAL")
+        self.assertIsNone(flash_36_config.temperature)
+        self.assertEqual(flash_37_config.thinking_config.thinking_level.value, "LOW")
+        self.assertIsNone(flash_37_config.temperature)
+
+    @patch("polytext.converter.audio_to_text.logger.info")
+    @patch("polytext.converter.audio_to_text.genai.Client")
+    def test_audio_logs_thinking_and_total_tokens(self, mock_client_cls, mock_info):
+        mock_client_cls.return_value = _FakeClient(
+            responses=[_make_response(thoughts_tokens=5)]
+        )
+
+        converter = AudioToTextConverter()
+        with tempfile.NamedTemporaryFile(suffix=".mp3") as temp_audio:
+            temp_audio.write(b"fake-audio")
+            temp_audio.flush()
+            converter.transcribe_audio(temp_audio.name)
+
+        mock_info.assert_any_call("Thinking tokens: %s", 5)
+        mock_info.assert_any_call("Total tokens: %s", 23)
 
     @patch("polytext.converter.audio_to_text.genai.Client")
     def test_audio_invalid_argument_is_not_retried(self, mock_client_cls):
@@ -296,6 +329,29 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
         converter = AudioToTextConverter()
         self.assertEqual(converter.max_output_tokens, 4250)
         self.assertEqual(converter.max_output_tokens, converter.max_llm_tokens)
+
+    @patch("polytext.converter.audio_to_text.genai.Client")
+    def test_gemini_3_7_audio_uses_6500_minimum_output_budget(self, mock_client_cls):
+        fake_client = _FakeClient()
+        mock_client_cls.return_value = fake_client
+
+        converter = AudioToTextConverter(transcription_model="gemini-3.7-flash")
+        with tempfile.NamedTemporaryFile(suffix=".mp3") as temp_audio:
+            temp_audio.write(b"fake-audio")
+            temp_audio.flush()
+            converter.transcribe_audio(temp_audio.name)
+
+        self.assertEqual(converter.max_llm_tokens, 4250)
+        self.assertEqual(converter.max_output_tokens, 6500)
+        self.assertEqual(fake_client.models.generate_content_max_output_tokens, [6500])
+
+    def test_gemini_3_7_audio_preserves_higher_explicit_output_budget(self):
+        converter = AudioToTextConverter(
+            transcription_model="gemini-3.7-flash",
+            max_output_tokens=8000,
+        )
+
+        self.assertEqual(converter.max_output_tokens, 8000)
 
     def test_base_loader_passes_audio_raw_output_flag_to_audio_loader(self):
         loader = BaseLoader(source="local", is_output_audio_raw=False)
@@ -556,10 +612,10 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
             [
                 "gemini-3.5-flash-lite",
                 "gemini-3.5-flash-lite",
-                "gemini-3.5-flash",
+                "gemini-3.6-flash",
             ],
         )
-        self.assertEqual(fake_client.models.generate_content_temperatures, [0, 0, 1.0])
+        self.assertEqual(fake_client.models.generate_content_temperatures, [0, 0, None])
         self.assertEqual(
             fake_client.models.generate_content_prompts,
             [
@@ -568,10 +624,45 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
                 AUDIO_TO_MARKDOWN_RAW_NON_LITERAL_FALLBACK_PROMPT,
             ],
         )
-        self.assertEqual(result["completion_model"], "gemini-3.5-flash")
+        self.assertEqual(result["completion_model"], "gemini-3.6-flash")
         self.assertEqual(result["fallback_from_model"], "gemini-3.5-flash-lite")
-        self.assertEqual(result["fallback_to_model"], "gemini-3.5-flash")
+        self.assertEqual(result["fallback_to_model"], "gemini-3.6-flash")
         self.assertEqual(result["prompt_variant"], "non_literal_fallback")
+
+    @patch("polytext.converter.audio_to_text.genai.Client")
+    def test_audio_uses_gemini_3_7_as_final_fallback(self, mock_client_cls):
+        fake_client = _FakeClient(
+            responses=[
+                _make_response("first attempt", finish_reason="MAX_TOKENS"),
+                _make_response("second attempt", finish_reason="RECITATION"),
+                _make_response("third attempt", finish_reason="MAX_TOKENS"),
+                _make_response("final fallback transcript", finish_reason="STOP"),
+            ]
+        )
+        mock_client_cls.return_value = fake_client
+
+        converter = AudioToTextConverter()
+        with tempfile.NamedTemporaryFile(suffix=".mp3") as temp_audio:
+            temp_audio.write(b"fake-audio")
+            temp_audio.flush()
+            result = converter.transcribe_audio(temp_audio.name)
+
+        self.assertEqual(
+            fake_client.models.generate_content_models,
+            [
+                "gemini-3.5-flash-lite",
+                "gemini-3.5-flash-lite",
+                "gemini-3.6-flash",
+                "gemini-3.7-flash",
+            ],
+        )
+        self.assertEqual(fake_client.models.generate_content_temperatures, [0, 0, None, None])
+        self.assertEqual(
+            fake_client.models.generate_content_max_output_tokens,
+            [4250, 4250, 4250, 6500],
+        )
+        self.assertEqual(result["transcript"], "final fallback transcript")
+        self.assertEqual(result["completion_model"], "gemini-3.7-flash")
 
     @patch("polytext.converter.audio_to_text.genai.Client")
     def test_healthy_transcript_does_not_retry_with_fallback(self, mock_client_cls):

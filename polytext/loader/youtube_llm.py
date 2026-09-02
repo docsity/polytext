@@ -23,7 +23,7 @@ YOUTUBE_MIN_OUTPUT_TOKENS = 500
 YOUTUBE_TAIL_REPETITION_LINES = int(os.getenv("YOUTUBE_TAIL_REPETITION_LINES", "200"))
 YOUTUBE_TAIL_REPETITION_THRESHOLD = float(os.getenv("YOUTUBE_TAIL_REPETITION_THRESHOLD", "0.35"))
 YOUTUBE_FALLBACK_SOURCE_PATTERN = os.getenv("YOUTUBE_FALLBACK_SOURCE_PATTERN", "flash-lite")
-YOUTUBE_FALLBACK_MODEL = os.getenv("YOUTUBE_FALLBACK_MODEL", "models/gemini-3.5-flash")
+YOUTUBE_FALLBACK_MODEL = os.getenv("YOUTUBE_FALLBACK_MODEL", "models/gemini-3.6-flash")
 YOUTUBE_FALLBACK_TEMPERATURE = 1.0
 YOUTUBE_FINAL_FALLBACK_MODEL = os.getenv("YOUTUBE_FINAL_FALLBACK_MODEL", "models/gemini-3.7-flash")
 YOUTUBE_FINAL_FALLBACK_TEMPERATURE = float(os.getenv("YOUTUBE_FINAL_FALLBACK_TEMPERATURE", "0.0"))
@@ -147,6 +147,10 @@ class YoutubeTranscriptLoaderWithLlm:
         return self.model == self.fallback_model
 
     def build_config(self, output_budget: int, prompt_template: str, temperature: float = 0.0) -> types.GenerateContentConfig:
+        config_kwargs = {}
+        if self.model not in ("models/gemini-3.6-flash", "models/gemini-3.7-flash"):
+            config_kwargs["temperature"] = temperature
+
         return types.GenerateContentConfig(
             safety_settings=[
                 types.SafetySetting(
@@ -172,11 +176,15 @@ class YoutubeTranscriptLoaderWithLlm:
                 if self.timeout_minutes is not None else None
             ),
             thinking_config=types.ThinkingConfig(
-                thinking_level=types.ThinkingLevel.MINIMAL,
+                thinking_level=(
+                    types.ThinkingLevel.LOW
+                    if self.model == "models/gemini-3.7-flash"
+                    else types.ThinkingLevel.MINIMAL
+                ),
             ),
-            temperature=temperature,
             max_output_tokens=output_budget,
-            system_instruction=[prompt_template]
+            system_instruction=[prompt_template],
+            **config_kwargs,
         )
 
     @retry(
@@ -280,11 +288,13 @@ class YoutubeTranscriptLoaderWithLlm:
             usage_metadata = getattr(response, "usage_metadata", None)
             prompt_tokens = getattr(usage_metadata, "prompt_token_count", 0) or 0
             completion_tokens = getattr(usage_metadata, "candidates_token_count", 0) or 0
+            thoughts_tokens = getattr(usage_metadata, "thoughts_token_count", 0) or 0
             total_tokens = getattr(usage_metadata, "total_token_count", 0) or 0
 
             if response.usage_metadata:
                 logger.info("Token in prompt: %s", prompt_tokens)
                 logger.info("Token in output: %s", completion_tokens)
+                logger.info("Token in thinking: %s", thoughts_tokens)
                 logger.info("Token total: %s", total_tokens)
                 logger.info("Response text length: %s", len(response_text))
 

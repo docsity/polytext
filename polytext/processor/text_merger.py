@@ -336,6 +336,14 @@ class TextMerger:
 
             logger.info(f"Completion tokens: {response.usage_metadata.candidates_token_count}")
             logger.info(f"Prompt tokens: {response.usage_metadata.prompt_token_count}")
+            logger.info(
+                "Thinking tokens: %s",
+                getattr(response.usage_metadata, "thoughts_token_count", 0) or 0,
+            )
+            logger.info(
+                "Total tokens: %s",
+                getattr(response.usage_metadata, "total_token_count", 0) or 0,
+            )
 
             response_dict = {"completion_tokens": response.usage_metadata.candidates_token_count,
                              "prompt_tokens": response.usage_metadata.prompt_token_count,

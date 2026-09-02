@@ -26,6 +26,8 @@ class _FakeModels:
             usage_metadata=SimpleNamespace(
                 candidates_token_count=None,
                 prompt_token_count=251,
+                thoughts_token_count=17,
+                total_token_count=268,
             ),
         )
 
@@ -37,10 +39,12 @@ class _FakeClient:
 
 class TestTextMergerDiagnostics(unittest.TestCase):
     @patch("polytext.processor.text_merger.logger.warning")
+    @patch("polytext.processor.text_merger.logger.info")
     @patch("polytext.processor.text_merger.genai.Client", return_value=_FakeClient())
     def test_logs_structured_diagnostics_when_merge_response_has_no_text(
         self,
         _mock_client,
+        mock_info,
         mock_warning,
     ):
         merger = TextMerger()
@@ -83,6 +87,8 @@ class TestTextMergerDiagnostics(unittest.TestCase):
         config = _mock_client.return_value.models.config
         self.assertEqual(config.tools, [])
         self.assertTrue(config.automatic_function_calling.disable)
+        mock_info.assert_any_call("Thinking tokens: %s", 17)
+        mock_info.assert_any_call("Total tokens: %s", 268)
 
 
 if __name__ == "__main__":
