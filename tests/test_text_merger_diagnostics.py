@@ -6,7 +6,11 @@ from polytext.processor.text_merger import TextMerger
 
 
 class _FakeModels:
+    def __init__(self):
+        self.config = None
+
     def generate_content(self, model, contents, config):
+        self.config = config
         return SimpleNamespace(
             text=None,
             candidates=[
@@ -39,7 +43,8 @@ class TestTextMergerDiagnostics(unittest.TestCase):
         _mock_client,
         mock_warning,
     ):
-        TextMerger().merge_texts_with_llm(
+        merger = TextMerger()
+        result = merger.merge_texts_with_llm(
             "Prima frase completa. Seconda frase completa.",
             "Seconda frase completa. Terza frase completa.",
         )
@@ -68,6 +73,16 @@ class TestTextMergerDiagnostics(unittest.TestCase):
                 "transcript_2_head": "Seconda frase completa. Terza frase completa.",
             },
         )
+        self.assertEqual(
+            result["merged_text"],
+            merger.merge_texts(
+                "Prima frase completa. Seconda frase completa.",
+                "Seconda frase completa. Terza frase completa.",
+            ),
+        )
+        config = _mock_client.return_value.models.config
+        self.assertEqual(config.tools, [])
+        self.assertTrue(config.automatic_function_calling.disable)
 
 
 if __name__ == "__main__":

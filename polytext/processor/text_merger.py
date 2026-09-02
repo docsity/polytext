@@ -288,6 +288,8 @@ class TextMerger:
 
             config = types.GenerateContentConfig(
                 # temperature=0,
+                tools=[],
+                automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
                 safety_settings=[
                     types.SafetySetting(
                         category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
@@ -328,6 +330,9 @@ class TextMerger:
                         text2,
                     ),
                 )
+                merged_text = self.merge_texts(end_text_1, start_text_2)
+            else:
+                merged_text = response.text
 
             logger.info(f"Completion tokens: {response.usage_metadata.candidates_token_count}")
             logger.info(f"Prompt tokens: {response.usage_metadata.prompt_token_count}")
@@ -336,7 +341,7 @@ class TextMerger:
                              "prompt_tokens": response.usage_metadata.prompt_token_count,
                              "start_text_1": start_text_1,
                              "central_text_1": central_text_1,
-                             "merged_text": response.text,
+                             "merged_text": merged_text,
                              "central_text_2": central_text_2,
                              "end_text_2": end_text_2}
 

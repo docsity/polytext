@@ -564,7 +564,7 @@ class AudioToTextConverter:
             return response_dict
         except EmptyDocument as e:
             if self.should_prompt_fallback_retry(e):
-                return self.run_fallback(
+                fallback_result = self.run_fallback(
                     audio_file=audio_file,
                     reason=e.message,
                     fallback_model=self.transcription_model,
@@ -572,22 +572,31 @@ class AudioToTextConverter:
                     fallback_stage=1,
                     prompt_variant=AUDIO_PROMPT_VARIANT_NON_LITERAL_FALLBACK,
                 )
+                fallback_result["completion_tokens"] += completion_tokens
+                fallback_result["prompt_tokens"] += prompt_tokens
+                return fallback_result
             if self.should_fallback_temperature_retry(e, temperature):
-                return self.run_fallback(
+                fallback_result = self.run_fallback(
                     audio_file=audio_file,
                     reason=e.message,
                     fallback_model=self.fallback_model,
                     fallback_temperature=self.fallback_temperature,
                     fallback_stage=2 if self.markdown_output else 1,
                 )
+                fallback_result["completion_tokens"] += completion_tokens
+                fallback_result["prompt_tokens"] += prompt_tokens
+                return fallback_result
             if self.should_final_fallback_model(e):
-                return self.run_fallback(
+                fallback_result = self.run_fallback(
                     audio_file=audio_file,
                     reason=e.message,
                     fallback_model=self.final_fallback_model,
                     fallback_temperature=0.0,
                     fallback_stage=3 if self.markdown_output else 2,
                 )
+                fallback_result["completion_tokens"] += completion_tokens
+                fallback_result["prompt_tokens"] += prompt_tokens
+                return fallback_result
             raise
 
     def process_chunk(self, chunk: dict, index: int) -> tuple[int, dict]:

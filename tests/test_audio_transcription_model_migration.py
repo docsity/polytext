@@ -155,7 +155,7 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
 
         self.assertEqual(
             formatted,
-            "Prima frase.\\n Seconda frase?\\n Terza frase!\\n ## Titolo\\n Quarta frase.\\n Quinta frase.",
+            "Prima frase.\n Seconda frase?\n Terza frase!\n## Titolo\nQuarta frase.\n Quinta frase.",
         )
 
     def test_normalize_no_human_speech_marker_returns_empty_for_marker_only(self):
@@ -207,6 +207,44 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
             completion_model="gemini-3.5-flash-lite",
             llm_api_key=None,
         )
+        mock_text_merger_cls.return_value.merge_chunks_with_llm_sequential.assert_called_once_with(
+            chunks=["chunk transcript"],
+        )
+
+    @patch("polytext.converter.audio_to_text.TextMerger")
+    @patch("polytext.converter.audio_to_text.AudioChunker")
+    @patch.object(AudioToTextConverter, "process_chunk")
+    def test_chunk_transcripts_are_formatted_only_after_llm_merge(
+        self,
+        mock_process_chunk,
+        mock_chunker_cls,
+        mock_text_merger_cls,
+    ):
+        fake_chunker = MagicMock()
+        mock_chunker_cls.return_value = fake_chunker
+        fake_chunker.extract_chunks.return_value = [
+            {"file_path": "/tmp/chunk-1.mp3"},
+            {"file_path": "/tmp/chunk-2.mp3"},
+        ]
+        chunk_results = {
+            0: {"transcript": "Prima frase. Seconda frase.", "completion_tokens": 1, "prompt_tokens": 2},
+            1: {"transcript": "Seconda frase. Terza frase.", "completion_tokens": 3, "prompt_tokens": 4},
+        }
+        mock_process_chunk.side_effect = lambda _chunk, index: (index, chunk_results[index])
+        mock_text_merger_cls.return_value.merge_chunks_with_llm_sequential.return_value = {
+            "full_text_merged": "Prima frase. Seconda frase. Terza frase.",
+            "completion_tokens": 5,
+            "prompt_tokens": 6,
+        }
+
+        with tempfile.NamedTemporaryFile(suffix=".mp3") as source_audio:
+            converter = AudioToTextConverter()
+            result = converter.transcribe_full_audio(source_audio.name)
+
+        mock_text_merger_cls.return_value.merge_chunks_with_llm_sequential.assert_called_once_with(
+            chunks=["Prima frase. Seconda frase.", "Seconda frase. Terza frase."],
+        )
+        self.assertEqual(result["text"], "Prima frase.\n Seconda frase.\n Terza frase.")
 
     def test_audio_prompts_forbid_filling_silence(self):
         self.assertIn("transcribe only clear human speech", AUDIO_TO_MARKDOWN_PROMPT.lower())
@@ -445,6 +483,8 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
         )
         self.assertEqual(result["prompt_variant"], "non_literal_fallback")
         self.assertIn("max output tokens", result["fallback_reason"].lower())
+        self.assertEqual(result["completion_tokens"], 22)
+        self.assertEqual(result["prompt_tokens"], 14)
 
     @patch("polytext.converter.audio_to_text.genai.Client")
     def test_repetitive_tail_retries_with_non_literal_prompt_before_fallback_model(self, mock_client_cls):
