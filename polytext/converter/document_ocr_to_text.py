@@ -22,6 +22,7 @@ from .gemini_quality_guards import (
     extract_finish_reason,
     tail_has_excessive_repetition,
 )
+from ..llm import LLMGenerationError, MultimodalLLM, normalize_provider
 
 logger = logging.getLogger(__name__)
 
@@ -112,6 +113,7 @@ def get_document_ocr(
     page_range=None,
     timeout_minutes=None,
     ocr_model: str | None = None,
+    ocr_model_provider: str = "google",
     max_output_tokens: int | None = None,
     include_image_descriptions: bool = False,
     allow_partial_ocr_failures: bool = False,
@@ -132,8 +134,10 @@ def get_document_ocr(
         target_size (int, optional): Target file size in bytes. Defaults to 1MB.
         page_range (tuple, optional): Optional page range to extract (start, end).
         timeout_minutes (int, optional): Number of minutes to wait for a response. Defaults to None.
-        ocr_model (str | None, optional): Gemini OCR model to use. Defaults to the converter default.
-        max_output_tokens (int | None, optional): Maximum Gemini output tokens.
+        ocr_model (str | None, optional): OCR model to use. Defaults according to provider.
+        ocr_model_provider (str, optional): Direct OCR provider ("google" or "openai").
+            Defaults to "google".
+        max_output_tokens (int | None, optional): Maximum output tokens.
             Defaults to the converter default.
         include_image_descriptions (bool, optional): If True, OCR prompts include
             brief functional descriptions for meaningful non-text images.
@@ -145,8 +149,12 @@ def get_document_ocr(
     Returns:
         dict: Dictionary containing the OCR results and metadata.
     """
+    resolved_provider = normalize_provider(ocr_model_provider)
     converter = DocumentOCRToTextConverter(
-        ocr_model=ocr_model or "gemini-3.1-flash-lite",
+        ocr_model=ocr_model or (
+            "gpt-5.6-luna" if resolved_provider == "openai" else "gemini-3.1-flash-lite"
+        ),
+        ocr_model_provider=resolved_provider,
         markdown_output=markdown_output,
         llm_api_key=llm_api_key,
         target_size=target_size,
@@ -168,7 +176,8 @@ class DocumentOCRToTextConverter:
         """
         Initialize the DocumentOCRToTextConverter class with specified OCR model and formatting options.
 
-        This class handles OCR processing of images using Google's Gemini Vision API.
+        This class handles OCR processing of document pages using Google Gemini or
+        the direct OpenAI Responses API.
         It supports various image formats and can output either plain text or markdown.
 
         Args:
@@ -182,7 +191,7 @@ class DocumentOCRToTextConverter:
             timeout_minutes (int, optional): Number of minutes to wait for a response. Defaults to None.
             fallback_stage (int, optional): Internal retry stage used by fallback attempts.
                 Defaults to 0.
-            max_output_tokens (int | None, optional): Maximum Gemini output tokens.
+            max_output_tokens (int | None, optional): Maximum output tokens.
                 Defaults to `OCR_MAX_OUTPUT_TOKENS`.
             include_image_descriptions (bool, optional): If True, OCR prompts include
                 brief functional descriptions for meaningful non-text images.
@@ -198,7 +207,7 @@ class DocumentOCRToTextConverter:
             ValueError: If invalid model or provider specified
         """
         self.ocr_model = ocr_model
-        self.ocr_model_provider = ocr_model_provider
+        self.ocr_model_provider = normalize_provider(ocr_model_provider)
         self.markdown_output = markdown_output
         self.llm_api_key = llm_api_key
         self.target_size = target_size
@@ -325,7 +334,7 @@ class DocumentOCRToTextConverter:
         Process an image file using OCR and return the extracted text.
 
         This method handles image compression/conversion if needed and uses
-        Google's Gemini Vision API to extract and format the text content.
+        the configured vision API to extract and format the text content.
 
         Args:
             file_for_ocr (str): Path to the image file for OCR processing.
@@ -339,7 +348,7 @@ class DocumentOCRToTextConverter:
                 - prompt_tokens (int): Number of tokens in prompt
                 - completion_model (str): Name of the model used
                 - completion_model_provider (str): Provider of the OCR service
-                - finish_reason (str | None): Gemini finish reason for the attempt
+                - finish_reason (str | None): Provider finish reason for the attempt
                 - max_output_tokens (int): Maximum output tokens configured for the attempt
                 - temperature (float): Temperature used for the attempt
 
@@ -358,40 +367,43 @@ class DocumentOCRToTextConverter:
         prompt_template = self._build_prompt_template()
 
         try:
-            if self.llm_api_key:
-                logger.info("Using provided Google API key")
-                client = genai.Client(api_key=self.llm_api_key)
-            else:
-                logger.info("Using Google API key from ENV")
-                client = genai.Client()
+            client = None
+            config = None
+            if self.ocr_model_provider == "google":
+                if self.llm_api_key:
+                    logger.info("Using provided Google API key")
+                    client = genai.Client(api_key=self.llm_api_key)
+                else:
+                    logger.info("Using Google API key from ENV")
+                    client = genai.Client()
 
-            config = types.GenerateContentConfig(
-                temperature=temperature,
-                max_output_tokens=self.max_output_tokens,
-                safety_settings=[
-                    types.SafetySetting(
-                        category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-                        threshold=types.HarmBlockThreshold.BLOCK_NONE,
+                config = types.GenerateContentConfig(
+                    temperature=temperature,
+                    max_output_tokens=self.max_output_tokens,
+                    safety_settings=[
+                        types.SafetySetting(
+                            category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                            threshold=types.HarmBlockThreshold.BLOCK_NONE,
+                        ),
+                        types.SafetySetting(
+                            category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                            threshold=types.HarmBlockThreshold.BLOCK_NONE,
+                        ),
+                        types.SafetySetting(
+                            category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                            threshold=types.HarmBlockThreshold.BLOCK_NONE,
+                        ),
+                        types.SafetySetting(
+                            category=types.HarmCategory.HARM_CATEGORY_HARASSMENT,
+                            threshold=types.HarmBlockThreshold.BLOCK_NONE,
+                        ),
+                    ],
+                    http_options=(
+                        types.HttpOptions(timeout=self.timeout_minutes * 60_000)
+                        if self.timeout_minutes is not None else None
                     ),
-                    types.SafetySetting(
-                        category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-                        threshold=types.HarmBlockThreshold.BLOCK_NONE,
-                    ),
-                    types.SafetySetting(
-                        category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-                        threshold=types.HarmBlockThreshold.BLOCK_NONE,
-                    ),
-                    types.SafetySetting(
-                        category=types.HarmCategory.HARM_CATEGORY_HARASSMENT,
-                        threshold=types.HarmBlockThreshold.BLOCK_NONE,
-                    ),
-                ],
-                http_options=(
-                    types.HttpOptions(timeout=self.timeout_minutes * 60_000)
-                    if self.timeout_minutes is not None else None
-                ),
-                system_instruction=[prompt_template]
-            )
+                    system_instruction=[prompt_template]
+                )
 
             mime_type, _ = mimetypes.guess_type(file_for_ocr)
             logger.info(f"OCR mime type: {mime_type}")
@@ -408,7 +420,29 @@ class DocumentOCRToTextConverter:
 
             logger.info(f"Final image file size: {file_size / (1024 * 1024):.2f} MB")
 
-            if file_size > 20 * 1024 * 1024:
+            if self.ocr_model_provider == "openai":
+                with open(temp_file_for_ocr, "rb") as image_file:
+                    image_data = image_file.read()
+                mime_type, _ = mimetypes.guess_type(temp_file_for_ocr)
+                if mime_type is None:
+                    raise ValueError("Image format not recognized")
+                generation = MultimodalLLM(
+                    model=self.ocr_model,
+                    provider=self.ocr_model_provider,
+                    api_key=self.llm_api_key,
+                    timeout_minutes=self.timeout_minutes,
+                ).generate_image(
+                    instructions=prompt_template,
+                    image_data=image_data,
+                    mime_type=mime_type,
+                    max_output_tokens=self.max_output_tokens,
+                    temperature=temperature,
+                )
+                response_text = generation.text
+                finish_reason = generation.finish_reason
+                completion_tokens = generation.completion_tokens
+                prompt_tokens = generation.prompt_tokens
+            elif file_size > 20 * 1024 * 1024:
                 logger.info("Total image file size exceeds 20MB, uploading file before transcription")
 
                 myfile = client.files.upload(file=temp_file_for_ocr)
@@ -421,6 +455,11 @@ class DocumentOCRToTextConverter:
                     contents=contents,
                     config=config
                 )
+
+                response_text = response.text or ""
+                finish_reason = extract_finish_reason(response)
+                completion_tokens = response.usage_metadata.candidates_token_count
+                prompt_tokens = response.usage_metadata.prompt_token_count
 
                 client.files.delete(name=myfile.name)
 
@@ -449,32 +488,35 @@ class DocumentOCRToTextConverter:
                     config=config
                 )
 
+                response_text = response.text or ""
+                finish_reason = extract_finish_reason(response)
+                completion_tokens = response.usage_metadata.candidates_token_count
+                prompt_tokens = response.usage_metadata.prompt_token_count
+
             end_time = time.time()
             time_elapsed = end_time - start_time
-            response_text = response.text or ""
-            finish_reason = extract_finish_reason(response)
             has_repetitive_tail = tail_has_excessive_repetition(
                 response_text,
                 tail_lines=OCR_TAIL_REPETITION_LINES,
                 threshold=OCR_TAIL_REPETITION_THRESHOLD,
             )
 
-            logger.info(f"Completion tokens: {response.usage_metadata.candidates_token_count}")
-            logger.info(f"Prompt tokens: {response.usage_metadata.prompt_token_count}")
+            logger.info(f"Completion tokens: {completion_tokens}")
+            logger.info(f"Prompt tokens: {prompt_tokens}")
 
-            if finish_reason and "RECITATION" in finish_reason:
+            if self.ocr_model_provider == "google" and finish_reason and "RECITATION" in finish_reason:
                 raise EmptyDocument(
                     message=f"Document OCR blocked because recitation was detected for image: {file_for_ocr}",
                     code=996,
                 )
 
-            if finish_reason and "MAX_TOKENS" in finish_reason:
+            if self.ocr_model_provider == "google" and finish_reason and "MAX_TOKENS" in finish_reason:
                 raise EmptyDocument(
                     message=f"Document OCR truncated because max output tokens were reached for image: {file_for_ocr}",
                     code=999,
                 )
 
-            if has_repetitive_tail:
+            if self.ocr_model_provider == "google" and has_repetitive_tail:
                 raise EmptyDocument(
                     message=f"Document OCR discarded because repetitive tail was detected for image: {file_for_ocr}",
                     code=997,
@@ -482,8 +524,8 @@ class DocumentOCRToTextConverter:
 
             final_ocr_dict = {
                 "text": response_text if "no readable text present" not in response_text.lower() else "",
-                "completion_tokens": response.usage_metadata.candidates_token_count,
-                "prompt_tokens": response.usage_metadata.prompt_token_count,
+                "completion_tokens": completion_tokens,
+                "prompt_tokens": prompt_tokens,
                 "completion_model": self.ocr_model,
                 "completion_model_provider": self.ocr_model_provider,
                 "text_chunks": "not provided",
@@ -555,13 +597,14 @@ class DocumentOCRToTextConverter:
                 # Perform OCR on the page
                 try:
                     ocr_result = self.get_ocr(temp_image_path)
-                except EmptyDocument as error:
+                except (EmptyDocument, LLMGenerationError) as error:
                     if not self.allow_partial_ocr_failures:
                         raise
+                    error_message = getattr(error, "message", str(error))
                     logger.warning(
                         "Document OCR failed on page %s after retries; keeping partial document because allow_partial_ocr_failures=True: %s",
                         page_num + 1,
-                        error.message,
+                        error_message,
                     )
                     ocr_result = {
                         "text": "",
@@ -571,7 +614,7 @@ class DocumentOCRToTextConverter:
                         "completion_model_provider": self.ocr_model_provider,
                         "text_chunks": "not provided",
                         "page_error": True,
-                        "page_error_reason": error.message,
+                        "page_error_reason": error_message,
                     }
                 return page_num, ocr_result
 

@@ -105,7 +105,9 @@ class BaseLoader:
             llm_api_key (str, optional): API key for language model service. Defaults to None.
             temp_dir (str, optional): Path for temporary file storage. Defaults to "temp".
             provider (str, optional): Provider of the model. Default to "google".
-            ocr_model (str, optional): OCR model to use for text extraction from images. Defaults to "gpt-5-mini".
+            ocr_model (str, optional): Model used for text/image transformations.
+                Defaults to "gemini-3.1-flash-lite" for Google, "gpt-5.6-luna"
+                for direct OpenAI, and "gpt-5-mini" for Azure OpenAI.
             timeout_minutes (int, optional): Timeout in minutes. Defaults to None.
             include_image_descriptions (bool | None, optional): If True, OCR prompts
                 include brief functional descriptions for meaningful non-text images.

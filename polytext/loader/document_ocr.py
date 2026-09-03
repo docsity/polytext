@@ -25,6 +25,7 @@ class DocumentOCRLoader:
 
     This loader supports multiple OCR backends (providers), currently:
     - Google Gemini Vision OCR
+    - OpenAI direct vision OCR
     - Azure OpenAI Vision OCR
 
     The OCR backend can be selected at initialization time via the
@@ -74,10 +75,12 @@ class DocumentOCRLoader:
             ocr_provider (str, optional): OCR backend provider to use.
                 Supported values:
                 - "google" (Gemini Vision)
+                - "openai" (direct OpenAI Vision)
                 - "azure" (Azure OpenAI Vision)
                 Defaults to "google".
             ocr_model (str, optional): OCR model or deployment name.
-                - For Google Gemini: optional / usually ignored.
+                - For Google Gemini: Gemini model name.
+                - For direct OpenAI: OpenAI model name (for example "gpt-5.6-luna").
                 - For Azure OpenAI: **deployment name** (e.g. "gpt-5-mini").
                 Defaults to None.
             include_image_descriptions (bool, optional): If True, OCR prompts include
@@ -87,8 +90,8 @@ class DocumentOCRLoader:
                 fail OCR after all retries are recorded inline instead of aborting
                 the whole document extraction. Defaults to False.
             **kwargs:
-                max_output_tokens (int, optional): Maximum Gemini output tokens for
-                    Google document OCR generation.
+                max_output_tokens (int, optional): Maximum output tokens for direct
+                    Google or OpenAI document OCR generation.
 
         Raises:
             ValueError: If cloud storage clients are provided without bucket names.
@@ -129,10 +132,12 @@ class DocumentOCRLoader:
         """
         if self.ocr_provider in ("google", "gemini"):
             return get_document_ocr_google
+        if self.ocr_provider == "openai":
+            return get_document_ocr_google
         if self.ocr_provider in ("azure", "azure_openai", "azure_oai"):
             return get_document_ocr_azure
         raise ValueError(
-            f"Invalid ocr_provider='{self.ocr_provider}'. Use 'google' or 'azure'."
+            f"Invalid ocr_provider='{self.ocr_provider}'. Use 'google', 'openai', or 'azure'."
         )
 
     def download_document(self, file_path, temp_file_path):
@@ -269,10 +274,9 @@ class DocumentOCRLoader:
                 target_size=self.target_size,
                 page_range=self.page_range,
                 timeout_minutes=self.timeout_minutes,
-                ocr_model=(
-                    self.ocr_model
-                    if isinstance(self.ocr_model, str) and self.ocr_model.startswith("gemini")
-                    else None
+                ocr_model=self.ocr_model,
+                ocr_model_provider=(
+                    "openai" if self.ocr_provider == "openai" else "google"
                 ),
                 max_output_tokens=self.max_output_tokens,
                 include_image_descriptions=self.include_image_descriptions,
