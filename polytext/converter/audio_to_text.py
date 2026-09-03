@@ -51,6 +51,12 @@ AUDIO_MIN_OUTPUT_TOKENS = 500
 GEMINI_3_7_AUDIO_MIN_OUTPUT_TOKENS = int(
     os.getenv("GEMINI_3_7_AUDIO_MIN_OUTPUT_TOKENS", "6500")
 )
+AUDIO_SHORT_RESPONSE_TOKEN_THRESHOLD = int(
+    os.getenv("AUDIO_SHORT_RESPONSE_TOKEN_THRESHOLD", "300")
+)
+AUDIO_DIAGNOSTIC_TRANSCRIPT_PREVIEW_CHARS = int(
+    os.getenv("AUDIO_DIAGNOSTIC_TRANSCRIPT_PREVIEW_CHARS", "500")
+)
 AUDIO_TAIL_REPETITION_LINES = int(os.getenv("AUDIO_TAIL_REPETITION_LINES", "200"))
 AUDIO_TAIL_REPETITION_THRESHOLD = float(os.getenv("AUDIO_TAIL_REPETITION_THRESHOLD", "0.35"))
 AUDIO_FALLBACK_SOURCE_PATTERN = os.getenv("AUDIO_FALLBACK_SOURCE_PATTERN", "flash-lite")
@@ -403,6 +409,57 @@ class AudioToTextConverter:
             **config_kwargs,
         )
 
+    def log_response_diagnostic(
+        self,
+        *,
+        audio_file: str,
+        response_text: str,
+        reasons: list[str],
+        finish_reason: str | None,
+        completion_tokens: int,
+        prompt_tokens: int,
+        thoughts_tokens: int,
+        total_tokens: int,
+        temperature: float,
+    ) -> None:
+        if not reasons:
+            return
+
+        log_full_transcript = os.getenv(
+            "AUDIO_LOG_DIAGNOSTIC_TRANSCRIPTS", "false"
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        transcript_truncated = (
+            not log_full_transcript
+            and len(response_text) > AUDIO_DIAGNOSTIC_TRANSCRIPT_PREVIEW_CHARS
+        )
+        diagnostic_transcript = (
+            response_text
+            if log_full_transcript
+            else response_text[:AUDIO_DIAGNOSTIC_TRANSCRIPT_PREVIEW_CHARS]
+        )
+
+        logger.warning(
+            "Audio transcription diagnostic: reasons=%s model=%s audio_file=%s "
+            "prompt_variant=%s fallback_stage=%s finish_reason=%s "
+            "max_output_tokens=%s temperature=%s completion_tokens=%s "
+            "prompt_tokens=%s thinking_tokens=%s total_tokens=%s "
+            "transcript_truncated=%s transcript=%r",
+            ",".join(reasons),
+            self.transcription_model,
+            audio_file,
+            self.prompt_variant,
+            self.fallback_stage,
+            finish_reason,
+            self.max_output_tokens,
+            temperature,
+            completion_tokens,
+            prompt_tokens,
+            thoughts_tokens,
+            total_tokens,
+            transcript_truncated,
+            diagnostic_transcript,
+        )
+
     def generate_transcription_response(
             self,
             client,
@@ -545,6 +602,28 @@ class AudioToTextConverter:
             logger.info(f"Prompt tokens: {prompt_tokens}")
             logger.info("Thinking tokens: %s", thoughts_tokens)
             logger.info("Total tokens: %s", total_tokens)
+
+            diagnostic_reasons = []
+            if completion_tokens <= AUDIO_SHORT_RESPONSE_TOKEN_THRESHOLD:
+                diagnostic_reasons.append("suspicious_short_response")
+            if finish_reason and "RECITATION" in finish_reason:
+                diagnostic_reasons.append("recitation")
+            if finish_reason and "MAX_TOKENS" in finish_reason:
+                diagnostic_reasons.append("max_tokens")
+            if has_repetitive_tail:
+                diagnostic_reasons.append("repetitive_tail")
+
+            self.log_response_diagnostic(
+                audio_file=audio_file,
+                response_text=response_text,
+                reasons=diagnostic_reasons,
+                finish_reason=finish_reason,
+                completion_tokens=completion_tokens,
+                prompt_tokens=prompt_tokens,
+                thoughts_tokens=thoughts_tokens,
+                total_tokens=total_tokens,
+                temperature=temperature,
+            )
 
             if finish_reason and "RECITATION" in finish_reason:
                 raise EmptyDocument(

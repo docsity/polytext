@@ -308,6 +308,56 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
         mock_info.assert_any_call("Total tokens: %s", 23)
 
     @patch("polytext.converter.audio_to_text.genai.Client")
+    def test_short_audio_response_logs_diagnostic_preview_without_retry(self, mock_client_cls):
+        response_text = "A" * 600 + "UNLOGGED_TAIL"
+        fake_client = _FakeClient(
+            responses=[_make_response(response_text, finish_reason="STOP", completion_tokens=169)]
+        )
+        mock_client_cls.return_value = fake_client
+
+        with patch.dict(os.environ, {"AUDIO_LOG_DIAGNOSTIC_TRANSCRIPTS": "false"}):
+            converter = AudioToTextConverter()
+            with tempfile.NamedTemporaryFile(suffix=".mp3") as temp_audio:
+                temp_audio.write(b"fake-audio")
+                temp_audio.flush()
+                with self.assertLogs("polytext.converter.audio_to_text", level="WARNING") as captured:
+                    result = converter.transcribe_audio(temp_audio.name)
+
+        diagnostic = "\n".join(captured.output)
+        self.assertEqual(result["transcript"], response_text)
+        self.assertEqual(fake_client.models.generate_content_models, ["gemini-3.5-flash-lite"])
+        self.assertIn("suspicious_short_response", diagnostic)
+        self.assertIn("completion_tokens=169", diagnostic)
+        self.assertIn("finish_reason=STOP", diagnostic)
+        self.assertIn("transcript_truncated=True", diagnostic)
+        self.assertNotIn("UNLOGGED_TAIL", diagnostic)
+
+    @patch("polytext.converter.audio_to_text.genai.Client")
+    def test_discarded_audio_response_logs_full_transcript_when_enabled(self, mock_client_cls):
+        discarded_text = "B" * 600 + "FULL_DIAGNOSTIC_TAIL"
+        fake_client = _FakeClient(
+            responses=[
+                _make_response(discarded_text, finish_reason="MAX_TOKENS", completion_tokens=4246),
+                _make_response("valid fallback", finish_reason="STOP", completion_tokens=400),
+            ]
+        )
+        mock_client_cls.return_value = fake_client
+
+        with patch.dict(os.environ, {"AUDIO_LOG_DIAGNOSTIC_TRANSCRIPTS": "true"}):
+            converter = AudioToTextConverter()
+            with tempfile.NamedTemporaryFile(suffix=".mp3") as temp_audio:
+                temp_audio.write(b"fake-audio")
+                temp_audio.flush()
+                with self.assertLogs("polytext.converter.audio_to_text", level="WARNING") as captured:
+                    converter.transcribe_audio(temp_audio.name)
+
+        diagnostic = "\n".join(captured.output)
+        self.assertIn("max_tokens", diagnostic)
+        self.assertIn("completion_tokens=4246", diagnostic)
+        self.assertIn("transcript_truncated=False", diagnostic)
+        self.assertIn("FULL_DIAGNOSTIC_TAIL", diagnostic)
+
+    @patch("polytext.converter.audio_to_text.genai.Client")
     def test_audio_invalid_argument_is_not_retried(self, mock_client_cls):
         fake_client = _ClientErrorClient()
         mock_client_cls.return_value = fake_client
