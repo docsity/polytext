@@ -41,6 +41,8 @@ class PlainTextLoader:
         self.temp_dir = temp_dir
         self.markdown_output = markdown_output
         self.type = "text"
+        self.model = kwargs.get("model", "gemini-3.1-flash-lite")
+        self.model_provider = kwargs.get("model_provider", "google")
 
         self.temp_dir = os.path.abspath(temp_dir)
         os.makedirs(self.temp_dir, exist_ok=True)
@@ -73,6 +75,8 @@ class PlainTextLoader:
             markdown_output=self.markdown_output,
             llm_api_key=self.llm_api_key,
             save_transcript_chunks=self.save_transcript_chunks,
+            model=self.model,
+            model_provider=self.model_provider,
         )
 
         result_dict["type"] = self.type

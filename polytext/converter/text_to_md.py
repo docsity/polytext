@@ -4,8 +4,6 @@ import time
 import os
 import dotenv
 
-from google import genai
-from google.genai import types
 from google.api_core import exceptions as google_exceptions
 from retry import retry
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -13,6 +11,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from polytext.processor.transcript_chunker import TranscriptChunker
 from polytext.processor.text_merger import TextMerger
 from polytext.prompts.text_to_md import TEXT_TO_MARKDOWN_PROMPT, TEXT_PROMPT
+from polytext.llm import MultimodalLLM
 
 dotenv.load_dotenv()
 
@@ -20,7 +19,9 @@ dotenv.load_dotenv()
 def text_to_md(transcript_text: str,
     markdown_output: bool,
     llm_api_key: str,
-    save_transcript_chunks: bool) -> dict:
+    save_transcript_chunks: bool,
+    model: str = "gemini-3.1-flash-lite",
+    model_provider: str = "google") -> dict:
     """
     Transform raw transcript text into Markdown using a language model.
 
@@ -39,7 +40,12 @@ def text_to_md(transcript_text: str,
             - completion_model_provider (str): Name of the model provider.
             - text_chunks (list, optional): List of intermediate chunks, if requested.
     """
-    yt_tr_conv = TextToMdConverter(markdown_output=markdown_output, llm_api_key=llm_api_key)
+    yt_tr_conv = TextToMdConverter(
+        markdown_output=markdown_output,
+        llm_api_key=llm_api_key,
+        model=model,
+        model_provider=model_provider,
+    )
     return yt_tr_conv.convert_text_to_md(transcript_text, save_transcript_chunks=save_transcript_chunks)
 
 
@@ -90,7 +96,11 @@ class TextToMdConverter:
         Returns:
             genai.Client: An authenticated GenAI client instance.
         """
-        return genai.Client(api_key=self.llm_api_key) if self.llm_api_key else genai.Client()
+        return MultimodalLLM(
+            model=self.model,
+            provider=self.model_provider,
+            api_key=self.llm_api_key,
+        )
 
     def get_prompt_template(self) -> str:
         """
@@ -140,19 +150,10 @@ class TextToMdConverter:
 
         start_time = time.time()
 
-        config = types.GenerateContentConfig(
-            safety_settings=[
-                types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold=types.HarmBlockThreshold.BLOCK_NONE),
-                types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
-                types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
-                types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
-            ]
-        )
-
-        response = client.models.generate_content(
-            model=self.model,
-            contents=[prompt_template, chunk_text],
-            config=config
+        response = client.generate_text(
+            instructions=prompt_template,
+            input_text=chunk_text,
+            max_output_tokens=self.max_llm_tokens,
         )
 
         elapsed = time.time() - start_time
@@ -160,8 +161,8 @@ class TextToMdConverter:
 
         return {
             "transcript": response.text,
-            "completion_tokens": response.usage_metadata.candidates_token_count,
-            "prompt_tokens": response.usage_metadata.prompt_token_count,
+            "completion_tokens": response.completion_tokens,
+            "prompt_tokens": response.prompt_tokens,
         }
 
 
@@ -219,13 +220,17 @@ class TextToMdConverter:
         transcript_chunks = [t[1] for t in sorted(results, key=lambda x: x[0])]
 
         # Merge all processed chunks into one final result
-        text_merger = TextMerger(llm_api_key=self.llm_api_key)
+        text_merger = TextMerger(
+            completion_model=self.model,
+            completion_model_provider=self.model_provider,
+            llm_api_key=self.llm_api_key,
+        )
         final_text = text_merger.merge_chunks_with_llm_sequential(chunks=transcript_chunks)
 
         result_dict = {
             "text": final_text["full_text_merged"],
-            "completion_tokens": total_completion_tokens,
-            "prompt_tokens": total_prompt_tokens,
+            "completion_tokens": total_completion_tokens + final_text["completion_tokens"],
+            "prompt_tokens": total_prompt_tokens + final_text["prompt_tokens"],
             "completion_model": self.model,
             "completion_model_provider": self.model_provider,
         }

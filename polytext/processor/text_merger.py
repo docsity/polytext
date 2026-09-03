@@ -2,14 +2,13 @@
 import re
 import logging
 from retry import retry
-from google import genai
-from google.genai import types
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from google.api_core import exceptions as google_exceptions
 from typing import List, Tuple, Dict, Any
 
 
 from ..prompts.text_merging import TEXT_MERGE_PROMPT
+from ..llm import MultimodalLLM
 
 logger = logging.getLogger(__name__)
 
@@ -220,48 +219,25 @@ class TextMerger:
         logger.info("Extracted complete sentences for merging")
 
         try:
-            if self.llm_api_key:
-                logger.info("Using provided Google API key")
-                client = genai.Client(api_key=self.llm_api_key)
-            else:
-                logger.info("Using Google API key from ENV")
-                client = genai.Client()
-
-            config = types.GenerateContentConfig(
-                # temperature=0,
-                safety_settings=[
-                    types.SafetySetting(
-                        category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-                        threshold=types.HarmBlockThreshold.BLOCK_NONE,
-                    ),
-                    types.SafetySetting(
-                        category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-                        threshold=types.HarmBlockThreshold.BLOCK_NONE,
-                    ),
-                    types.SafetySetting(
-                        category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-                        threshold=types.HarmBlockThreshold.BLOCK_NONE,
-                    ),
-                    types.SafetySetting(
-                        category=types.HarmCategory.HARM_CATEGORY_HARASSMENT,
-                        threshold=types.HarmBlockThreshold.BLOCK_NONE,
-                    ),
-                ]
+            client = MultimodalLLM(
+                model=self.completion_model,
+                provider=self.completion_model_provider,
+                api_key=self.llm_api_key,
             )
 
             prompt = TEXT_MERGE_PROMPT.format(text_1=end_text_1, text_2=start_text_2)
 
-            response = client.models.generate_content(
-                model=self.completion_model,
-                contents=prompt,
-                config=config
+            response = client.generate_text(
+                instructions="",
+                input_text=prompt,
+                max_output_tokens=self.max_llm_tokens,
             )
 
-            logger.info(f"Completion tokens: {response.usage_metadata.candidates_token_count}")
-            logger.info(f"Prompt tokens: {response.usage_metadata.prompt_token_count}")
+            logger.info(f"Completion tokens: {response.completion_tokens}")
+            logger.info(f"Prompt tokens: {response.prompt_tokens}")
 
-            response_dict = {"completion_tokens": response.usage_metadata.candidates_token_count,
-                             "prompt_tokens": response.usage_metadata.prompt_token_count,
+            response_dict = {"completion_tokens": response.completion_tokens,
+                             "prompt_tokens": response.prompt_tokens,
                              "start_text_1": start_text_1,
                              "central_text_1": central_text_1,
                              "merged_text": response.text,

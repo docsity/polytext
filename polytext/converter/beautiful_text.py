@@ -3,13 +3,12 @@ import re
 import time
 from importlib import import_module
 
-from google import genai
-from google.genai import types
 from google.api_core import exceptions as google_exceptions
 from retry import retry
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from polytext.prompts.beautiful_text import BEAUTIFUL_TEXT_PROMPT
+from polytext.llm import MultimodalLLM
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +35,11 @@ class BeautifulTextConverter:
         self.max_target_chars = max_target_chars
 
     def get_client(self):
-        return genai.Client(api_key=self.llm_api_key) if self.llm_api_key else genai.Client()
+        return MultimodalLLM(
+            model=self.model,
+            provider=self.model_provider,
+            api_key=self.llm_api_key,
+        )
 
     def chunk_raw_text(self, raw_text: str) -> list[dict]:
         text = (raw_text or "").strip()
@@ -104,43 +107,18 @@ class BeautifulTextConverter:
 
         target_text = chunk["target_text"]
 
-        config = types.GenerateContentConfig(
-            safety_settings=[
-                types.SafetySetting(
-                    category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-                    threshold=types.HarmBlockThreshold.BLOCK_NONE,
-                ),
-                types.SafetySetting(
-                    category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-                    threshold=types.HarmBlockThreshold.BLOCK_NONE,
-                ),
-                types.SafetySetting(
-                    category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-                    threshold=types.HarmBlockThreshold.BLOCK_NONE,
-                ),
-                types.SafetySetting(
-                    category=types.HarmCategory.HARM_CATEGORY_HARASSMENT,
-                    threshold=types.HarmBlockThreshold.BLOCK_NONE,
-                ),
-            ]
-        )
-
-        response = client.models.generate_content(
-            model=self.model,
-            contents=[
-                BEAUTIFUL_TEXT_PROMPT,
-                "TARGET TEXT TO CLEAN",
-                target_text,
-            ],
-            config=config,
+        response = client.generate_text(
+            instructions=BEAUTIFUL_TEXT_PROMPT,
+            input_text=f"TARGET TEXT TO CLEAN\n{target_text}",
+            max_output_tokens=self.max_llm_tokens,
         )
 
         logger.info("Beautiful text chunk %s processed in %.2fs", index + 1, time.time() - start_time)
 
         return {
             "transcript": response.text,
-            "completion_tokens": response.usage_metadata.candidates_token_count,
-            "prompt_tokens": response.usage_metadata.prompt_token_count,
+            "completion_tokens": response.completion_tokens,
+            "prompt_tokens": response.prompt_tokens,
         }
 
     def merge_cleaned_chunks(self, chunks: list[str]) -> str:

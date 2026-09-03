@@ -1,5 +1,4 @@
 import unittest
-from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from polytext.exceptions import ConversionError, EmptyDocument, LoaderError
@@ -178,10 +177,7 @@ class TestBaseLoaderErrorMapping(unittest.TestCase):
         fake_converter_class = Mock()
         fake_converter_class.return_value.convert.return_value = cleanup_result
 
-        with patch.dict(
-            "sys.modules",
-            {"polytext.converter.beautiful_text": SimpleNamespace(BeautifulTextConverter=fake_converter_class)},
-        ):
+        with patch("polytext.loader.base.BeautifulTextConverter", fake_converter_class):
             with self.assertRaises(LoaderError) as error_context:
                 loader.get_beautiful_text(["dummy input"], active_chapters=True)
 

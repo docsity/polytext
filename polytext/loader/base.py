@@ -89,7 +89,7 @@ def _raise_empty_document_loader_error(error: EmptyDocument) -> None:
 
 class BaseLoader:
     def __init__(self, markdown_output=True, llm_api_key=None, provider: str = "google", temp_dir: str = "temp",
-                 ocr_model: str = "gpt-5-mini", timeout_minutes: int | None = None,
+                 ocr_model: str | None = None, timeout_minutes: int | None = None,
                  include_image_descriptions: bool | None = None,
                  force_ocr: bool = False,
                  **kwargs):
@@ -127,8 +127,16 @@ class BaseLoader:
         self.markdown_output = markdown_output
         self.llm_api_key = llm_api_key
         self.temp_dir = temp_dir
-        self.provider = provider
-        self.ocr_model = ocr_model
+        self.provider = (provider or "google").lower()
+        default_models = {
+            "google": "gemini-3.1-flash-lite",
+            "gemini": "gemini-3.1-flash-lite",
+            "openai": "gpt-5.6-luna",
+            "azure": "gpt-5-mini",
+            "azure_openai": "gpt-5-mini",
+            "azure_oai": "gpt-5-mini",
+        }
+        self.ocr_model = ocr_model or default_models.get(self.provider, "gemini-3.1-flash-lite")
         self.timeout_minutes = timeout_minutes
         self.include_image_descriptions = (
             _read_bool_env(OCR_INCLUDE_IMAGE_DESCRIPTIONS_ENV)
@@ -260,7 +268,11 @@ class BaseLoader:
         kwargs = {**self.kwargs, **kwargs}
         raw_result = self.extract_raw_text_for_beautiful_text(input_value=input_list[0], **kwargs)
 
-        converter = BeautifulTextConverter(llm_api_key=self.llm_api_key)
+        converter = BeautifulTextConverter(
+            llm_api_key=self.llm_api_key,
+            model=self.ocr_model,
+            model_provider=self.provider,
+        )
         cleanup_result = converter.convert(
             raw_text=raw_result["text"],
             save_transcript_chunks=kwargs.get("save_transcript_chunks", self.save_transcript_chunks),
@@ -484,6 +496,8 @@ class BaseLoader:
                     llm_api_key=llm_api_key,
                     markdown_output=self.markdown_output,
                     temp_dir=self.temp_dir,
+                    model=self.ocr_model,
+                    model_provider=self.provider,
                     **kwargs,
                 )
             else:
@@ -498,6 +512,8 @@ class BaseLoader:
                 llm_api_key=llm_api_key,
                 markdown_output=self.markdown_output,
                 temp_dir=self.temp_dir,
+                model=self.ocr_model,
+                model_provider=self.provider,
                 **kwargs,
             )
 
