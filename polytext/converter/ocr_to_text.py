@@ -132,7 +132,9 @@ def get_ocr(
         target_size (int, optional): Target file size in bytes. Defaults to 1MB.
         timeout_minutes (int, optional): Number of minutes to wait for a response. Defaults to None.
         ocr_model (str | None, optional): Gemini OCR model to use. Defaults to the converter default.
-        max_output_tokens (int | None, optional): Maximum Gemini output tokens.
+        ocr_model_provider (str, optional): Direct OCR provider (``google`` or
+            ``openai``). Defaults to ``google``.
+        max_output_tokens (int | None, optional): Maximum output tokens.
             Defaults to the converter default.
         include_image_descriptions (bool, optional): If True, OCR prompts include
             brief functional descriptions for meaningful non-text images.
@@ -165,8 +167,9 @@ class OCRToTextConverter:
         """
         Initialize the OCRToTextConverter class with specified OCR model and formatting options.
 
-        This class handles OCR processing of images using Google's Gemini Vision API.
-        It supports various image formats and can output either plain text or markdown.
+        This class handles OCR processing using Google Gemini or the direct
+        OpenAI Responses API. It supports various image formats and can output
+        either plain text or Markdown.
 
         Args:
             ocr_model (str): Model name for OCR processing. Defaults to "gemini-3.1-flash-lite".
@@ -178,7 +181,7 @@ class OCRToTextConverter:
             timeout_minutes (int, optional): Number of minutes to wait for a response. Defaults to None.
             fallback_stage (int, optional): Internal retry stage used by fallback attempts.
                 Defaults to 0.
-            max_output_tokens (int | None, optional): Maximum Gemini output tokens.
+            max_output_tokens (int | None, optional): Maximum output tokens.
                 Defaults to `OCR_MAX_OUTPUT_TOKENS`.
             include_image_descriptions (bool, optional): If True, OCR prompts include
                 brief functional descriptions for meaningful non-text images.
@@ -314,7 +317,7 @@ class OCRToTextConverter:
         Process an image file using OCR and return the extracted text.
 
         This method handles image compression/conversion if needed and uses
-        Google's Gemini Vision API to extract and format the text content.
+        the configured vision provider to extract and format the text content.
 
         Args:
             file_for_ocr (str): Path to the image file for OCR processing.
@@ -412,7 +415,7 @@ class OCRToTextConverter:
                     provider=self.ocr_model_provider,
                     api_key=self.llm_api_key,
                     timeout_minutes=self.timeout_minutes,
-                ).generate_image(
+                ).generate_text_from_image(
                     instructions=prompt_template,
                     image_data=image_data,
                     mime_type=mime_type,

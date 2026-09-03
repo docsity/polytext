@@ -30,6 +30,9 @@ def text_to_md(transcript_text: str,
         markdown_output (bool): Whether the output should be in Markdown format.
         llm_api_key (str): API key for the LLM provider.
         save_transcript_chunks (bool): Whether to include processed chunk texts in the output.
+        model (str): Model used for conversion and chunk merging.
+        model_provider (str): Direct LLM provider (``google``/``gemini`` or
+            ``openai``).
 
     Returns:
         dict: Dictionary with:
@@ -50,6 +53,8 @@ def text_to_md(transcript_text: str,
 
 
 class TextToMdConverter:
+    """Convert chunked raw text to plain text or Markdown with an LLM."""
+
     def __init__(
         self,
             markdown_output: bool = True,
@@ -68,7 +73,8 @@ class TextToMdConverter:
 
         Args:
             markdown_output (bool): Whether output should be in Markdown format.
-            llm_api_key (str): API key to authenticate with the LLM service.
+            llm_api_key (str): Explicit API-key override. If omitted, the
+                selected provider SDK uses its environment configuration.
             max_llm_tokens (int): Max token budget per LLM call.
             prompt_overhead (int): Reserved tokens for prompt metadata.
             tokens_per_char (float): Estimated tokens per character.
@@ -90,11 +96,11 @@ class TextToMdConverter:
         self.model_provider = model_provider
 
     def get_client(self) -> object:
-        """
-        Instantiate the GenAI client using the API key.
+        """Create the provider-neutral text generation adapter.
 
         Returns:
-            genai.Client: An authenticated GenAI client instance.
+            MultimodalLLM: Adapter configured with this converter's provider,
+                model, and optional explicit API key.
         """
         return MultimodalLLM(
             model=self.model,

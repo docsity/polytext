@@ -9,6 +9,12 @@ from retry import retry
 
 @dataclass(frozen=True)
 class GenerationResult:
+    """Provider-neutral result returned by text and vision generations.
+
+    Token counts use each provider's reported input and output usage. The
+    ``finish_reason`` contains the provider completion status when available.
+    """
+
     text: str
     prompt_tokens: int
     completion_tokens: int
@@ -22,6 +28,7 @@ class LLMGenerationError(RuntimeError):
 
 
 def normalize_provider(provider: str) -> str:
+    """Normalize supported provider aliases to ``google`` or ``openai``."""
     normalized = (provider or "google").strip().lower()
     aliases = {
         "google": "google",
@@ -34,6 +41,17 @@ def normalize_provider(provider: str) -> str:
 
 
 class MultimodalLLM:
+    """Small provider adapter for text output from text or image inputs.
+
+    Supported providers are Google Gemini (``google``/``gemini``) and direct
+    OpenAI (``openai``). ``api_key`` is an explicit credential override. When
+    it is omitted, the underlying SDK resolves its normal environment-based
+    configuration, including ``OPENAI_API_KEY`` for OpenAI.
+
+    This adapter does not generate images. Both public generation methods
+    return :class:`GenerationResult` containing text.
+    """
+
     def __init__(
         self,
         model: str,
@@ -48,6 +66,7 @@ class MultimodalLLM:
         self._client = None
 
     def _get_client(self):
+        """Lazily construct and cache the selected provider SDK client."""
         if self._client is not None:
             return self._client
         if self.provider == "openai":
@@ -78,10 +97,16 @@ class MultimodalLLM:
         backoff=2,
     )
     def _create_openai_response(self, **request):
+        """Create an OpenAI response, retrying only transient API failures."""
         return self._get_client().responses.create(**request)
 
     @staticmethod
     def _openai_result(response, model: str) -> GenerationResult:
+        """Validate and normalize an OpenAI Responses API result.
+
+        Empty completed responses and responses marked incomplete are rejected
+        because downstream transcription and merge code requires usable text.
+        """
         text = response.output_text or ""
         status = getattr(response, "status", None)
         incomplete_details = getattr(response, "incomplete_details", None)
@@ -107,6 +132,18 @@ class MultimodalLLM:
         max_output_tokens: int | None = None,
         temperature: float | None = None,
     ) -> GenerationResult:
+        """Generate text from a textual input.
+
+        Args:
+            instructions: Rules or task instructions for the model.
+            input_text: Text to process.
+            max_output_tokens: Optional provider output-token limit.
+            temperature: Optional sampling temperature. Currently applied to
+                Gemini; Luna uses its supported reasoning configuration.
+
+        Raises:
+            LLMGenerationError: If OpenAI returns empty or incomplete output.
+        """
         client = self._get_client()
         if self.provider == "openai":
             request = {
@@ -145,7 +182,7 @@ class MultimodalLLM:
             finish_reason=None,
         )
 
-    def generate_image(
+    def generate_text_from_image(
         self,
         instructions: str,
         image_data: bytes,
@@ -153,6 +190,24 @@ class MultimodalLLM:
         max_output_tokens: int | None = None,
         temperature: float | None = None,
     ) -> GenerationResult:
+        """Generate text from an image according to the supplied instructions.
+
+        The OpenAI request contains the image as the sole user-content item;
+        ``instructions`` carries the complete OCR or image-processing prompt.
+        Image bytes are encoded as a data URL for OpenAI and sent as an inline
+        image part for Gemini.
+
+        Args:
+            instructions: Complete instructions governing the textual result.
+            image_data: Raw bytes of the input image.
+            mime_type: MIME type associated with ``image_data``.
+            max_output_tokens: Optional provider output-token limit.
+            temperature: Optional sampling temperature. Currently applied to
+                Gemini; Luna uses its supported reasoning configuration.
+
+        Raises:
+            LLMGenerationError: If OpenAI returns empty or incomplete output.
+        """
         client = self._get_client()
         if self.provider == "openai":
             encoded_image = base64.b64encode(image_data).decode("ascii")
@@ -163,7 +218,6 @@ class MultimodalLLM:
                     {
                         "role": "user",
                         "content": [
-                            {"type": "input_text", "text": "Transcribe the supplied image."},
                             {
                                 "type": "input_image",
                                 "image_url": f"data:{mime_type};base64,{encoded_image}",

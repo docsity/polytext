@@ -21,7 +21,7 @@ class TestOpenAIImageOCR(unittest.TestCase):
 
     @patch("polytext.converter.ocr_to_text.MultimodalLLM")
     def test_openai_image_ocr_returns_normalized_metadata(self, llm_cls):
-        llm_cls.return_value.generate_image.return_value = GenerationResult(
+        llm_cls.return_value.generate_text_from_image.return_value = GenerationResult(
             text="# Visible heading\nBody",
             prompt_tokens=31,
             completion_tokens=8,
@@ -48,13 +48,13 @@ class TestOpenAIImageOCR(unittest.TestCase):
             api_key="explicit-key",
             timeout_minutes=None,
         )
-        call = llm_cls.return_value.generate_image.call_args.kwargs
+        call = llm_cls.return_value.generate_text_from_image.call_args.kwargs
         self.assertEqual(call["image_data"], b"small-png-fixture")
         self.assertEqual(call["mime_type"], "image/png")
 
     @patch("polytext.converter.ocr_to_text.MultimodalLLM")
     def test_openai_no_readable_text_marker_becomes_empty_text(self, llm_cls):
-        llm_cls.return_value.generate_image.return_value = GenerationResult(
+        llm_cls.return_value.generate_text_from_image.return_value = GenerationResult(
             text="No readable text present",
             prompt_tokens=10,
             completion_tokens=4,
@@ -72,7 +72,7 @@ class TestOpenAIImageOCR(unittest.TestCase):
 
     @patch("polytext.converter.ocr_to_text.MultimodalLLM")
     def test_openai_failure_does_not_fall_back_to_gemini(self, llm_cls):
-        llm_cls.return_value.generate_image.side_effect = LLMGenerationError(
+        llm_cls.return_value.generate_text_from_image.side_effect = LLMGenerationError(
             "OpenAI returned an empty response"
         )
         converter = OCRToTextConverter(
@@ -87,7 +87,7 @@ class TestOpenAIImageOCR(unittest.TestCase):
 
     @patch("polytext.converter.ocr_to_text.MultimodalLLM")
     def test_get_ocr_convenience_function_propagates_openai(self, llm_cls):
-        llm_cls.return_value.generate_image.return_value = GenerationResult(
+        llm_cls.return_value.generate_text_from_image.return_value = GenerationResult(
             text="text",
             prompt_tokens=2,
             completion_tokens=1,
@@ -106,7 +106,7 @@ class TestOpenAIImageOCR(unittest.TestCase):
 
     @patch("polytext.converter.ocr_to_text.MultimodalLLM")
     def test_get_ocr_defaults_to_luna_for_openai(self, llm_cls):
-        llm_cls.return_value.generate_image.return_value = GenerationResult(
+        llm_cls.return_value.generate_text_from_image.return_value = GenerationResult(
             text="text",
             prompt_tokens=2,
             completion_tokens=1,

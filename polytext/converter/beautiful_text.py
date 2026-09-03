@@ -14,6 +14,8 @@ logger = logging.getLogger(__name__)
 
 
 class BeautifulTextConverter:
+    """Clean and structure extracted text using Google Gemini or OpenAI."""
+
     def __init__(
         self,
         llm_api_key: str = None,
@@ -25,6 +27,12 @@ class BeautifulTextConverter:
         overlap_chars: int = 800,
         max_target_chars: int = 12000,
     ) -> None:
+        """Configure chunking and the LLM used to clean extracted text.
+
+        ``llm_api_key`` overrides provider environment configuration. When it
+        is omitted, the selected SDK resolves its standard environment
+        variables, such as ``OPENAI_API_KEY`` for direct OpenAI.
+        """
         self.llm_api_key = llm_api_key
         self.model = model
         self.model_provider = model_provider
@@ -35,6 +43,7 @@ class BeautifulTextConverter:
         self.max_target_chars = max_target_chars
 
     def get_client(self):
+        """Return a provider-neutral adapter configured for text generation."""
         return MultimodalLLM(
             model=self.model,
             provider=self.model_provider,

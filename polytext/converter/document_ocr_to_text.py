@@ -431,7 +431,7 @@ class DocumentOCRToTextConverter:
                     provider=self.ocr_model_provider,
                     api_key=self.llm_api_key,
                     timeout_minutes=self.timeout_minutes,
-                ).generate_image(
+                ).generate_text_from_image(
                     instructions=prompt_template,
                     image_data=image_data,
                     mime_type=mime_type,

@@ -87,7 +87,7 @@ class TestOpenAIDocumentOCR(unittest.TestCase):
     @patch("fitz.open")
     def test_openai_document_ocr_function_defaults_to_luna(self, fitz_open, llm_cls):
         fitz_open.return_value = _Pdf([_Page(b"page-one")])
-        llm_cls.return_value.generate_image.return_value = _result("First page", 10, 3)
+        llm_cls.return_value.generate_text_from_image.return_value = _result("First page", 10, 3)
 
         result = get_document_ocr(
             document_for_ocr="document.pdf",
@@ -108,12 +108,12 @@ class TestOpenAIDocumentOCR(unittest.TestCase):
         pdf = _Pdf([_Page(b"page-one"), _Page(b"page-two")])
         fitz_open.return_value = pdf
 
-        def generate_image(**kwargs):
+        def generate_text_from_image(**kwargs):
             if kwargs["image_data"] == b"page-one":
                 return _result("First page", 10, 3)
             return _result("Second page", 20, 5)
 
-        llm_cls.return_value.generate_image.side_effect = generate_image
+        llm_cls.return_value.generate_text_from_image.side_effect = generate_text_from_image
         converter = DocumentOCRToTextConverter(
             ocr_model="gpt-5.6-luna",
             ocr_model_provider="openai",
@@ -135,12 +135,12 @@ class TestOpenAIDocumentOCR(unittest.TestCase):
     def test_openai_document_ocr_records_partial_page_failure(self, fitz_open, llm_cls):
         fitz_open.return_value = _Pdf([_Page(b"page-one"), _Page(b"page-two")])
 
-        def generate_image(**kwargs):
+        def generate_text_from_image(**kwargs):
             if kwargs["image_data"] == b"page-two":
                 raise LLMGenerationError("OpenAI returned an empty response")
             return _result("First page", 10, 3)
 
-        llm_cls.return_value.generate_image.side_effect = generate_image
+        llm_cls.return_value.generate_text_from_image.side_effect = generate_text_from_image
         converter = DocumentOCRToTextConverter(
             ocr_model="gpt-5.6-luna",
             ocr_model_provider="openai",
@@ -157,7 +157,7 @@ class TestOpenAIDocumentOCR(unittest.TestCase):
     @patch("fitz.open")
     def test_openai_document_ocr_raises_page_failure_by_default(self, fitz_open, llm_cls):
         fitz_open.return_value = _Pdf([_Page(b"page-one")])
-        llm_cls.return_value.generate_image.side_effect = LLMGenerationError(
+        llm_cls.return_value.generate_text_from_image.side_effect = LLMGenerationError(
             "OpenAI returned an empty response"
         )
         converter = DocumentOCRToTextConverter(

@@ -13,6 +13,8 @@ from ..llm import MultimodalLLM
 logger = logging.getLogger(__name__)
 
 class TextMerger:
+    """Merge overlapping text chunks locally or with a configured LLM."""
+
     def __init__(
             self,
             completion_model: str = "gemini-3.1-flash-lite",
@@ -23,6 +25,19 @@ class TextMerger:
             min_matches: int = 3,
             n_words_for_llm_merge: int = 200
     ) -> None:
+        """Configure local overlap matching and optional LLM-assisted merging.
+
+        Args:
+            completion_model: Model used for LLM-assisted merges.
+            completion_model_provider: Direct provider for the model.
+            llm_api_key: Explicit credential override; when omitted, the
+                provider SDK uses its environment configuration.
+            max_llm_tokens: Maximum output tokens for each merge request.
+            k: Number of overlap words used by the local matcher.
+            min_matches: Minimum matching words accepted by the local matcher.
+            n_words_for_llm_merge: Boundary context taken from each chunk for
+                an LLM-assisted merge.
+        """
         self.completion_model = completion_model
         self.completion_model_provider = completion_model_provider
         self.k = k
@@ -208,7 +223,8 @@ class TextMerger:
             text2 (str): The second text (ending part)
 
         Returns:
-            str: The merged text
+            dict: Merged boundary text, preserved surrounding text, and token
+                usage reported by the selected provider.
         """
 
         [start_text_1, central_text_1, end_text_1] = self.extract_complete_sentences(text1,

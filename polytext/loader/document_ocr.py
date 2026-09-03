@@ -66,8 +66,9 @@ class DocumentOCRLoader:
                 Defaults to None.
             document_gcs_bucket (str, optional): GCS bucket name for document storage. Defaults to None.
             llm_api_key (str, optional): API key for language model service.
-                For Azure OpenAI, this should be the Azure API key.
-                Defaults to None.
+                This is an explicit override for Google/direct OpenAI. For
+                Azure OpenAI, it is the Azure API key. If omitted, direct SDKs
+                use their environment configuration. Defaults to None.
             temp_dir (str, optional): Path for temporary file storage. Defaults to "temp".
             target_size (int, optional): Target file size in bytes. Defaults to 1MB.
             page_range (tuple): Optional page range to extract (start, end).

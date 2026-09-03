@@ -84,7 +84,7 @@ class TestMultimodalLLM(unittest.TestCase):
         openai_cls.assert_called_once_with()
 
     @patch("polytext.llm.multimodal.OpenAI")
-    def test_openai_image_generation_sends_a_data_url(self, openai_cls):
+    def test_openai_text_from_image_sends_only_the_image_as_user_content(self, openai_cls):
         openai_cls.return_value.responses.create.return_value = SimpleNamespace(
             output_text="visible words",
             usage=SimpleNamespace(input_tokens=31, output_tokens=4),
@@ -92,7 +92,7 @@ class TestMultimodalLLM(unittest.TestCase):
             incomplete_details=None,
         )
 
-        result = MultimodalLLM("gpt-5.6-luna", "openai").generate_image(
+        result = MultimodalLLM("gpt-5.6-luna", "openai").generate_text_from_image(
             instructions="Transcribe",
             image_data=b"image-bytes",
             mime_type="image/png",
@@ -102,7 +102,8 @@ class TestMultimodalLLM(unittest.TestCase):
         request = openai_cls.return_value.responses.create.call_args.kwargs
         self.assertEqual(request["model"], "gpt-5.6-luna")
         self.assertEqual(request["instructions"], "Transcribe")
-        image_part = request["input"][0]["content"][1]
+        self.assertEqual(len(request["input"][0]["content"]), 1)
+        image_part = request["input"][0]["content"][0]
         self.assertEqual(image_part["type"], "input_image")
         self.assertEqual(
             image_part["image_url"],

@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 class OCRLoader:
+    """Load an image and extract text through Google Gemini or direct OpenAI."""
 
     def __init__(self,
                  source: str,
@@ -43,7 +44,8 @@ class OCRLoader:
             gcs_client (google.cloud.storage.Client, optional): GCS client for Cloud Storage operations.
                 Defaults to None.
             document_gcs_bucket (str, optional): GCS bucket name for document storage. Defaults to None.
-            llm_api_key (str, optional): API key for language model service. Defaults to None.
+            llm_api_key (str, optional): Explicit API-key override. If omitted,
+                the provider SDK uses its environment configuration.
             temp_dir (str, optional): Path for temporary file storage. Defaults to "temp".
             target_size (int, optional): Target file size in bytes. Defaults to 1MB.
             timeout_minutes (int, optional): Timeout in minutes. Defaults to None.
@@ -51,8 +53,11 @@ class OCRLoader:
                 brief functional descriptions for meaningful non-text images.
                 Defaults to False.
             **kwargs:
-                ocr_model (str, optional): Explicit Gemini OCR model to pass through to the converter.
-                max_output_tokens (int, optional): Maximum Gemini output tokens for OCR generation.
+                ocr_model (str, optional): Explicit OCR model passed to the converter.
+                ocr_model_provider (str, optional): Direct OCR provider
+                    (``google``/``gemini`` or ``openai``).
+                max_output_tokens (int, optional): Maximum output tokens for
+                    direct Google or OpenAI OCR generation.
 
         Raises:
             ValueError: If cloud storage clients are provided without bucket names
