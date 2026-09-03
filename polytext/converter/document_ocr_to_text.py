@@ -13,6 +13,7 @@ from google.api_core import exceptions as google_exceptions
 from ..prompts.ocr import (
     OCR_TO_MARKDOWN_NON_LITERAL_FALLBACK_PROMPT,
     OCR_TO_MARKDOWN_PROMPT,
+    OCR_TO_PLAIN_TEXT_NON_LITERAL_FALLBACK_PROMPT,
     OCR_TO_PLAIN_TEXT_PROMPT,
     build_ocr_prompt,
 )
@@ -34,7 +35,7 @@ OCR_TAIL_REPETITION_THRESHOLD = float(os.getenv("OCR_TAIL_REPETITION_THRESHOLD",
 OCR_FALLBACK_SOURCE_PATTERN = os.getenv("OCR_FALLBACK_SOURCE_PATTERN", "flash-lite-preview")
 OCR_FALLBACK_MODEL = os.getenv("OCR_FALLBACK_MODEL", "gemini-3-flash-preview")
 OCR_FALLBACK_TEMPERATURE = float(os.getenv("OCR_FALLBACK_TEMPERATURE", "1.0"))
-OCR_FINAL_FALLBACK_MODEL = os.getenv("OCR_FINAL_FALLBACK_MODEL", "gemini-2.0-flash")
+OCR_FINAL_FALLBACK_MODEL = os.getenv("OCR_FINAL_FALLBACK_MODEL", "gemini-3.5-flash")
 OCR_PROMPT_VARIANT_DEFAULT = "default"
 OCR_PROMPT_VARIANT_NON_LITERAL_FALLBACK = "non_literal_fallback"
 OCR_RETRIABLE_OUTPUT_ERROR_CODES = (996, 997, 999)
@@ -113,6 +114,7 @@ def get_document_ocr(
     ocr_model: str | None = None,
     max_output_tokens: int | None = None,
     include_image_descriptions: bool = False,
+    allow_partial_ocr_failures: bool = False,
 ):
     """
     Convenience function to extract text from an image file using OCR, optionally formatted as Markdown.
@@ -136,6 +138,9 @@ def get_document_ocr(
         include_image_descriptions (bool, optional): If True, OCR prompts include
             brief functional descriptions for meaningful non-text images.
             Defaults to False.
+        allow_partial_ocr_failures (bool, optional): If True, pages that still
+            fail OCR after all retries are recorded inline instead of aborting
+            the whole document extraction. Defaults to False.
 
     Returns:
         dict: Dictionary containing the OCR results and metadata.
@@ -149,6 +154,7 @@ def get_document_ocr(
         timeout_minutes=timeout_minutes,
         max_output_tokens=max_output_tokens,
         include_image_descriptions=include_image_descriptions,
+        allow_partial_ocr_failures=allow_partial_ocr_failures,
     )
     return converter.get_document_ocr(document_for_ocr)
 
@@ -157,7 +163,8 @@ class DocumentOCRToTextConverter:
                 markdown_output=True, llm_api_key=None, target_size=1, temp_dir="temp",
                  page_range=None, timeout_minutes: int = None, fallback_stage: int = 0,
                  max_output_tokens: int | None = None, include_image_descriptions: bool = False,
-                 prompt_variant: str = OCR_PROMPT_VARIANT_DEFAULT):
+                 prompt_variant: str = OCR_PROMPT_VARIANT_DEFAULT,
+                 allow_partial_ocr_failures: bool = False):
         """
         Initialize the DocumentOCRToTextConverter class with specified OCR model and formatting options.
 
@@ -182,6 +189,9 @@ class DocumentOCRToTextConverter:
                 Defaults to False.
             prompt_variant (str, optional): Prompt variant used by this attempt.
                 Defaults to "default".
+            allow_partial_ocr_failures (bool, optional): If True, pages that still
+                fail OCR after all retries are recorded inline instead of aborting
+                the whole document extraction. Defaults to False.
 
         Raises:
             OSError: If temp directory creation fails
@@ -196,6 +206,7 @@ class DocumentOCRToTextConverter:
         self.timeout_minutes = timeout_minutes
         self.include_image_descriptions = include_image_descriptions
         self.prompt_variant = prompt_variant
+        self.allow_partial_ocr_failures = allow_partial_ocr_failures
         requested_output_tokens = OCR_MAX_OUTPUT_TOKENS if max_output_tokens is None else max_output_tokens
         self.max_output_tokens = max(requested_output_tokens, OCR_MIN_OUTPUT_TOKENS)
         self.fallback_stage = fallback_stage
@@ -212,6 +223,8 @@ class DocumentOCRToTextConverter:
     def _build_prompt_template(self) -> str:
         if self.markdown_output and self.prompt_variant == OCR_PROMPT_VARIANT_NON_LITERAL_FALLBACK:
             base_prompt = OCR_TO_MARKDOWN_NON_LITERAL_FALLBACK_PROMPT
+        elif not self.markdown_output and self.prompt_variant == OCR_PROMPT_VARIANT_NON_LITERAL_FALLBACK:
+            base_prompt = OCR_TO_PLAIN_TEXT_NON_LITERAL_FALLBACK_PROMPT
         elif self.markdown_output:
             base_prompt = OCR_TO_MARKDOWN_PROMPT
         else:
@@ -223,8 +236,6 @@ class DocumentOCRToTextConverter:
 
     def should_prompt_fallback_retry(self, error: EmptyDocument) -> bool:
         if self.fallback_stage != 0:
-            return False
-        if not self.markdown_output:
             return False
         if self.prompt_variant == OCR_PROMPT_VARIANT_NON_LITERAL_FALLBACK:
             return False
@@ -283,6 +294,7 @@ class DocumentOCRToTextConverter:
             max_output_tokens=self.max_output_tokens,
             include_image_descriptions=self.include_image_descriptions,
             prompt_variant=resolved_prompt_variant,
+            allow_partial_ocr_failures=self.allow_partial_ocr_failures,
         )
         result = fallback_converter.get_ocr(
             file_for_ocr=file_for_ocr,
@@ -541,7 +553,26 @@ class DocumentOCRToTextConverter:
                 pix.save(temp_image_path)
 
                 # Perform OCR on the page
-                ocr_result = self.get_ocr(temp_image_path)
+                try:
+                    ocr_result = self.get_ocr(temp_image_path)
+                except EmptyDocument as error:
+                    if not self.allow_partial_ocr_failures:
+                        raise
+                    logger.warning(
+                        "Document OCR failed on page %s after retries; keeping partial document because allow_partial_ocr_failures=True: %s",
+                        page_num + 1,
+                        error.message,
+                    )
+                    ocr_result = {
+                        "text": "",
+                        "completion_tokens": 0,
+                        "prompt_tokens": 0,
+                        "completion_model": self.ocr_model,
+                        "completion_model_provider": self.ocr_model_provider,
+                        "text_chunks": "not provided",
+                        "page_error": True,
+                        "page_error_reason": error.message,
+                    }
                 return page_num, ocr_result
 
             finally:
@@ -574,11 +605,17 @@ class DocumentOCRToTextConverter:
             all_text = []
             total_completion_tokens = 0
             total_prompt_tokens = 0
+            failed_pages = []
 
-            for _, ocr_result in results:
+            for page_num, ocr_result in results:
                 all_text.append(f"{ocr_result['text']}\n")
                 total_completion_tokens += ocr_result['completion_tokens']
                 total_prompt_tokens += ocr_result['prompt_tokens']
+                if ocr_result.get("page_error"):
+                    failed_pages.append({
+                        "page": page_num + 1,
+                        "reason": ocr_result.get("page_error_reason", "unknown"),
+                    })
 
             pdf.close()
 
@@ -589,6 +626,8 @@ class DocumentOCRToTextConverter:
                 "completion_model": self.ocr_model,
                 "completion_model_provider": self.ocr_model_provider,
                 "text_chunks": "not provided",
+                "ocr_failed_pages": [item["page"] for item in failed_pages],
+                "ocr_failed_pages_detail": failed_pages,
             }
 
             return final_result_dict
