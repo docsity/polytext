@@ -55,7 +55,7 @@ except ConversionError as e:
     print(f"Conversion failed: {e}")
 ```
 
-Features that require the API key for Google Gemini are:
+Features that require an LLM API key include:
 - audio
 - video
 - image
@@ -69,6 +69,49 @@ llm_api_key = "your_google_gemini_api_key"  # Set your Google Gemini API key her
 # Instantiate the loader 
 loader = BaseLoader(llm_api_key=llm_api_key)
 ```
+
+### Direct OpenAI text and image processing
+
+Text transformations, image OCR, and forced OCR of scanned documents can use
+OpenAI directly. When `provider="openai"`, the default model is
+`gpt-5.6-luna`.
+
+Set `OPENAI_API_KEY` in the environment:
+
+```bash
+export OPENAI_API_KEY="your_openai_api_key"
+```
+
+Then select the provider on `BaseLoader`:
+
+```python
+from polytext.loader.base import BaseLoader
+
+loader = BaseLoader(
+    provider="openai",
+    source="local",
+    markdown_output=True,
+)
+
+# Text and single-image OCR
+text_result = loader.get_text(input_list=["/path/to/notes.txt"])
+image_result = loader.get_text(input_list=["/path/to/scan.jpg"])
+
+# Multipage/scanned document OCR
+document_loader = BaseLoader(
+    provider="openai",
+    source="local",
+    force_ocr=True,
+)
+document_result = document_loader.get_text(input_list=["/path/to/scan.pdf"])
+```
+
+You may pass `llm_api_key="..."` to `BaseLoader` as an explicit credential
+override. If omitted, the OpenAI SDK uses `OPENAI_API_KEY`. A custom compatible
+model can be selected with `ocr_model="..."`.
+
+Direct OpenAI processing currently covers text and images. Audio, video, and
+YouTube processing continue to use the existing Gemini pipelines.
 
 Text or Markdown Extraction
 
