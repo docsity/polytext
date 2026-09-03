@@ -105,6 +105,11 @@ class BeautifulTextConverter:
         target_text = chunk["target_text"]
 
         config = types.GenerateContentConfig(
+            temperature=0,
+            thinking_config=types.ThinkingConfig(thinking_budget=0),
+            max_output_tokens=self.max_llm_tokens,
+            tools=[],
+            automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
             safety_settings=[
                 types.SafetySetting(
                     category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
