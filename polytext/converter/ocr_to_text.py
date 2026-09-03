@@ -22,6 +22,7 @@ from .gemini_quality_guards import (
     extract_finish_reason,
     tail_has_excessive_repetition,
 )
+from ..llm import MultimodalLLM, normalize_provider
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +112,7 @@ def get_ocr(
     target_size=1,
     timeout_minutes=None,
     ocr_model: str | None = None,
+    ocr_model_provider: str = "google",
     max_output_tokens: int | None = None,
     include_image_descriptions: bool = False,
 ):
@@ -139,8 +141,12 @@ def get_ocr(
     Returns:
         dict: Dictionary containing the OCR results and metadata.
     """
+    resolved_provider = normalize_provider(ocr_model_provider)
     converter = OCRToTextConverter(
-        ocr_model=ocr_model or "gemini-3.1-flash-lite",
+        ocr_model=ocr_model or (
+            "gpt-5.6-luna" if resolved_provider == "openai" else "gemini-3.1-flash-lite"
+        ),
+        ocr_model_provider=resolved_provider,
         markdown_output=markdown_output,
         llm_api_key=llm_api_key,
         target_size=target_size,
@@ -185,7 +191,7 @@ class OCRToTextConverter:
             ValueError: If invalid model or provider specified
         """
         self.ocr_model = ocr_model
-        self.ocr_model_provider = ocr_model_provider
+        self.ocr_model_provider = normalize_provider(ocr_model_provider)
         self.markdown_output = markdown_output
         self.llm_api_key = llm_api_key
         self.target_size = target_size
@@ -342,40 +348,43 @@ class OCRToTextConverter:
         logger.info(prompt_template)
 
         try:
-            if self.llm_api_key:
-                logger.info("Using provided Google API key")
-                client = genai.Client(api_key=self.llm_api_key)
-            else:
-                logger.info("Using Google API key from ENV")
-                client = genai.Client()
+            client = None
+            config = None
+            if self.ocr_model_provider == "google":
+                if self.llm_api_key:
+                    logger.info("Using provided Google API key")
+                    client = genai.Client(api_key=self.llm_api_key)
+                else:
+                    logger.info("Using Google API key from ENV")
+                    client = genai.Client()
 
-            config = types.GenerateContentConfig(
-                temperature=temperature,
-                max_output_tokens=self.max_output_tokens,
-                safety_settings=[
-                    types.SafetySetting(
-                        category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-                        threshold=types.HarmBlockThreshold.BLOCK_NONE,
+                config = types.GenerateContentConfig(
+                    temperature=temperature,
+                    max_output_tokens=self.max_output_tokens,
+                    safety_settings=[
+                        types.SafetySetting(
+                            category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                            threshold=types.HarmBlockThreshold.BLOCK_NONE,
+                        ),
+                        types.SafetySetting(
+                            category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                            threshold=types.HarmBlockThreshold.BLOCK_NONE,
+                        ),
+                        types.SafetySetting(
+                            category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                            threshold=types.HarmBlockThreshold.BLOCK_NONE,
+                        ),
+                        types.SafetySetting(
+                            category=types.HarmCategory.HARM_CATEGORY_HARASSMENT,
+                            threshold=types.HarmBlockThreshold.BLOCK_NONE,
+                        ),
+                    ],
+                    http_options=(
+                        types.HttpOptions(timeout=self.timeout_minutes * 60_000)
+                        if self.timeout_minutes is not None else None
                     ),
-                    types.SafetySetting(
-                        category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-                        threshold=types.HarmBlockThreshold.BLOCK_NONE,
-                    ),
-                    types.SafetySetting(
-                        category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-                        threshold=types.HarmBlockThreshold.BLOCK_NONE,
-                    ),
-                    types.SafetySetting(
-                        category=types.HarmCategory.HARM_CATEGORY_HARASSMENT,
-                        threshold=types.HarmBlockThreshold.BLOCK_NONE,
-                    ),
-                ],
-                http_options=(
-                    types.HttpOptions(timeout=self.timeout_minutes * 60_000)
-                    if self.timeout_minutes is not None else None
-                ),
-                system_instruction=[prompt_template]
-            )
+                    system_instruction=[prompt_template]
+                )
 
             mime_type, _ = mimetypes.guess_type(file_for_ocr)
             logger.info(f"OCR mime type: {mime_type}")
@@ -392,7 +401,30 @@ class OCRToTextConverter:
 
             logger.info(f"Final image file size: {file_size / (1024 * 1024):.2f} MB")
 
-            if file_size > 20 * 1024 * 1024:
+            if self.ocr_model_provider == "openai":
+                with open(temp_file_for_ocr, "rb") as image_file:
+                    image_data = image_file.read()
+                mime_type, _ = mimetypes.guess_type(temp_file_for_ocr)
+                if mime_type is None:
+                    raise ValueError("Image format not recognized")
+                generation = MultimodalLLM(
+                    model=self.ocr_model,
+                    provider=self.ocr_model_provider,
+                    api_key=self.llm_api_key,
+                    timeout_minutes=self.timeout_minutes,
+                ).generate_image(
+                    instructions=prompt_template,
+                    image_data=image_data,
+                    mime_type=mime_type,
+                    max_output_tokens=self.max_output_tokens,
+                    temperature=temperature,
+                )
+                response = None
+                response_text = generation.text
+                finish_reason = generation.finish_reason
+                completion_tokens = generation.completion_tokens
+                prompt_tokens = generation.prompt_tokens
+            elif file_size > 20 * 1024 * 1024:
                 logger.info("Total image file size exceeds 20MB, uploading file before transcription")
 
                 myfile = client.files.upload(file=temp_file_for_ocr)
@@ -405,6 +437,11 @@ class OCRToTextConverter:
                     contents=contents,
                     config=config
                 )
+
+                response_text = response.text or ""
+                finish_reason = extract_finish_reason(response)
+                completion_tokens = response.usage_metadata.candidates_token_count
+                prompt_tokens = response.usage_metadata.prompt_token_count
 
                 client.files.delete(name=myfile.name)
 
@@ -433,32 +470,35 @@ class OCRToTextConverter:
                     config=config
                 )
 
+                response_text = response.text or ""
+                finish_reason = extract_finish_reason(response)
+                completion_tokens = response.usage_metadata.candidates_token_count
+                prompt_tokens = response.usage_metadata.prompt_token_count
+
             end_time = time.time()
             time_elapsed = end_time - start_time
-            response_text = response.text or ""
-            finish_reason = extract_finish_reason(response)
             has_repetitive_tail = tail_has_excessive_repetition(
                 response_text,
                 tail_lines=OCR_TAIL_REPETITION_LINES,
                 threshold=OCR_TAIL_REPETITION_THRESHOLD,
             )
 
-            logger.info(f"Completion tokens: {response.usage_metadata.candidates_token_count}")
-            logger.info(f"Prompt tokens: {response.usage_metadata.prompt_token_count}")
+            logger.info(f"Completion tokens: {completion_tokens}")
+            logger.info(f"Prompt tokens: {prompt_tokens}")
 
-            if finish_reason and "RECITATION" in finish_reason:
+            if self.ocr_model_provider == "google" and finish_reason and "RECITATION" in finish_reason:
                 raise EmptyDocument(
                     message=f"OCR blocked because recitation was detected for image: {file_for_ocr}",
                     code=996,
                 )
 
-            if finish_reason and "MAX_TOKENS" in finish_reason:
+            if self.ocr_model_provider == "google" and finish_reason and "MAX_TOKENS" in finish_reason:
                 raise EmptyDocument(
                     message=f"OCR truncated because max output tokens were reached for image: {file_for_ocr}",
                     code=999,
                 )
 
-            if has_repetitive_tail:
+            if self.ocr_model_provider == "google" and has_repetitive_tail:
                 raise EmptyDocument(
                     message=f"OCR discarded because repetitive tail was detected for image: {file_for_ocr}",
                     code=997,
@@ -466,8 +506,8 @@ class OCRToTextConverter:
 
             final_ocr_dict = {
                 "text": response_text if "no readable text present" not in response_text.lower() else "",
-                "completion_tokens": response.usage_metadata.candidates_token_count,
-                "prompt_tokens": response.usage_metadata.prompt_token_count,
+                "completion_tokens": completion_tokens,
+                "prompt_tokens": prompt_tokens,
                 "completion_model": self.ocr_model,
                 "completion_model_provider": self.ocr_model_provider,
                 "text_chunks": "not provided",

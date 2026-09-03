@@ -488,7 +488,18 @@ class BaseLoader:
                 video_kwargs = {**kwargs, "is_output_audio_raw": self.is_output_audio_raw}
                 return VideoLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, timeout_minutes=self.timeout_minutes, **video_kwargs)
             elif mime_type.startswith("image/"):
-                return OCRLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, timeout_minutes=self.timeout_minutes, include_image_descriptions=self.include_image_descriptions, **kwargs)
+                image_kwargs = {k: v for k, v in kwargs.items() if k != "source"}
+                return OCRLoader(
+                    source=self.source,
+                    llm_api_key=llm_api_key,
+                    markdown_output=self.markdown_output,
+                    temp_dir=self.temp_dir,
+                    timeout_minutes=self.timeout_minutes,
+                    include_image_descriptions=self.include_image_descriptions,
+                    ocr_model=self.ocr_model,
+                    ocr_model_provider=self.provider,
+                    **image_kwargs,
+                )
             elif mime_type.startswith("text/markdown"):
                 return MarkdownLoader(markdown_output=self.markdown_output, temp_dir=self.temp_dir, **kwargs)
             elif mime_type == "text/html":

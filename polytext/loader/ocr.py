@@ -70,11 +70,8 @@ class OCRLoader:
         self.timeout_minutes = timeout_minutes
         self.include_image_descriptions = include_image_descriptions
         requested_ocr_model = kwargs.get("ocr_model")
-        self.ocr_model = (
-            requested_ocr_model
-            if isinstance(requested_ocr_model, str) and requested_ocr_model.startswith("gemini")
-            else None
-        )
+        self.ocr_model_provider = kwargs.get("ocr_model_provider", "google")
+        self.ocr_model = requested_ocr_model
         self.max_output_tokens = kwargs.get("max_output_tokens")
 
         # Set up custom temp directory
@@ -147,6 +144,7 @@ class OCRLoader:
                               target_size=self.target_size,
                               timeout_minutes=self.timeout_minutes,
                               ocr_model=self.ocr_model,
+                              ocr_model_provider=self.ocr_model_provider,
                               max_output_tokens=self.max_output_tokens,
                               include_image_descriptions=self.include_image_descriptions)
 
