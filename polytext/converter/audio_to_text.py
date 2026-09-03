@@ -80,23 +80,30 @@ def add_line_break_after_each_sentence(text: str) -> str:
     if not text:
         return text
 
+    line_feed = chr(10)
     lines = text.splitlines()
     formatted_lines = []
 
     for line in lines:
         stripped_line = line.strip()
+
         if not stripped_line:
             formatted_lines.append("")
             continue
+
         if re.match(r"^#{1,6}\s+", stripped_line):
             formatted_lines.append(stripped_line)
             continue
 
         normalized_line = re.sub(r"\s+", " ", stripped_line)
-        normalized_line = re.sub(r"([.!?])\s+", r"\1\\n ", normalized_line)
+        normalized_line = re.sub(
+            r"([.!?])\s+",
+            lambda match: f"{match.group(1)}{line_feed} ",
+            normalized_line,
+        )
         formatted_lines.append(normalized_line)
 
-    return "\\n ".join(formatted_lines).strip()
+    return line_feed.join(formatted_lines).strip()
 
 
 def create_ascii_safe_upload_copy(audio_file: str) -> tuple[str, str | None]:
@@ -537,8 +544,6 @@ class AudioToTextConverter:
                 )
 
             response_text, marker_only = normalize_no_human_speech_marker(response_text)
-            if not marker_only:
-                response_text = self.format_audio_output_text(response_text)
 
             response_dict = {
                 "transcript": "" if marker_only else response_text,

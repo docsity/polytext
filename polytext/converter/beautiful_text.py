@@ -9,8 +9,6 @@ from google.api_core import exceptions as google_exceptions
 from retry import retry
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from polytext.processor.transcript_chunker import TranscriptChunker
-from polytext.processor.text_merger import TextMerger
 from polytext.prompts.beautiful_text import BEAUTIFUL_TEXT_PROMPT
 
 logger = logging.getLogger(__name__)
@@ -26,6 +24,7 @@ class BeautifulTextConverter:
         prompt_overhead: int = 1800,
         tokens_per_char: float = 0.25,
         overlap_chars: int = 800,
+        max_target_chars: int = 12000,
     ) -> None:
         self.llm_api_key = llm_api_key
         self.model = model
@@ -34,19 +33,58 @@ class BeautifulTextConverter:
         self.prompt_overhead = prompt_overhead
         self.tokens_per_char = tokens_per_char
         self.overlap_chars = overlap_chars
+        self.max_target_chars = max_target_chars
 
     def get_client(self):
         return genai.Client(api_key=self.llm_api_key) if self.llm_api_key else genai.Client()
 
     def chunk_raw_text(self, raw_text: str) -> list[dict]:
-        chunker = TranscriptChunker(
-            transcript=raw_text,
-            max_llm_tokens=self.max_llm_tokens,
-            prompt_overhead=self.prompt_overhead,
-            tokens_per_char=self.tokens_per_char,
-            overlap_chars=self.overlap_chars,
-        )
-        return chunker.chunk_transcript()
+        text = (raw_text or "").strip()
+        if not text:
+            return []
+
+        chunks = []
+        start = 0
+        index = 0
+
+        while start < len(text):
+            proposed_end = min(start + self.max_target_chars, len(text))
+            end = self._find_chunk_end(text, start, proposed_end)
+            target_text = text[start:end].strip()
+
+            if not target_text:
+                break
+
+            chunks.append(
+                {
+                    "index": index,
+                    "target_text": target_text,
+                }
+            )
+            start = end
+            index += 1
+
+        return chunks
+
+    def _find_chunk_end(self, text: str, start: int, proposed_end: int) -> int:
+        if proposed_end >= len(text):
+            return len(text)
+
+        minimum_end = start + int(self.max_target_chars * 0.65)
+        chunk_window = text[minimum_end:proposed_end]
+        sentence_boundaries = list(re.finditer(r"(?<=[.!?])\s+", chunk_window))
+        if sentence_boundaries:
+            return minimum_end + sentence_boundaries[-1].end()
+
+        paragraph_boundary = text.rfind("\n\n", minimum_end, proposed_end)
+        if paragraph_boundary != -1:
+            return paragraph_boundary + 2
+
+        whitespace_boundary = text.rfind(" ", minimum_end, proposed_end)
+        if whitespace_boundary != -1:
+            return whitespace_boundary + 1
+
+        return proposed_end
 
     @retry(
         (
@@ -60,9 +98,11 @@ class BeautifulTextConverter:
         backoff=2,
         logger=logger,
     )
-    def process_chunk(self, client, chunk_text: str, index: int) -> dict:
+    def process_chunk(self, client, chunk: dict, index: int) -> dict:
         logger.info("Processing beautiful text chunk %s", index + 1)
         start_time = time.time()
+
+        target_text = chunk["target_text"]
 
         config = types.GenerateContentConfig(
             safety_settings=[
@@ -87,7 +127,11 @@ class BeautifulTextConverter:
 
         response = client.models.generate_content(
             model=self.model,
-            contents=[BEAUTIFUL_TEXT_PROMPT, chunk_text],
+            contents=[
+                BEAUTIFUL_TEXT_PROMPT,
+                "TARGET TEXT TO CLEAN",
+                target_text,
+            ],
             config=config,
         )
 
@@ -100,7 +144,7 @@ class BeautifulTextConverter:
         }
 
     def merge_cleaned_chunks(self, chunks: list[str]) -> str:
-        return TextMerger(llm_api_key=self.llm_api_key).merge_chunks(chunks=chunks)
+        return "\n\n".join(chunk.strip() for chunk in chunks if chunk.strip())
 
     def _convert_markdown_to_json(self, markdown_text: str) -> dict:
         if not markdown_text.strip():
@@ -181,7 +225,7 @@ class BeautifulTextConverter:
 
         with ThreadPoolExecutor() as executor:
             future_to_index = {
-                executor.submit(self.process_chunk, client, chunk["text"], chunk["index"]): chunk["index"]
+                executor.submit(self.process_chunk, client, chunk, chunk["index"]): chunk["index"]
                 for chunk in chunks
             }
 

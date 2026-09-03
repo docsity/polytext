@@ -46,6 +46,7 @@ class DocumentOCRLoader:
                  ocr_provider: str = "google",
                  ocr_model: str | None = None,
                  include_image_descriptions: bool = False,
+                 allow_partial_ocr_failures: bool = False,
                  **kwargs
                  ):
         """
@@ -82,6 +83,9 @@ class DocumentOCRLoader:
             include_image_descriptions (bool, optional): If True, OCR prompts include
                 brief functional descriptions for meaningful non-text images.
                 Defaults to False.
+            allow_partial_ocr_failures (bool, optional): If True, pages that still
+                fail OCR after all retries are recorded inline instead of aborting
+                the whole document extraction. Defaults to False.
             **kwargs:
                 max_output_tokens (int, optional): Maximum Gemini output tokens for
                     Google document OCR generation.
@@ -105,6 +109,7 @@ class DocumentOCRLoader:
         self.ocr_provider = (ocr_provider or "google").lower()
         self.ocr_model = ocr_model
         self.include_image_descriptions = include_image_descriptions
+        self.allow_partial_ocr_failures = allow_partial_ocr_failures
         self.max_output_tokens = kwargs.get("max_output_tokens")
 
         # Set up custom temp directory
@@ -254,6 +259,7 @@ class DocumentOCRLoader:
                 timeout_minutes=self.timeout_minutes,
                 ocr_model=self.ocr_model or None,
                 include_image_descriptions=self.include_image_descriptions,
+                allow_partial_ocr_failures=self.allow_partial_ocr_failures,
             )
         else:
             result_dict = ocr_fn(
@@ -270,6 +276,7 @@ class DocumentOCRLoader:
                 ),
                 max_output_tokens=self.max_output_tokens,
                 include_image_descriptions=self.include_image_descriptions,
+                allow_partial_ocr_failures=self.allow_partial_ocr_failures,
             )
 
         result_dict["type"] = self.type

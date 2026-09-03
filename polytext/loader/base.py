@@ -90,7 +90,9 @@ def _raise_empty_document_loader_error(error: EmptyDocument) -> None:
 class BaseLoader:
     def __init__(self, markdown_output=True, llm_api_key=None, provider: str = "google", temp_dir: str = "temp",
                  ocr_model: str = "gpt-5-mini", timeout_minutes: int | None = None,
-                 include_image_descriptions: bool | None = None, **kwargs):
+                 include_image_descriptions: bool | None = None,
+                 force_ocr: bool = False,
+                 **kwargs):
         """
         Initialize the BaseLoader with cloud storage and LLM configurations.
 
@@ -108,6 +110,8 @@ class BaseLoader:
             include_image_descriptions (bool | None, optional): If True, OCR prompts
                 include brief functional descriptions for meaningful non-text images.
                 If None, defaults from OCR_INCLUDE_IMAGE_DESCRIPTIONS. Defaults to None.
+            force_ocr (bool, optional): If True, supported document files are routed to
+                OCRLoader instead of the standard DocumentLoader. Defaults to False.
              **kwargs: Additional keyword arguments to pass to the underlying loader or extraction logic.
                 - target_size (int, optional): Target file size in bytes. Defaults to 1MB
                 - source (str): Source of the document. Must be either "cloud" or "local"
@@ -131,6 +135,7 @@ class BaseLoader:
             if include_image_descriptions is None
             else include_image_descriptions
         )
+        self.force_ocr = force_ocr
         self.kwargs = kwargs
         self.target_size = kwargs.get("target_size", 1)
         self.source = kwargs.get("source", "cloud")
@@ -411,8 +416,7 @@ class BaseLoader:
             if path_without_query:
                 _, file_extension = os.path.splitext(path_without_query)
         else:  # If is local file path (without schema)
-            if os.path.exists(input):
-                _, file_extension = os.path.splitext(input)
+            _, file_extension = os.path.splitext(input)
 
         if file_extension:
             file_extension = file_extension.lower()
@@ -442,7 +446,29 @@ class BaseLoader:
             )
         elif mime_type:
             if file_extension in [".pdf", ".xlsx", ".docx", ".txt", ".csv", ".odt", ".pptx", ".xls", ".doc", ".ppt", ".rtf"]:
-                return DocumentLoader(markdown_output=self.markdown_output, temp_dir=self.temp_dir, timeout_minutes=self.timeout_minutes, **kwargs)
+                document_kwargs = {k: v for k, v in kwargs.items() if k != "source"}
+                if self.force_ocr:
+
+                    return DocumentOCRLoader(
+                        source=self.source,
+                        llm_api_key=llm_api_key,
+                        markdown_output=self.markdown_output,
+                        temp_dir=self.temp_dir,
+                        timeout_minutes=self.timeout_minutes,
+                        ocr_provider=self.provider,
+                        ocr_model=self.ocr_model,
+                        include_image_descriptions=self.include_image_descriptions,
+                        allow_partial_ocr_failures=True,
+                        **document_kwargs,
+                    )
+
+                return DocumentLoader(
+                    source=self.source,
+                    markdown_output=self.markdown_output,
+                    temp_dir=self.temp_dir,
+                    timeout_minutes=self.timeout_minutes,
+                    **document_kwargs,
+                )
             elif mime_type.startswith("audio/"):
                 audio_kwargs = {**kwargs, "is_output_audio_raw": self.is_output_audio_raw}
                 return AudioLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, timeout_minutes=self.timeout_minutes, **audio_kwargs)
@@ -571,14 +597,18 @@ class BaseLoader:
 
         result_dict["text"] = clean_extracted_text_whitespace(remove_markdown_strip(result_dict["text"]))
 
-        result_dict = {
+        final_result = {
             "text": result_dict["text"],
             "completion_tokens": result_dict["completion_tokens"],
             "prompt_tokens": result_dict["prompt_tokens"],
             "output_list": [result_dict],
         }
 
-        return result_dict
+        for metadata_key in ("ocr_failed_pages", "ocr_failed_pages_detail"):
+            if metadata_key in result_dict:
+                final_result[metadata_key] = result_dict[metadata_key]
+
+        return final_result
 
 # Helper methods
     @staticmethod
