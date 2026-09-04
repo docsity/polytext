@@ -1,4 +1,8 @@
 
+1.0.23 (unreleased)
+-------------------------
+- add fairCopy command
+
 1.0.22 (07/07/2026 17:00)
 -------------------------
 - add fallback to RECITATION error
