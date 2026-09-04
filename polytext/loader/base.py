@@ -94,6 +94,7 @@ class BaseLoader:
                  ocr_model: str | None = None, timeout_minutes: int | None = None,
                  include_image_descriptions: bool | None = None,
                  force_ocr: bool = False,
+                 text_model: str | None = None,
                  **kwargs):
         """
         Initialize the BaseLoader with cloud storage and LLM configurations.
@@ -107,9 +108,12 @@ class BaseLoader:
             llm_api_key (str, optional): API key for language model service. Defaults to None.
             temp_dir (str, optional): Path for temporary file storage. Defaults to "temp".
             provider (str, optional): Provider of the model. Default to "google".
-            ocr_model (str, optional): Model used for text/image transformations.
+            ocr_model (str, optional): Model used for image and document OCR.
                 Defaults to "gemini-3.1-flash-lite" for Google, "gpt-5.6-luna"
                 for direct OpenAI, and "gpt-5-mini" for Azure OpenAI.
+            text_model (str, optional): Model used for text transformations and
+                their LLM-assisted merges. When omitted, it inherits
+                ``ocr_model`` for backward compatibility.
             timeout_minutes (int, optional): Timeout in minutes. Defaults to None.
             include_image_descriptions (bool | None, optional): If True, OCR prompts
                 include brief functional descriptions for meaningful non-text images.
@@ -141,6 +145,7 @@ class BaseLoader:
             "azure_oai": "gpt-5-mini",
         }
         self.ocr_model = ocr_model or default_models.get(self.provider, "gemini-3.1-flash-lite")
+        self.text_model = text_model or self.ocr_model
         self.timeout_minutes = timeout_minutes
         self.include_image_descriptions = (
             _read_bool_env(OCR_INCLUDE_IMAGE_DESCRIPTIONS_ENV)
@@ -274,14 +279,18 @@ class BaseLoader:
 
         converter = BeautifulTextConverter(
             llm_api_key=self.llm_api_key,
-            model=self.ocr_model,
+            model=self.text_model,
             model_provider=self.provider,
+            timeout_minutes=self.timeout_minutes,
         )
-        cleanup_result = converter.convert(
-            raw_text=raw_result["text"],
-            save_transcript_chunks=kwargs.get("save_transcript_chunks", self.save_transcript_chunks),
-            active_chapters=kwargs.get("active_chapters", True),
-        )
+        try:
+            cleanup_result = converter.convert(
+                raw_text=raw_result["text"],
+                save_transcript_chunks=kwargs.get("save_transcript_chunks", self.save_transcript_chunks),
+                active_chapters=kwargs.get("active_chapters", True),
+            )
+        except EmptyDocument as error:
+            _raise_empty_document_loader_error(error)
         if not cleanup_result.get("chapters"):
             raise LoaderError(
                 message="No chapters detected",
@@ -511,8 +520,9 @@ class BaseLoader:
                     llm_api_key=llm_api_key,
                     markdown_output=self.markdown_output,
                     temp_dir=self.temp_dir,
-                    model=self.ocr_model,
+                    model=self.text_model,
                     model_provider=self.provider,
+                    timeout_minutes=self.timeout_minutes,
                     **kwargs,
                 )
             else:
@@ -527,8 +537,9 @@ class BaseLoader:
                 llm_api_key=llm_api_key,
                 markdown_output=self.markdown_output,
                 temp_dir=self.temp_dir,
-                model=self.ocr_model,
+                model=self.text_model,
                 model_provider=self.provider,
+                timeout_minutes=self.timeout_minutes,
                 **kwargs,
             )
 

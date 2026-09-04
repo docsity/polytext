@@ -25,6 +25,7 @@ class PlainTextLoader:
         llm_api_key: str = None,
         markdown_output: bool = True,
         temp_dir: str = "temp",
+        timeout_minutes: int | None = None,
         **kwargs,
     ) -> None:
         """
@@ -34,6 +35,7 @@ class PlainTextLoader:
             llm_api_key (str, optional): API key for the language model used for processing.
             markdown_output (bool, optional): If True, format the extracted text as Markdown. Defaults to True.
             temp_dir (str, optional): Directory for temporary/intermediate files. Defaults to 'temp'.
+            timeout_minutes (int | None, optional): Provider request timeout in minutes.
             save_transcript_chunks (bool, optional): Whether to include processed chunks in the output.
         """
         self.llm_api_key = llm_api_key
@@ -43,6 +45,7 @@ class PlainTextLoader:
         self.type = "text"
         self.model = kwargs.get("model", "gemini-3.1-flash-lite")
         self.model_provider = kwargs.get("model_provider", "google")
+        self.timeout_minutes = timeout_minutes
 
         self.temp_dir = os.path.abspath(temp_dir)
         os.makedirs(self.temp_dir, exist_ok=True)
@@ -77,6 +80,7 @@ class PlainTextLoader:
             save_transcript_chunks=self.save_transcript_chunks,
             model=self.model,
             model_provider=self.model_provider,
+            timeout_minutes=self.timeout_minutes,
         )
 
         result_dict["type"] = self.type

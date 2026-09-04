@@ -8,7 +8,8 @@ from typing import List, Tuple, Dict, Any
 
 
 from ..prompts.text_merging import TEXT_MERGE_PROMPT
-from ..llm import MultimodalLLM
+from ..exceptions import EmptyDocument
+from ..llm import LLMGenerationError, MultimodalLLM, OPENAI_OUTPUT_ERROR_CODES
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +24,8 @@ class TextMerger:
             max_llm_tokens: int = 8000,
             k: int = 5,
             min_matches: int = 3,
-            n_words_for_llm_merge: int = 200
+            n_words_for_llm_merge: int = 200,
+            timeout_minutes: int | None = None,
     ) -> None:
         """Configure local overlap matching and optional LLM-assisted merging.
 
@@ -37,6 +39,7 @@ class TextMerger:
             min_matches: Minimum matching words accepted by the local matcher.
             n_words_for_llm_merge: Boundary context taken from each chunk for
                 an LLM-assisted merge.
+            timeout_minutes: Optional provider request timeout in minutes.
         """
         self.completion_model = completion_model
         self.completion_model_provider = completion_model_provider
@@ -45,6 +48,7 @@ class TextMerger:
         self.llm_api_key = llm_api_key
         self.max_llm_tokens = max_llm_tokens
         self.n_words_for_llm_merge = n_words_for_llm_merge
+        self.timeout_minutes = timeout_minutes
 
     def merge_texts(self, text1: str, text2: str) -> str:
         """
@@ -239,6 +243,11 @@ class TextMerger:
                 model=self.completion_model,
                 provider=self.completion_model_provider,
                 api_key=self.llm_api_key,
+                timeout_minutes=(
+                    self.timeout_minutes
+                    if self.completion_model_provider == "openai"
+                    else None
+                ),
             )
 
             prompt = TEXT_MERGE_PROMPT.format(text_1=end_text_1, text_2=start_text_2)
@@ -263,6 +272,22 @@ class TextMerger:
             logger.info("Texts merged with LLM")
             return response_dict
 
+        except LLMGenerationError as e:
+            error_code = OPENAI_OUTPUT_ERROR_CODES.get(e.reason)
+            if self.completion_model_provider != "openai" or error_code is None:
+                raise
+            logger.warning(
+                "OpenAI text merge returned unusable output: model=%s reason=%s prompt_tokens=%s completion_tokens=%s partial_output=%r",
+                self.completion_model,
+                e.reason,
+                e.prompt_tokens,
+                e.completion_tokens,
+                e.partial_text,
+            )
+            raise EmptyDocument(
+                message=f"OpenAI text merge returned unusable output ({e.reason})",
+                code=error_code,
+            ) from e
         except Exception as e:
             logger.info(f"Error during text merging: {str(e)}")
             raise

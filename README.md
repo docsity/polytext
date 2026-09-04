@@ -110,6 +110,23 @@ You may pass `llm_api_key="..."` to `BaseLoader` as an explicit credential
 override. If omitted, the OpenAI SDK uses `OPENAI_API_KEY`. A custom compatible
 model can be selected with `ocr_model="..."`.
 
+Text and OCR models can be selected independently. Existing callers remain
+compatible: when `text_model` is omitted, it inherits `ocr_model`.
+
+```python
+loader = BaseLoader(
+    provider="openai",
+    text_model="gpt-5.6-luna",
+    ocr_model="gpt-5.6-terra",
+    timeout_minutes=2,
+)
+```
+
+For OpenAI, `timeout_minutes` is applied to the SDK request timeout for text,
+merge, and image operations. Unusable text or merge outputs are exposed through
+the same structured errors used by OCR (`CONTENT_FILTER`, `EMPTY_LLM_OUTPUT`,
+and `MAX_TOKENS`); a failed LLM merge is not replaced by a local merge.
+
 OpenAI OCR retries unusable outputs (empty responses, `content_filter`, output
 token limits, or excessive repetition) once with the current model and a
 non-literal prompt, then falls back to `gpt-5.6-terra`. Override that model with

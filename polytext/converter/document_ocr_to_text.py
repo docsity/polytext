@@ -26,7 +26,12 @@ from .image_preprocessing import (
     convert_image_to_png,
     prepare_image_for_ocr,
 )
-from ..llm import LLMGenerationError, MultimodalLLM, normalize_provider
+from ..llm import (
+    LLMGenerationError,
+    MultimodalLLM,
+    OPENAI_OUTPUT_ERROR_CODES,
+    normalize_provider,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -42,11 +47,6 @@ OCR_FINAL_FALLBACK_MODEL = os.getenv("OCR_FINAL_FALLBACK_MODEL", "gemini-3.5-fla
 OCR_PROMPT_VARIANT_DEFAULT = "default"
 OCR_PROMPT_VARIANT_NON_LITERAL_FALLBACK = "non_literal_fallback"
 OCR_RETRIABLE_OUTPUT_ERROR_CODES = (993, 994, 996, 997, 999)
-OPENAI_OUTPUT_ERROR_CODES = {
-    "empty_response": 994,
-    "content_filter": 993,
-    "max_output_tokens": 999,
-}
 
 
 def compress_and_convert_image(input_path: str, target_size=1):

@@ -8,7 +8,8 @@ from retry import retry
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from polytext.prompts.beautiful_text import BEAUTIFUL_TEXT_PROMPT
-from polytext.llm import MultimodalLLM
+from polytext.exceptions import EmptyDocument
+from polytext.llm import LLMGenerationError, MultimodalLLM, OPENAI_OUTPUT_ERROR_CODES
 
 logger = logging.getLogger(__name__)
 
@@ -26,12 +27,16 @@ class BeautifulTextConverter:
         tokens_per_char: float = 0.25,
         overlap_chars: int = 800,
         max_target_chars: int = 12000,
+        timeout_minutes: int | None = None,
     ) -> None:
         """Configure chunking and the LLM used to clean extracted text.
 
         ``llm_api_key`` overrides provider environment configuration. When it
         is omitted, the selected SDK resolves its standard environment
         variables, such as ``OPENAI_API_KEY`` for direct OpenAI.
+
+        ``timeout_minutes`` applies the same request deadline to text cleanup
+        calls as to other operations using the provider adapter.
         """
         self.llm_api_key = llm_api_key
         self.model = model
@@ -41,6 +46,7 @@ class BeautifulTextConverter:
         self.tokens_per_char = tokens_per_char
         self.overlap_chars = overlap_chars
         self.max_target_chars = max_target_chars
+        self.timeout_minutes = timeout_minutes
 
     def get_client(self):
         """Return a provider-neutral adapter configured for text generation."""
@@ -48,6 +54,7 @@ class BeautifulTextConverter:
             model=self.model,
             provider=self.model_provider,
             api_key=self.llm_api_key,
+            timeout_minutes=self.timeout_minutes if self.model_provider == "openai" else None,
         )
 
     def chunk_raw_text(self, raw_text: str) -> list[dict]:
@@ -116,11 +123,29 @@ class BeautifulTextConverter:
 
         target_text = chunk["target_text"]
 
-        response = client.generate_text(
-            instructions=BEAUTIFUL_TEXT_PROMPT,
-            input_text=f"TARGET TEXT TO CLEAN\n{target_text}",
-            max_output_tokens=self.max_llm_tokens,
-        )
+        try:
+            response = client.generate_text(
+                instructions=BEAUTIFUL_TEXT_PROMPT,
+                input_text=f"TARGET TEXT TO CLEAN\n{target_text}",
+                max_output_tokens=self.max_llm_tokens,
+            )
+        except LLMGenerationError as error:
+            error_code = OPENAI_OUTPUT_ERROR_CODES.get(error.reason)
+            if self.model_provider != "openai" or error_code is None:
+                raise
+            logger.warning(
+                "OpenAI beautiful-text chunk returned unusable output: index=%s model=%s reason=%s prompt_tokens=%s completion_tokens=%s partial_output=%r",
+                index,
+                self.model,
+                error.reason,
+                error.prompt_tokens,
+                error.completion_tokens,
+                error.partial_text,
+            )
+            raise EmptyDocument(
+                message=f"OpenAI beautiful-text processing returned unusable output ({error.reason}) for chunk {index + 1}",
+                code=error_code,
+            ) from error
 
         logger.info("Beautiful text chunk %s processed in %.2fs", index + 1, time.time() - start_time)
 

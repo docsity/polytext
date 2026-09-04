@@ -11,17 +11,21 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from polytext.processor.transcript_chunker import TranscriptChunker
 from polytext.processor.text_merger import TextMerger
 from polytext.prompts.text_to_md import TEXT_TO_MARKDOWN_PROMPT, TEXT_PROMPT
-from polytext.llm import MultimodalLLM
+from polytext.exceptions import EmptyDocument
+from polytext.llm import LLMGenerationError, MultimodalLLM, OPENAI_OUTPUT_ERROR_CODES
 
 dotenv.load_dotenv()
 
 
-def text_to_md(transcript_text: str,
+def text_to_md(
+    transcript_text: str,
     markdown_output: bool,
     llm_api_key: str,
     save_transcript_chunks: bool,
     model: str = "gemini-3.1-flash-lite",
-    model_provider: str = "google") -> dict:
+    model_provider: str = "google",
+    timeout_minutes: int | None = None,
+) -> dict:
     """
     Transform raw transcript text into Markdown using a language model.
 
@@ -33,6 +37,7 @@ def text_to_md(transcript_text: str,
         model (str): Model used for conversion and chunk merging.
         model_provider (str): Direct LLM provider (``google``/``gemini`` or
             ``openai``).
+        timeout_minutes (int | None): Optional provider request timeout in minutes.
 
     Returns:
         dict: Dictionary with:
@@ -48,6 +53,7 @@ def text_to_md(transcript_text: str,
         llm_api_key=llm_api_key,
         model=model,
         model_provider=model_provider,
+        timeout_minutes=timeout_minutes,
     )
     return yt_tr_conv.convert_text_to_md(transcript_text, save_transcript_chunks=save_transcript_chunks)
 
@@ -67,6 +73,7 @@ class TextToMdConverter:
             min_matches: int = 3,
             model: str = "gemini-3.1-flash-lite",
             model_provider: str = "google",
+            timeout_minutes: int | None = None,
     ) -> None:
         """
         Initialize the converter with configuration parameters.
@@ -83,6 +90,7 @@ class TextToMdConverter:
             min_matches (int): Reserved for future enhancements.
             model (str): Model name.
             model_provider (str): Provider of the model.
+            timeout_minutes (int | None): Optional provider request timeout in minutes.
         """
         self.markdown_output = markdown_output
         self.llm_api_key = llm_api_key
@@ -94,6 +102,7 @@ class TextToMdConverter:
         self.min_matches = min_matches
         self.model = model
         self.model_provider = model_provider
+        self.timeout_minutes = timeout_minutes
 
     def get_client(self) -> object:
         """Create the provider-neutral text generation adapter.
@@ -106,6 +115,7 @@ class TextToMdConverter:
             model=self.model,
             provider=self.model_provider,
             api_key=self.llm_api_key,
+            timeout_minutes=self.timeout_minutes if self.model_provider == "openai" else None,
         )
 
     def get_prompt_template(self) -> str:
@@ -156,11 +166,29 @@ class TextToMdConverter:
 
         start_time = time.time()
 
-        response = client.generate_text(
-            instructions=prompt_template,
-            input_text=chunk_text,
-            max_output_tokens=self.max_llm_tokens,
-        )
+        try:
+            response = client.generate_text(
+                instructions=prompt_template,
+                input_text=chunk_text,
+                max_output_tokens=self.max_llm_tokens,
+            )
+        except LLMGenerationError as error:
+            error_code = OPENAI_OUTPUT_ERROR_CODES.get(error.reason)
+            if self.model_provider != "openai" or error_code is None:
+                raise
+            logging.warning(
+                "OpenAI text chunk returned unusable output: index=%s model=%s reason=%s prompt_tokens=%s completion_tokens=%s partial_output=%r",
+                index,
+                self.model,
+                error.reason,
+                error.prompt_tokens,
+                error.completion_tokens,
+                error.partial_text,
+            )
+            raise EmptyDocument(
+                message=f"OpenAI text processing returned unusable output ({error.reason}) for chunk {index + 1}",
+                code=error_code,
+            ) from error
 
         elapsed = time.time() - start_time
         logging.info(f"Chunk {index + 1} processed in {elapsed:.2f}s")
@@ -230,6 +258,7 @@ class TextToMdConverter:
             completion_model=self.model,
             completion_model_provider=self.model_provider,
             llm_api_key=self.llm_api_key,
+            timeout_minutes=self.timeout_minutes,
         )
         final_text = text_merger.merge_chunks_with_llm_sequential(chunks=transcript_chunks)
 

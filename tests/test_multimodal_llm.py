@@ -84,6 +84,19 @@ class TestMultimodalLLM(unittest.TestCase):
         openai_cls.assert_called_once_with()
 
     @patch("polytext.llm.multimodal.OpenAI")
+    def test_openai_client_receives_timeout_in_seconds(self, openai_cls):
+        adapter = MultimodalLLM(
+            "gpt-5.6-luna",
+            "openai",
+            api_key="explicit-key",
+            timeout_minutes=2,
+        )
+
+        adapter._get_client()
+
+        openai_cls.assert_called_once_with(api_key="explicit-key", timeout=120)
+
+    @patch("polytext.llm.multimodal.OpenAI")
     def test_openai_text_from_image_sends_only_the_image_as_user_content(self, openai_cls):
         openai_cls.return_value.responses.create.return_value = SimpleNamespace(
             output_text="visible words",

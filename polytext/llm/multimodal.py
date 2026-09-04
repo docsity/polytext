@@ -7,6 +7,13 @@ from openai import APIConnectionError, APITimeoutError, InternalServerError, Ope
 from retry import retry
 
 
+OPENAI_OUTPUT_ERROR_CODES = {
+    "content_filter": 993,
+    "empty_response": 994,
+    "max_output_tokens": 999,
+}
+
+
 @dataclass(frozen=True)
 class GenerationResult:
     """Provider-neutral result returned by text and vision generations.
@@ -91,7 +98,12 @@ class MultimodalLLM:
         if self._client is not None:
             return self._client
         if self.provider == "openai":
-            self._client = OpenAI(api_key=self.api_key) if self.api_key else OpenAI()
+            options = {}
+            if self.api_key:
+                options["api_key"] = self.api_key
+            if self.timeout_minutes is not None:
+                options["timeout"] = self.timeout_minutes * 60
+            self._client = OpenAI(**options)
         else:
             self._client = genai.Client(api_key=self.api_key) if self.api_key else genai.Client()
         return self._client
