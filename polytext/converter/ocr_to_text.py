@@ -4,7 +4,6 @@ import logging
 import tempfile
 import time
 import mimetypes
-import ffmpeg
 from retry import retry
 from google import genai
 from google.genai import types
@@ -22,13 +21,16 @@ from .gemini_quality_guards import (
     extract_finish_reason,
     tail_has_excessive_repetition,
 )
+from .image_preprocessing import (
+    GEMINI_SUPPORTED_MIME_TYPES,
+    convert_image_to_png,
+    prepare_image_for_ocr,
+)
 from ..llm import MultimodalLLM, normalize_provider
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_MIME_TYPES = {
-    'image/png', 'image/jpeg', 'image/webp', 'image/heic', 'image/heif',
-}
+SUPPORTED_MIME_TYPES = GEMINI_SUPPORTED_MIME_TYPES
 OCR_MIN_OUTPUT_TOKENS = 500
 OCR_MAX_OUTPUT_TOKENS = int(os.getenv("OCR_MAX_OUTPUT_TOKENS", "8192"))
 OCR_TAIL_REPETITION_LINES = int(os.getenv("OCR_TAIL_REPETITION_LINES", "200"))
@@ -43,67 +45,12 @@ OCR_RETRIABLE_OUTPUT_ERROR_CODES = (996, 997, 999)
 
 
 def compress_and_convert_image(input_path: str, target_size=1):
-    """
-    Compress and convert image files to PNG format using ffmpeg.
-
-    Args:
-        input_path (str): Path to the original image file
-        target_size (int, optional): Target file size in bytes. Defaults to 1MB
-
-    Returns:
-        str: Path to the temporary compressed/converted PNG file
-
-    Raises:
-        RuntimeError: If FFmpeg compression/conversion fails
-
-    Notes:
-        - Creates a temporary PNG file that should be deleted after use
-        - Compresses images over target_size
-        - Uses maximum available CPU threads for faster processing
-    """
-    target_size = target_size * 1024 * 1024
-    temp_dir = os.path.abspath("temp")
-    os.makedirs(temp_dir, exist_ok=True)
-    tempfile.tempdir = temp_dir
-    try:
-        # Create temporary file for image output
-        fd, temp_image_path = tempfile.mkstemp(suffix='.png')
-        os.close(fd)
-
-        # Get original file size
-        original_size = os.path.getsize(input_path)
-        logger.info(f"Original image size: {original_size / 1024 / 1024:.2f}MB")
-
-        if original_size > target_size:
-            # Calculate compression ratio based on target size
-            compression_ratio = (target_size / original_size) ** 0.5
-            new_size = int(100 * compression_ratio)  # Convert to percentage
-            new_size = max(1, min(new_size, 100))  # Ensure between 1-100
-
-            logger.info(f"Compressing image to {new_size}% quality")
-            ffmpeg.input(input_path).output(
-                temp_image_path,
-                vf=f'scale=iw*{compression_ratio}:ih*{compression_ratio}',  # Scale dimensions
-                compression_level=9,  # Maximum PNG compression
-                threads=0,  # Use maximum available threads
-                loglevel='error'  # Reduce logging overhead
-            ).run(quiet=True, overwrite_output=True)
-        else:
-            # Just convert to PNG if no compression needed
-            logger.info("Converting image to PNG without compression")
-            ffmpeg.input(input_path).output(
-                temp_image_path,
-                compression_level=9,
-                threads=0,
-                loglevel='error'
-            ).run(quiet=True, overwrite_output=True)
-
-        logger.info(f"Successfully processed image: {temp_image_path}")
-        return temp_image_path
-
-    except Exception as e:
-        logger.exception("FFmpeg error during image processing for %s", input_path)
-        raise RuntimeError(f"FFmpeg error during image processing: {e}") from e
+    """Backward-compatible wrapper around shared image conversion."""
+    return convert_image_to_png(
+        input_path,
+        target_size_mb=target_size,
+        mime_type=mimetypes.guess_type(input_path)[0],
+    )
 
 def get_ocr(
     file_for_ocr,
@@ -129,7 +76,8 @@ def get_ocr(
             formatted as Markdown. Defaults to False.
         llm_api_key (str, optional): API key for the LLM service. If provided,
             it will override the default configuration.
-        target_size (int, optional): Target file size in bytes. Defaults to 1MB.
+        target_size (int, optional): Gemini conversion threshold in MB. Direct
+            OpenAI uses its provider-specific 20 MB threshold. Defaults to 1.
         timeout_minutes (int, optional): Number of minutes to wait for a response. Defaults to None.
         ocr_model (str | None, optional): Gemini OCR model to use. Defaults to the converter default.
         ocr_model_provider (str, optional): Direct OCR provider (``google`` or
@@ -176,7 +124,9 @@ class OCRToTextConverter:
             ocr_model_provider (str): Provider of OCR service. Defaults to "google".
             markdown_output (bool): Enable markdown formatting in output. Defaults to True.
             llm_api_key (str, optional): Override API key for language model. Defaults to None.
-            target_size (int, optional): Target file size in bytes. Defaults to 1MB.
+            target_size (int, optional): Gemini conversion threshold in MB.
+                Direct OpenAI uses its provider-specific 20 MB threshold.
+                Defaults to 1.
             temp_dir (str): Directory for temporary files. Defaults to "temp".
             timeout_minutes (int, optional): Number of minutes to wait for a response. Defaults to None.
             fallback_stage (int, optional): Internal retry stage used by fallback attempts.
@@ -389,18 +339,16 @@ class OCRToTextConverter:
                     system_instruction=[prompt_template]
                 )
 
-            mime_type, _ = mimetypes.guess_type(file_for_ocr)
+            prepared_image = prepare_image_for_ocr(
+                file_for_ocr,
+                provider=self.ocr_model_provider,
+                target_size_mb=self.target_size,
+            )
+            temp_file_for_ocr = prepared_image.path
+            should_delete_temp_file = prepared_image.is_temporary
+            file_size = prepared_image.file_size
+            mime_type = prepared_image.mime_type
             logger.info(f"OCR mime type: {mime_type}")
-            file_size = os.path.getsize(file_for_ocr)
-            logger.info(f"Initial image file size: {file_size}")
-            if file_size > self.target_size * 1024 * 1024 or mime_type not in SUPPORTED_MIME_TYPES:
-                logger.info(f"Image file size exceeds {self.target_size}MB or unsupported mime type, compressing and converting image")
-                temp_file_for_ocr = compress_and_convert_image(input_path=file_for_ocr, target_size=self.target_size)
-                should_delete_temp_file = True
-                file_size = os.path.getsize(temp_file_for_ocr)
-            else:
-                logger.info(f"Image file size does not exceed {self.target_size}MB and mime type is supported, no compression or conversion needed")
-                temp_file_for_ocr = file_for_ocr
 
             logger.info(f"Final image file size: {file_size / (1024 * 1024):.2f} MB")
 

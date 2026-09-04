@@ -70,7 +70,8 @@ class DocumentOCRLoader:
                 Azure OpenAI, it is the Azure API key. If omitted, direct SDKs
                 use their environment configuration. Defaults to None.
             temp_dir (str, optional): Path for temporary file storage. Defaults to "temp".
-            target_size (int, optional): Target file size in bytes. Defaults to 1MB.
+            target_size (int, optional): Gemini page-image conversion threshold
+                in MB. Direct OpenAI uses a separate 20 MB threshold. Defaults to 1.
             page_range (tuple): Optional page range to extract (start, end).
             timeout_minutes (int, optional): Timeout in minutes. Defaults to None.
             ocr_provider (str, optional): OCR backend provider to use.
