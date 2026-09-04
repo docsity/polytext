@@ -3,17 +3,16 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from polytext.converter.image_preprocessing import (
-    OPENAI_MAX_IMAGE_SIZE_MB,
-    prepare_image_for_ocr,
-)
+from PIL import Image
+
+from polytext.converter.image_preprocessing import prepare_image_for_ocr
 
 
 class TestImagePreprocessing(unittest.TestCase):
     def setUp(self):
         fd, self.image_path = tempfile.mkstemp(suffix=".png")
-        os.write(fd, b"image")
         os.close(fd)
+        Image.new("RGB", (24, 16), color="white").save(self.image_path)
 
     def tearDown(self):
         if os.path.exists(self.image_path):
@@ -37,8 +36,8 @@ class TestImagePreprocessing(unittest.TestCase):
 
     @patch("polytext.converter.image_preprocessing.convert_image_to_png")
     @patch("polytext.converter.image_preprocessing.os.path.getsize")
-    def test_openai_preserves_compatible_image_below_twenty_mb(self, getsize, convert):
-        getsize.return_value = 12 * 1024 * 1024
+    def test_openai_preserves_normal_resolution_even_above_gemini_target(self, getsize, convert):
+        getsize.return_value = 2 * 1024 * 1024
 
         prepared = prepare_image_for_ocr(
             self.image_path,
@@ -49,22 +48,28 @@ class TestImagePreprocessing(unittest.TestCase):
         convert.assert_not_called()
         self.assertEqual(prepared.path, self.image_path)
         self.assertFalse(prepared.is_temporary)
-        self.assertEqual(OPENAI_MAX_IMAGE_SIZE_MB, 20)
 
-    @patch("polytext.converter.image_preprocessing.convert_image_to_png")
-    @patch("polytext.converter.image_preprocessing.os.path.getsize")
-    def test_openai_converts_compatible_image_above_twenty_mb(self, getsize, convert):
-        getsize.return_value = 21 * 1024 * 1024
-        convert.return_value = "/tmp/converted.png"
+    def test_openai_resizes_images_above_ten_megapixels_to_1200_pixels(self):
+        fd, large_image_path = tempfile.mkstemp(suffix=".jpg")
+        os.close(fd)
+        prepared = None
+        try:
+            Image.new("RGB", (4000, 3000), color="white").save(large_image_path)
 
-        prepared = prepare_image_for_ocr(
-            self.image_path,
-            provider="openai",
-            target_size_mb=1,
-        )
+            prepared = prepare_image_for_ocr(
+                large_image_path,
+                provider="openai",
+                target_size_mb=1,
+            )
 
-        convert.assert_called_once_with(self.image_path, target_size_mb=20, mime_type="image/png")
-        self.assertTrue(prepared.is_temporary)
+            self.assertTrue(prepared.is_temporary)
+            with Image.open(prepared.path) as image:
+                self.assertEqual(image.size, (1200, 900))
+        finally:
+            if prepared and prepared.is_temporary and os.path.exists(prepared.path):
+                os.remove(prepared.path)
+            if os.path.exists(large_image_path):
+                os.remove(large_image_path)
 
     @patch("polytext.converter.image_preprocessing.convert_image_to_png")
     @patch("polytext.converter.image_preprocessing.os.path.getsize")

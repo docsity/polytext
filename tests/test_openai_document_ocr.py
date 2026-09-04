@@ -1,5 +1,8 @@
+import io
 import unittest
 from unittest.mock import patch
+
+from PIL import Image
 
 from polytext.converter.document_ocr_to_text import (
     DocumentOCRToTextConverter,
@@ -17,6 +20,12 @@ class _Pixmap:
     def save(self, path):
         with open(path, "wb") as image_file:
             image_file.write(self.payload)
+
+
+def _png_bytes(color):
+    output = io.BytesIO()
+    Image.new("RGB", (24, 16), color=color).save(output, format="PNG")
+    return output.getvalue()
 
 
 class _Page:
@@ -86,7 +95,7 @@ class TestOpenAIDocumentOCR(unittest.TestCase):
     @patch("polytext.converter.document_ocr_to_text.MultimodalLLM")
     @patch("fitz.open")
     def test_openai_document_ocr_function_defaults_to_luna(self, fitz_open, llm_cls):
-        fitz_open.return_value = _Pdf([_Page(b"page-one")])
+        fitz_open.return_value = _Pdf([_Page(_png_bytes("white"))])
         llm_cls.return_value.generate_text_from_image.return_value = _result("First page", 10, 3)
 
         result = get_document_ocr(
@@ -105,11 +114,13 @@ class TestOpenAIDocumentOCR(unittest.TestCase):
     @patch("polytext.converter.document_ocr_to_text.MultimodalLLM")
     @patch("fitz.open")
     def test_openai_document_ocr_preserves_page_order_and_tokens(self, fitz_open, llm_cls):
-        pdf = _Pdf([_Page(b"page-one"), _Page(b"page-two")])
+        page_one = _png_bytes("white")
+        page_two = _png_bytes("black")
+        pdf = _Pdf([_Page(page_one), _Page(page_two)])
         fitz_open.return_value = pdf
 
         def generate_text_from_image(**kwargs):
-            if kwargs["image_data"] == b"page-one":
+            if kwargs["image_data"] == page_one:
                 return _result("First page", 10, 3)
             return _result("Second page", 20, 5)
 
@@ -133,10 +144,12 @@ class TestOpenAIDocumentOCR(unittest.TestCase):
     @patch("polytext.converter.document_ocr_to_text.MultimodalLLM")
     @patch("fitz.open")
     def test_openai_document_ocr_records_partial_page_failure(self, fitz_open, llm_cls):
-        fitz_open.return_value = _Pdf([_Page(b"page-one"), _Page(b"page-two")])
+        page_one = _png_bytes("white")
+        page_two = _png_bytes("black")
+        fitz_open.return_value = _Pdf([_Page(page_one), _Page(page_two)])
 
         def generate_text_from_image(**kwargs):
-            if kwargs["image_data"] == b"page-two":
+            if kwargs["image_data"] == page_two:
                 raise LLMGenerationError("OpenAI returned an empty response")
             return _result("First page", 10, 3)
 
@@ -156,7 +169,7 @@ class TestOpenAIDocumentOCR(unittest.TestCase):
     @patch("polytext.converter.document_ocr_to_text.MultimodalLLM")
     @patch("fitz.open")
     def test_openai_document_ocr_raises_page_failure_by_default(self, fitz_open, llm_cls):
-        fitz_open.return_value = _Pdf([_Page(b"page-one")])
+        fitz_open.return_value = _Pdf([_Page(_png_bytes("white"))])
         llm_cls.return_value.generate_text_from_image.side_effect = LLMGenerationError(
             "OpenAI returned an empty response"
         )

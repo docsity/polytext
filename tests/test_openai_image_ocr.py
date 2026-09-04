@@ -3,6 +3,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from PIL import Image
+
 from polytext.converter.ocr_to_text import OCRToTextConverter, get_ocr
 from polytext.llm import GenerationResult, LLMGenerationError
 from polytext.loader.base import BaseLoader
@@ -12,8 +14,10 @@ from polytext.loader.ocr import OCRLoader
 class TestOpenAIImageOCR(unittest.TestCase):
     def setUp(self):
         fd, self.image_path = tempfile.mkstemp(suffix=".png")
-        os.write(fd, b"small-png-fixture")
         os.close(fd)
+        Image.new("RGB", (24, 16), color="white").save(self.image_path)
+        with open(self.image_path, "rb") as image_file:
+            self.image_data = image_file.read()
 
     def tearDown(self):
         if os.path.exists(self.image_path):
@@ -49,7 +53,7 @@ class TestOpenAIImageOCR(unittest.TestCase):
             timeout_minutes=None,
         )
         call = llm_cls.return_value.generate_text_from_image.call_args.kwargs
-        self.assertEqual(call["image_data"], b"small-png-fixture")
+        self.assertEqual(call["image_data"], self.image_data)
         self.assertEqual(call["mime_type"], "image/png")
 
     @patch("polytext.converter.ocr_to_text.MultimodalLLM")

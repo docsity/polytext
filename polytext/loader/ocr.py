@@ -48,7 +48,8 @@ class OCRLoader:
                 the provider SDK uses its environment configuration.
             temp_dir (str, optional): Path for temporary file storage. Defaults to "temp".
             target_size (int, optional): Gemini image conversion threshold in
-                MB. Direct OpenAI uses a separate 20 MB threshold. Defaults to 1.
+                MB. Direct OpenAI uses resolution-aware preprocessing.
+                Defaults to 1.
             timeout_minutes (int, optional): Timeout in minutes. Defaults to None.
             include_image_descriptions (bool, optional): If True, OCR prompts include
                 brief functional descriptions for meaningful non-text images.

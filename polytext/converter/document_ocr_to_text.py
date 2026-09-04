@@ -78,8 +78,8 @@ def get_document_ocr(
             formatted as Markdown. Defaults to False.
         llm_api_key (str, optional): API key for the LLM service. If provided,
             it will override the default configuration.
-        target_size (int, optional): Gemini conversion threshold in MB. Direct
-            OpenAI uses its provider-specific 20 MB threshold. Defaults to 1.
+        target_size (int, optional): Gemini image conversion threshold in MB.
+            Direct OpenAI uses resolution-aware preprocessing. Defaults to 1.
         page_range (tuple, optional): Optional page range to extract (start, end).
         timeout_minutes (int, optional): Number of minutes to wait for a response. Defaults to None.
         ocr_model (str | None, optional): OCR model to use. Defaults according to provider.
@@ -133,8 +133,8 @@ class DocumentOCRToTextConverter:
             ocr_model_provider (str): Provider of OCR service. Defaults to "google".
             markdown_output (bool): Enable markdown formatting in output. Defaults to True.
             llm_api_key (str, optional): Override API key for language model. Defaults to None.
-            target_size (int, optional): Gemini conversion threshold in MB.
-                Direct OpenAI uses its provider-specific 20 MB threshold.
+            target_size (int, optional): Gemini image conversion threshold in
+                MB. Direct OpenAI uses resolution-aware preprocessing.
                 Defaults to 1.
             temp_dir (str): Directory for temporary files. Defaults to "temp".
             page_range (tuple, optional): Optional page range to extract (start, end).

@@ -26,6 +26,8 @@ OPENAI_SUPPORTED_MIME_TYPES = {
 }
 HEIF_MIME_TYPES = {"image/heic", "image/heif"}
 OPENAI_MAX_IMAGE_SIZE_MB = 20
+OPENAI_HIGH_RESOLUTION_PIXEL_THRESHOLD = 10_000_000
+OPENAI_HIGH_RESOLUTION_MAX_DIMENSION = 1200
 
 
 @dataclass(frozen=True)
@@ -106,6 +108,39 @@ def convert_image_to_png(
         raise RuntimeError(f"Image conversion failed: {error}") from error
 
 
+def _image_dimensions(input_path: str) -> tuple[int, int]:
+    """Return image dimensions without decoding the full raster."""
+    from PIL import Image
+
+    with Image.open(input_path) as image:
+        return image.size
+
+
+def resize_image_to_png(input_path: str, max_dimension: int) -> str:
+    """Resize an EXIF-corrected image to a maximum dimension and save as PNG."""
+    from PIL import Image, ImageOps
+
+    fd, output_path = tempfile.mkstemp(suffix=".png")
+    os.close(fd)
+    try:
+        with Image.open(input_path) as source:
+            source.seek(0)
+            image = ImageOps.exif_transpose(source)
+            image.thumbnail(
+                (max_dimension, max_dimension),
+                resample=Image.Resampling.LANCZOS,
+            )
+            if image.mode not in {"RGB", "RGBA"}:
+                image = image.convert("RGB")
+            image.save(output_path, format="PNG", optimize=True)
+        return output_path
+    except Exception as error:
+        if os.path.exists(output_path):
+            os.remove(output_path)
+        logger.exception("Image resizing failed for %s", input_path)
+        raise RuntimeError(f"Image resizing failed: {error}") from error
+
+
 def prepare_image_for_ocr(
     input_path: str,
     provider: str,
@@ -113,19 +148,78 @@ def prepare_image_for_ocr(
 ) -> PreparedImage:
     """Prepare an image according to the selected OCR provider.
 
-    Gemini retains the historical ``target_size_mb`` threshold. Direct OpenAI
-    preserves compatible PNG, JPEG, and WebP inputs up to 20 MB, while other
-    formats and larger inputs are converted to PNG.
+    Gemini retains its historical ``target_size_mb`` threshold. Direct OpenAI
+    preserves compatible images up to 10 megapixels and 20 MB; larger images
+    are resized to a 1200-pixel maximum dimension to control vision tokens.
     """
     resolved_provider = normalize_provider(provider)
     mime_type = mimetypes.guess_type(input_path)[0]
     file_size = os.path.getsize(input_path)
     if resolved_provider == "openai":
-        supported_types = OPENAI_SUPPORTED_MIME_TYPES
-        conversion_target_mb = OPENAI_MAX_IMAGE_SIZE_MB
-    else:
-        supported_types = GEMINI_SUPPORTED_MIME_TYPES
-        conversion_target_mb = target_size_mb
+        if mime_type not in OPENAI_SUPPORTED_MIME_TYPES:
+            logger.info(
+                "Converting unsupported OpenAI image: mime_type=%s, size=%.2f MB",
+                mime_type,
+                file_size / (1024 * 1024),
+            )
+            converted_path = convert_image_to_png(
+                input_path,
+                target_size_mb=OPENAI_MAX_IMAGE_SIZE_MB,
+                mime_type=mime_type,
+            )
+            return PreparedImage(
+                converted_path,
+                "image/png",
+                os.path.getsize(converted_path),
+                True,
+            )
+
+        width, height = _image_dimensions(input_path)
+        pixel_count = width * height
+        requires_resize = (
+            pixel_count > OPENAI_HIGH_RESOLUTION_PIXEL_THRESHOLD
+            or file_size > OPENAI_MAX_IMAGE_SIZE_MB * 1024 * 1024
+        )
+        if not requires_resize:
+            logger.info(
+                "Keeping original OpenAI image: mime_type=%s, dimensions=%sx%s, size=%.2f MB",
+                mime_type,
+                width,
+                height,
+                file_size / (1024 * 1024),
+            )
+            return PreparedImage(input_path, mime_type or "", file_size, False)
+
+        logger.info(
+            "Resizing high-resolution OpenAI image: dimensions=%sx%s, pixels=%s, "
+            "size=%.2f MB, max_dimension=%s",
+            width,
+            height,
+            pixel_count,
+            file_size / (1024 * 1024),
+            OPENAI_HIGH_RESOLUTION_MAX_DIMENSION,
+        )
+        converted_path = resize_image_to_png(
+            input_path,
+            max_dimension=OPENAI_HIGH_RESOLUTION_MAX_DIMENSION,
+        )
+        converted_width, converted_height = _image_dimensions(converted_path)
+        converted_size = os.path.getsize(converted_path)
+        logger.info(
+            "Final OpenAI image: dimensions=%sx%s, size=%.2f MB",
+            converted_width,
+            converted_height,
+            converted_size / (1024 * 1024),
+        )
+        return PreparedImage(
+            converted_path,
+            "image/png",
+            converted_size,
+            True,
+        )
+
+    supported_types = GEMINI_SUPPORTED_MIME_TYPES
+    conversion_target_mb = target_size_mb
 
     requires_conversion = (
         mime_type not in supported_types

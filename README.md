@@ -113,11 +113,12 @@ model can be selected with `ocr_model="..."`.
 Direct OpenAI processing currently covers text and images. Audio, video, and
 YouTube processing continue to use the existing Gemini pipelines.
 
-For image OCR, compatible PNG, JPEG, and WebP inputs are preserved up to 20 MB
-when using direct OpenAI, avoiding unnecessary loss of small-text detail. Other
-formats are converted to PNG; HEIC and HEIF conversion uses `pillow-heif`, and
-animated images are treated as a single first frame. Gemini retains the
-existing `target_size` conversion threshold.
+For image OCR, Gemini retains the configurable `target_size` conversion
+threshold (1 MB by default). Direct OpenAI preserves compatible images up to
+10 megapixels and 20 MB, while larger inputs are resized to a maximum dimension
+of 1200 pixels to control vision-token usage. Unsupported provider formats are
+converted to PNG; HEIC and HEIF conversion uses `pillow-heif`, and animated
+images are treated as a single first frame.
 
 Text or Markdown Extraction
 
