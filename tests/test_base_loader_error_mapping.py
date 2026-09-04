@@ -61,6 +61,8 @@ class _BeautifulTextLoader(BaseLoader):
 class TestBaseLoaderErrorMapping(unittest.TestCase):
     def test_llm_output_empty_document_codes_are_raised_as_loader_errors(self):
         cases = [
+            (993, "CONTENT_FILTER"),
+            (994, "EMPTY_LLM_OUTPUT"),
             (995, "INVALID_ARGUMENT"),
             (996, "RECITATION"),
             (997, "REPETITIVE_OUTPUT"),

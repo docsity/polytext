@@ -1,4 +1,6 @@
 import io
+import os
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -180,6 +182,34 @@ class TestOpenAIDocumentOCR(unittest.TestCase):
 
         with self.assertRaisesRegex(LLMGenerationError, "empty response"):
             converter.get_document_ocr("document.pdf")
+
+    @patch.dict(os.environ, {"OPENAI_OCR_FALLBACK_MODEL": "gpt-5.6-terra"}, clear=False)
+    @patch("polytext.converter.document_ocr_to_text.MultimodalLLM")
+    def test_openai_page_content_filter_retries_prompt_then_terra(self, llm_cls):
+        llm_cls.return_value.generate_text_from_image.side_effect = [
+            LLMGenerationError("filtered", reason="content_filter"),
+            LLMGenerationError("filtered", reason="content_filter"),
+            _result("Recovered page", 20, 5),
+        ]
+        converter = DocumentOCRToTextConverter(
+            ocr_model="gpt-5.6-luna",
+            ocr_model_provider="openai",
+        )
+
+        fd, image_path = tempfile.mkstemp(suffix=".png")
+        os.close(fd)
+        try:
+            Image.new("RGB", (24, 16), color="white").save(image_path)
+            result = converter.get_ocr(image_path)
+        finally:
+            os.remove(image_path)
+
+        self.assertEqual(result["text"], "Recovered page")
+        self.assertEqual(result["completion_model"], "gpt-5.6-terra")
+        self.assertEqual(
+            [call.kwargs["model"] for call in llm_cls.call_args_list],
+            ["gpt-5.6-luna", "gpt-5.6-luna", "gpt-5.6-terra"],
+        )
 
 
 if __name__ == "__main__":

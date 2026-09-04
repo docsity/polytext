@@ -6,6 +6,7 @@ from unittest.mock import patch
 from PIL import Image
 
 from polytext.converter.ocr_to_text import OCRToTextConverter, get_ocr
+from polytext.exceptions import EmptyDocument
 from polytext.llm import GenerationResult, LLMGenerationError
 from polytext.loader.base import BaseLoader
 from polytext.loader.ocr import OCRLoader
@@ -88,6 +89,83 @@ class TestOpenAIImageOCR(unittest.TestCase):
             converter.get_ocr(self.image_path)
 
         self.assertEqual(llm_cls.call_count, 1)
+
+    @patch.dict(os.environ, {"OPENAI_OCR_FALLBACK_MODEL": "gpt-5.6-terra"}, clear=False)
+    @patch("polytext.converter.ocr_to_text.MultimodalLLM")
+    def test_openai_content_filter_retries_prompt_then_terra(self, llm_cls):
+        llm_cls.return_value.generate_text_from_image.side_effect = [
+            LLMGenerationError("filtered", reason="content_filter"),
+            LLMGenerationError("filtered", reason="content_filter"),
+            GenerationResult("Recovered", 20, 5, "gpt-5.6-terra", "openai", "completed"),
+        ]
+
+        result = OCRToTextConverter(
+            ocr_model="gpt-5.6-luna",
+            ocr_model_provider="openai",
+        ).get_ocr(self.image_path)
+
+        self.assertEqual(result["text"], "Recovered")
+        self.assertEqual(result["completion_model"], "gpt-5.6-terra")
+        self.assertEqual(
+            [call.kwargs["model"] for call in llm_cls.call_args_list],
+            ["gpt-5.6-luna", "gpt-5.6-luna", "gpt-5.6-terra"],
+        )
+
+    def test_openai_final_fallback_is_disabled_unless_explicitly_configured(self):
+        with patch.dict(os.environ, {"OPENAI_OCR_FINAL_FALLBACK_MODEL": ""}):
+            converter = OCRToTextConverter(
+                ocr_model="gpt-5.6-luna",
+                ocr_model_provider="openai",
+            )
+        self.assertIsNone(converter.final_fallback_model)
+
+    @patch.dict(os.environ, {"OPENAI_OCR_FINAL_FALLBACK_MODEL": "gpt-5.6-sol"}, clear=False)
+    def test_openai_final_fallback_can_be_explicitly_enabled(self):
+        converter = OCRToTextConverter(
+            ocr_model="gpt-5.6-luna",
+            ocr_model_provider="openai",
+        )
+        self.assertEqual(converter.final_fallback_model, "gpt-5.6-sol")
+
+    @patch.dict(os.environ, {"OPENAI_OCR_FINAL_FALLBACK_MODEL": ""}, clear=False)
+    @patch("polytext.converter.ocr_to_text.MultimodalLLM")
+    def test_openai_stops_after_terra_when_final_fallback_is_disabled(self, llm_cls):
+        llm_cls.return_value.generate_text_from_image.side_effect = [
+            LLMGenerationError("filtered", reason="content_filter"),
+            LLMGenerationError("filtered", reason="content_filter"),
+            LLMGenerationError("filtered", reason="content_filter"),
+        ]
+
+        with self.assertRaises(EmptyDocument) as error_context:
+            OCRToTextConverter(
+                ocr_model="gpt-5.6-luna",
+                ocr_model_provider="openai",
+            ).get_ocr(self.image_path)
+
+        self.assertEqual(llm_cls.call_count, 3)
+        self.assertEqual(error_context.exception.code, 993)
+        self.assertIsNone(error_context.exception.result_dict)
+
+    @patch.dict(os.environ, {"OPENAI_OCR_FINAL_FALLBACK_MODEL": "gpt-5.6-sol"}, clear=False)
+    @patch("polytext.converter.ocr_to_text.MultimodalLLM")
+    def test_openai_uses_sol_only_when_explicitly_configured(self, llm_cls):
+        llm_cls.return_value.generate_text_from_image.side_effect = [
+            LLMGenerationError("filtered", reason="content_filter"),
+            LLMGenerationError("filtered", reason="content_filter"),
+            LLMGenerationError("filtered", reason="content_filter"),
+            GenerationResult("Recovered", 20, 5, "gpt-5.6-sol", "openai", "completed"),
+        ]
+
+        result = OCRToTextConverter(
+            ocr_model="gpt-5.6-luna",
+            ocr_model_provider="openai",
+        ).get_ocr(self.image_path)
+
+        self.assertEqual(result["completion_model"], "gpt-5.6-sol")
+        self.assertEqual(
+            [call.kwargs["model"] for call in llm_cls.call_args_list],
+            ["gpt-5.6-luna", "gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol"],
+        )
 
     @patch("polytext.converter.ocr_to_text.MultimodalLLM")
     def test_get_ocr_convenience_function_propagates_openai(self, llm_cls):

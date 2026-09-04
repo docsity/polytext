@@ -110,6 +110,16 @@ You may pass `llm_api_key="..."` to `BaseLoader` as an explicit credential
 override. If omitted, the OpenAI SDK uses `OPENAI_API_KEY`. A custom compatible
 model can be selected with `ocr_model="..."`.
 
+OpenAI OCR retries unusable outputs (empty responses, `content_filter`, output
+token limits, or excessive repetition) once with the current model and a
+non-literal prompt, then falls back to `gpt-5.6-terra`. Override that model with
+`OPENAI_OCR_FALLBACK_MODEL`. There is no final OpenAI fallback by default;
+enable the more expensive Sol stage explicitly when desired:
+
+```bash
+export OPENAI_OCR_FINAL_FALLBACK_MODEL="gpt-5.6-sol"
+```
+
 Direct OpenAI processing currently covers text and images. Audio, video, and
 YouTube processing continue to use the existing Gemini pipelines.
 

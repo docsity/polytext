@@ -26,7 +26,7 @@ from .image_preprocessing import (
     convert_image_to_png,
     prepare_image_for_ocr,
 )
-from ..llm import MultimodalLLM, normalize_provider
+from ..llm import LLMGenerationError, MultimodalLLM, normalize_provider
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +41,12 @@ OCR_FALLBACK_TEMPERATURE = float(os.getenv("OCR_FALLBACK_TEMPERATURE", "1.0"))
 OCR_FINAL_FALLBACK_MODEL = os.getenv("OCR_FINAL_FALLBACK_MODEL", "gemini-3.5-flash")
 OCR_PROMPT_VARIANT_DEFAULT = "default"
 OCR_PROMPT_VARIANT_NON_LITERAL_FALLBACK = "non_literal_fallback"
-OCR_RETRIABLE_OUTPUT_ERROR_CODES = (996, 997, 999)
+OCR_RETRIABLE_OUTPUT_ERROR_CODES = (993, 994, 996, 997, 999)
+OPENAI_OUTPUT_ERROR_CODES = {
+    "empty_response": 994,
+    "content_filter": 993,
+    "max_output_tokens": 999,
+}
 
 
 def compress_and_convert_image(input_path: str, target_size=1):
@@ -155,9 +160,17 @@ class OCRToTextConverter:
         self.max_output_tokens = max(requested_output_tokens, OCR_MIN_OUTPUT_TOKENS)
         self.fallback_stage = fallback_stage
         self.fallback_source_pattern = OCR_FALLBACK_SOURCE_PATTERN
-        self.fallback_model = OCR_FALLBACK_MODEL
+        self.fallback_model = (
+            os.getenv("OPENAI_OCR_FALLBACK_MODEL", "gpt-5.6-terra")
+            if self.ocr_model_provider == "openai"
+            else OCR_FALLBACK_MODEL
+        )
         self.fallback_temperature = OCR_FALLBACK_TEMPERATURE
-        self.final_fallback_model = OCR_FINAL_FALLBACK_MODEL
+        self.final_fallback_model = (
+            os.getenv("OPENAI_OCR_FINAL_FALLBACK_MODEL") or None
+            if self.ocr_model_provider == "openai"
+            else OCR_FINAL_FALLBACK_MODEL
+        )
 
         # Set up custom temp directory
         self.temp_dir = os.path.abspath(temp_dir)
@@ -203,7 +216,7 @@ class OCRToTextConverter:
             return False
         if error.code not in OCR_RETRIABLE_OUTPUT_ERROR_CODES:
             return False
-        if self.final_fallback_model == self.ocr_model:
+        if not self.final_fallback_model or self.final_fallback_model == self.ocr_model:
             return False
         return self.ocr_model == self.fallback_model
 
@@ -358,18 +371,36 @@ class OCRToTextConverter:
                 mime_type, _ = mimetypes.guess_type(temp_file_for_ocr)
                 if mime_type is None:
                     raise ValueError("Image format not recognized")
-                generation = MultimodalLLM(
-                    model=self.ocr_model,
-                    provider=self.ocr_model_provider,
-                    api_key=self.llm_api_key,
-                    timeout_minutes=self.timeout_minutes,
-                ).generate_text_from_image(
-                    instructions=prompt_template,
-                    image_data=image_data,
-                    mime_type=mime_type,
-                    max_output_tokens=self.max_output_tokens,
-                    temperature=temperature,
-                )
+                try:
+                    generation = MultimodalLLM(
+                        model=self.ocr_model,
+                        provider=self.ocr_model_provider,
+                        api_key=self.llm_api_key,
+                        timeout_minutes=self.timeout_minutes,
+                    ).generate_text_from_image(
+                        instructions=prompt_template,
+                        image_data=image_data,
+                        mime_type=mime_type,
+                        max_output_tokens=self.max_output_tokens,
+                        temperature=temperature,
+                    )
+                except LLMGenerationError as error:
+                    error_code = OPENAI_OUTPUT_ERROR_CODES.get(error.reason)
+                    if error_code is None:
+                        raise
+                    logger.warning(
+                        "OpenAI OCR returned unusable output for %s: model=%s reason=%s prompt_tokens=%s completion_tokens=%s partial_output=%r",
+                        file_for_ocr,
+                        self.ocr_model,
+                        error.reason,
+                        error.prompt_tokens,
+                        error.completion_tokens,
+                        error.partial_text,
+                    )
+                    raise EmptyDocument(
+                        message=f"OpenAI OCR returned unusable output ({error.reason}) for image: {file_for_ocr}",
+                        code=error_code,
+                    ) from error
                 response = None
                 response_text = generation.text
                 finish_reason = generation.finish_reason
@@ -449,7 +480,14 @@ class OCRToTextConverter:
                     code=999,
                 )
 
-            if self.ocr_model_provider == "google" and has_repetitive_tail:
+            if has_repetitive_tail:
+                logger.warning(
+                    "OCR repetitive output for %s: model=%s provider=%s output=%r",
+                    file_for_ocr,
+                    self.ocr_model,
+                    self.ocr_model_provider,
+                    response_text,
+                )
                 raise EmptyDocument(
                     message=f"OCR discarded because repetitive tail was detected for image: {file_for_ocr}",
                     code=997,

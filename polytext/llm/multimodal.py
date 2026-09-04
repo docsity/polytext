@@ -24,7 +24,28 @@ class GenerationResult:
 
 
 class LLMGenerationError(RuntimeError):
-    """Raised when an LLM returns no usable completed output."""
+    """Raised when an LLM returns no usable completed output.
+
+    Provider diagnostics are retained so callers can distinguish an empty
+    response, an output-token limit, and a content-filtered response without
+    parsing the human-readable message.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        reason: str | None = None,
+        partial_text: str = "",
+        prompt_tokens: int = 0,
+        completion_tokens: int = 0,
+    ) -> None:
+        super().__init__(message)
+        self.message = message
+        self.reason = reason
+        self.partial_text = partial_text
+        self.prompt_tokens = prompt_tokens
+        self.completion_tokens = completion_tokens
 
 
 def normalize_provider(provider: str) -> str:
@@ -110,16 +131,29 @@ class MultimodalLLM:
         text = response.output_text or ""
         status = getattr(response, "status", None)
         incomplete_details = getattr(response, "incomplete_details", None)
+        usage = getattr(response, "usage", None)
+        prompt_tokens = getattr(usage, "input_tokens", 0) or 0
+        completion_tokens = getattr(usage, "output_tokens", 0) or 0
         if status == "incomplete":
             reason = getattr(incomplete_details, "reason", "unknown")
-            raise LLMGenerationError(f"OpenAI returned an incomplete response: {reason}")
+            raise LLMGenerationError(
+                f"OpenAI returned an incomplete response: {reason}",
+                reason=reason,
+                partial_text=text,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+            )
         if not text.strip():
-            raise LLMGenerationError("OpenAI returned an empty response")
-        usage = getattr(response, "usage", None)
+            raise LLMGenerationError(
+                "OpenAI returned an empty response",
+                reason="empty_response",
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+            )
         return GenerationResult(
             text=text,
-            prompt_tokens=getattr(usage, "input_tokens", 0) or 0,
-            completion_tokens=getattr(usage, "output_tokens", 0) or 0,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
             model=model,
             provider="openai",
             finish_reason=status,

@@ -5,7 +5,7 @@ from unittest.mock import patch
 import httpx
 from openai import APITimeoutError, AuthenticationError
 
-from polytext.llm.multimodal import MultimodalLLM, normalize_provider
+from polytext.llm.multimodal import LLMGenerationError, MultimodalLLM, normalize_provider
 
 
 class TestMultimodalLLM(unittest.TestCase):
@@ -132,8 +132,15 @@ class TestMultimodalLLM(unittest.TestCase):
             incomplete_details=SimpleNamespace(reason="max_output_tokens"),
         )
 
-        with self.assertRaisesRegex(Exception, "incomplete response.*max_output_tokens"):
+        with self.assertRaisesRegex(Exception, "incomplete response.*max_output_tokens") as error_context:
             MultimodalLLM("gpt-5.6-luna", "openai").generate_text("Do it", "input")
+
+        error = error_context.exception
+        self.assertIsInstance(error, LLMGenerationError)
+        self.assertEqual(error.reason, "max_output_tokens")
+        self.assertEqual(error.partial_text, "partial")
+        self.assertEqual(error.prompt_tokens, 3)
+        self.assertEqual(error.completion_tokens, 1)
 
     @patch("polytext.llm.multimodal.OpenAI")
     def test_openai_retries_a_transient_timeout(self, openai_cls):
