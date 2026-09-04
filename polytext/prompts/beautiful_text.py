@@ -65,15 +65,19 @@ FORMATTING:
 - output Markdown only
 - preserve the transcript as a cleaned spoken transcript, not as a rewritten article
 - use paragraphs, but do not heavily reorganize the flow
+- structure every thematic block as exactly one H2 heading (`## Title`) followed by its related paragraph or paragraphs
+- use only H2 headings; never use `#`, `###`, or any other heading level
+- do not output body text before the first H2 heading or outside an H2 section
 - headings may be generated editorially, but only to label the topic of the following block
 - headings must be short, neutral, and strictly supported by the text below
-- the final Markdown must contain at least one heading
-- if the text is short or has weak structure, add one minimal heading only
+- every H2 heading must be followed by at least one non-empty paragraph of source content
+- the final Markdown must contain at least one H2 heading
+- if the text is short or has weak structure, add one minimal H2 heading only
 - do not convert prose into bullet lists unless the speaker is explicitly enumerating points
 - use emphasis sparingly
 - you may add light Markdown emphasis to improve scanability, but only locally and without rewriting the sentence
-- use **bold** for the most important claims, decisions, problems, findings, contrasts, and concepts in the passage
-- do not systematically bold names, companies, products, or platforms; bold them only when the entity itself is central to the point being made
+- **bold** must be used to highlight keywords, titles, and important concepts within the text
+- in every H2 section, use **bold** to highlight a minimum of three and a maximum of ten short phrases containing keywords, titles, or important concepts within the text
 - use *italics* sparingly for contextual labels, foreign expressions, or technical terms when this remains clearly faithful to the source
 - do not apply emphasis to large portions of text
 - do not use emphasis as a substitute for rewriting, summarizing, or restructuring
@@ -88,5 +92,6 @@ FINAL CHECK:
 - verify that every paragraph has been cleaned rather than reduced to its main idea
 - the body must not contain invented speaker attributions or other unsupported additions
 - prefer awkward fidelity over elegant rewriting
+- verify that every thematic block starts with an H2 heading and contains only the paragraphs related to that heading
 - headings may be editorially generated, but body text must remain maximally faithful
 """
