@@ -21,7 +21,7 @@ a = Analysis(
     datas=collect_data_files('magika', include_py_files=True),
     
     # Import nascosti che PyInstaller non rileva automaticamente (equivalente a --hidden-import)
-    hiddenimports=['audioop'],
+    hiddenimports=['audioop', 'markdown_to_json'],
     
     # Hooks aggiuntivi da eseguire
     hookspath=[],
