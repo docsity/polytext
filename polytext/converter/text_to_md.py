@@ -141,6 +141,8 @@ class TextToMdConverter:
         start_time = time.time()
 
         config = types.GenerateContentConfig(
+            tools=[],
+            automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
             safety_settings=[
                 types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold=types.HarmBlockThreshold.BLOCK_NONE),
                 types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
