@@ -30,7 +30,7 @@ from .gemini_quality_guards import extract_finish_reason, tail_has_excessive_rep
 logger = logging.getLogger(__name__)
 
 SUPPORTED_MIME_TYPES = {
-    'audio/x-aac', 'audio/flac', 'audio/mp3', 'audio/m4a', 'audio/mpeg',
+    'audio/aac', 'audio/flac', 'audio/mp3', 'audio/m4a', 'audio/mpeg',
     'audio/mpga', 'audio/mp4', 'audio/opus', 'audio/pcm', 'audio/wav', 'audio/webm'
 }
 
@@ -433,6 +433,8 @@ class AudioToTextConverter:
             except ValueError:
                 logger.exception("Unsupported audio format for %s", audio_file)
                 raise
+        if mime_type == "audio/x-aac":
+            mime_type = "audio/aac"
 
         return client.models.generate_content(
             model=self.transcription_model,
@@ -455,7 +457,6 @@ class AudioToTextConverter:
                 google_exceptions.ServiceUnavailable,
                 google_exceptions.InternalServerError,
                 genai_errors.ServerError,
-                genai_errors.APIError,
         ),
         tries=8,
         delay=1,
