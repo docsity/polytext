@@ -129,7 +129,11 @@ class TextMerger:
 
 
     @staticmethod
-    def extract_complete_sentences(text: str, n_words: int) -> List[str]:
+    def extract_complete_sentences(
+            text: str,
+            n_words: int,
+            merge_context_side: str = "start",
+    ) -> List[str]:
         """
         Extract the first N words, central text, and last N words that form complete sentences.
 
@@ -152,38 +156,51 @@ class TextMerger:
         if not sentences:
             return ["", "", ""]
 
-        # Process sentences from the beginning
-        start_sentences = []
-        start_word_count = 0
         start_idx = 0
-
-        for i, sentence in enumerate(sentences):
-            words = sentence.split()
-            if start_word_count + len(words) <= n_words:
-                start_sentences.append(sentence)
-                start_word_count += len(words)
-                start_idx = i + 1
-            else:
-                break
-
-        # Process sentences from the end
-        end_sentences = []
-        end_word_count = 0
         end_idx = len(sentences)
 
-        for i, sentence in enumerate(reversed(sentences)):
-            words = sentence.split()
-            if end_word_count + len(words) <= n_words:
-                end_sentences.insert(0, sentence)
-                end_word_count += len(words)
-                end_idx = len(sentences) - i - 1
-            else:
-                break
+        if merge_context_side == "end":
+            end_word_count = 0
+            for i, sentence in enumerate(reversed(sentences)):
+                words = sentence.split()
+                if end_word_count + len(words) <= n_words:
+                    end_word_count += len(words)
+                    end_idx = len(sentences) - i - 1
+                else:
+                    break
+
+            start_word_count = 0
+            for i, sentence in enumerate(sentences[:end_idx]):
+                words = sentence.split()
+                if start_word_count + len(words) <= n_words:
+                    start_word_count += len(words)
+                    start_idx = i + 1
+                else:
+                    break
+        else:
+            start_word_count = 0
+            for i, sentence in enumerate(sentences):
+                words = sentence.split()
+                if start_word_count + len(words) <= n_words:
+                    start_word_count += len(words)
+                    start_idx = i + 1
+                else:
+                    break
+
+            end_word_count = 0
+            remaining_sentences = sentences[start_idx:]
+            for i, sentence in enumerate(reversed(remaining_sentences)):
+                words = sentence.split()
+                if end_word_count + len(words) <= n_words:
+                    end_word_count += len(words)
+                    end_idx = len(sentences) - i - 1
+                else:
+                    break
 
         # Extract the three parts
-        start_text = " ".join(start_sentences)
+        start_text = " ".join(sentences[:start_idx])
         central_text = " ".join(sentences[start_idx:end_idx])
-        end_text = " ".join(end_sentences)
+        end_text = " ".join(sentences[end_idx:])
 
         return [start_text, central_text, end_text]
 
@@ -212,10 +229,16 @@ class TextMerger:
             str: The merged text
         """
 
-        [start_text_1, central_text_1, end_text_1] = self.extract_complete_sentences(text1,
-                                                                                     n_words=self.n_words_for_llm_merge)
-        [start_text_2, central_text_2, end_text_2] = self.extract_complete_sentences(text2,
-                                                                                     n_words=self.n_words_for_llm_merge)
+        [start_text_1, central_text_1, end_text_1] = self.extract_complete_sentences(
+            text1,
+            n_words=self.n_words_for_llm_merge,
+            merge_context_side="end",
+        )
+        [start_text_2, central_text_2, end_text_2] = self.extract_complete_sentences(
+            text2,
+            n_words=self.n_words_for_llm_merge,
+            merge_context_side="start",
+        )
 
         logger.info("Extracted complete sentences for merging")
 
