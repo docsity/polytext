@@ -7,14 +7,14 @@ from polytext.processor.audio_chunker import AudioChunker
 
 class TestAudioChunker(unittest.TestCase):
     @patch("polytext.processor.audio_chunker.AudioSegment.from_file")
-    def test_optimal_chunk_size_is_about_15_minutes_with_4250_max_tokens(self, mock_from_file):
+    def test_optimal_chunk_size_is_about_10_minutes_with_4250_max_tokens(self, mock_from_file):
         fake_audio = MagicMock()
         fake_audio.__len__.return_value = 3_600_000
         mock_from_file.return_value = fake_audio
 
         chunker = AudioChunker(audio_path="/tmp/dummy.mp3", max_llm_tokens=4250)
 
-        self.assertEqual(chunker.calculate_optimal_chunk_size(), 900_000)
+        self.assertEqual(chunker.calculate_optimal_chunk_size(), 600_000)
 
     @patch("polytext.processor.audio_chunker.ffmpeg.run")
     @patch("polytext.processor.audio_chunker.ffmpeg.input")
@@ -40,6 +40,12 @@ class TestAudioChunker(unittest.TestCase):
 
         try:
             self.assertNotEqual(chunk_a["file_path"], chunk_b["file_path"])
+            self.assertTrue(chunk_a["file_path"].endswith(".wav"))
+            output_kwargs = mock_ffmpeg_input.return_value.output.call_args.kwargs
+            self.assertEqual(output_kwargs["acodec"], "pcm_s16le")
+            self.assertEqual(output_kwargs["ar"], 16000)
+            self.assertEqual(output_kwargs["ac"], 1)
+            self.assertNotIn("q", output_kwargs)
         finally:
             for file_path in (chunk_a["file_path"], chunk_b["file_path"]):
                 if os.path.exists(file_path):

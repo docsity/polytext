@@ -458,7 +458,6 @@ class BaseLoader:
                         ocr_provider=self.provider,
                         ocr_model=self.ocr_model,
                         include_image_descriptions=self.include_image_descriptions,
-                        allow_partial_ocr_failures=True,
                         **document_kwargs,
                     )
 
