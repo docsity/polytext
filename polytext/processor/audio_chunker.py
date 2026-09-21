@@ -15,7 +15,7 @@ class AudioChunker:
             audio_path: str,
             max_llm_tokens: int = 8000,
             overlap_duration: int = 5000,
-            tokens_per_minute: int = 200,
+            tokens_per_minute: int = 300,
             prompt_overhead: int = 500
     ) -> None:
         self.audio_path = audio_path

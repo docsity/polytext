@@ -242,7 +242,9 @@ class DocumentOCRToTextConverter:
         return error.code in OCR_RETRIABLE_OUTPUT_ERROR_CODES
 
     def should_fallback_temperature_retry(self, error: EmptyDocument, temperature: float) -> bool:
-        expected_stage = 1 if self.markdown_output else 0
+        # The non-literal prompt retry advances every OCR mode to stage 1.
+        # Plain-text document OCR must therefore also try the fallback model at stage 1.
+        expected_stage = 1
         if self.fallback_stage != expected_stage:
             return False
         if error.code not in OCR_RETRIABLE_OUTPUT_ERROR_CODES:
