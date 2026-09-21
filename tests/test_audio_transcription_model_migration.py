@@ -19,6 +19,7 @@ from polytext.converter.audio_to_text import (
 from polytext.loader import BaseLoader
 from polytext.loader.audio import AudioLoader
 from polytext.loader.video import VideoLoader
+from polytext.processor.text_merger import TextMerger
 
 
 def _make_response(
@@ -147,6 +148,37 @@ class _ImmediateExecutor:
 
 
 class TestAudioTranscriptionModelMigration(unittest.TestCase):
+    def test_long_audio_protections_are_enabled_only_above_80_minutes(self):
+        converter = AudioToTextConverter()
+
+        converter.set_long_audio_protections(80 * 60 * 1000)
+        self.assertFalse(converter.long_audio_protections_enabled)
+
+        converter.set_long_audio_protections(80 * 60 * 1000 + 1)
+        self.assertTrue(converter.long_audio_protections_enabled)
+
+    def test_sequential_merge_does_not_duplicate_a_short_final_chunk(self):
+        response = SimpleNamespace(
+            text="Overlap resolved. Unique ending. Final sentence.",
+            usage_metadata=SimpleNamespace(candidates_token_count=6, prompt_token_count=10),
+        )
+        client = MagicMock()
+        client.models.generate_content.return_value = response
+        long_chunk = " ".join(
+            f"Sentence {index} has enough words to remain outside merge context."
+            for index in range(100)
+        )
+        short_final_chunk = "Overlap resolved. Unique ending. Final sentence."
+
+        with patch("polytext.processor.text_merger.genai.Client", return_value=client):
+            result = TextMerger().merge_chunks_with_llm_sequential(
+                [long_chunk, short_final_chunk]
+            )
+
+        merged_text = result["full_text_merged"]
+        self.assertEqual(merged_text.count("Unique ending."), 1)
+        self.assertEqual(merged_text.count("Final sentence."), 1)
+
     def test_formats_audio_output_with_single_line_break_after_each_sentence(self):
         converter = AudioToTextConverter()
 
@@ -184,6 +216,7 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
     ):
         fake_chunker = MagicMock()
         mock_chunker_cls.return_value = fake_chunker
+        fake_chunker.duration_ms = 80 * 60 * 1000
         fake_chunker.extract_chunks.return_value = [{"file_path": "/tmp/fake_chunk.mp3"}]
         mock_process_chunk.return_value = (
             0,
@@ -204,6 +237,7 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
 
         self.assertEqual(result["text"], "chunk transcript")
         self.assertEqual(mock_chunker_cls.call_args.args[0], source_audio.name)
+        self.assertFalse(converter.long_audio_protections_enabled)
 
     @patch("polytext.converter.audio_to_text.TextMerger")
     @patch("polytext.converter.audio_to_text.AudioChunker")
@@ -223,6 +257,7 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
     ):
         fake_chunker = MagicMock()
         mock_chunker_cls.return_value = fake_chunker
+        fake_chunker.duration_ms = 60 * 60 * 1000
         fake_chunker.extract_chunks.return_value = [{"file_path": "/tmp/normalized-audio.mp3"}]
         mock_process_chunk.return_value = (
             0,
@@ -260,6 +295,16 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
         self.assertIn("do not use bullet", prompt)
         self.assertIn("do not reorganize", prompt)
         self.assertIn("raw transcript", prompt)
+
+    def test_non_literal_fallback_prompts_forbid_translation(self):
+        for prompt in (
+            AUDIO_TO_MARKDOWN_NON_LITERAL_FALLBACK_PROMPT,
+            AUDIO_TO_MARKDOWN_RAW_NON_LITERAL_FALLBACK_PROMPT,
+        ):
+            normalized_prompt = prompt.lower()
+            self.assertIn("never translate speech into another language", normalized_prompt)
+            self.assertIn("only within its original language", normalized_prompt)
+            self.assertIn("actual language change in the audio", normalized_prompt)
 
     def test_default_audio_transcription_model_is_gemini_3_1_flash_lite_preview(self):
         converter = AudioToTextConverter()
@@ -525,29 +570,31 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
 
     @patch.object(AudioToTextConverter, "transcribe_audio_halves")
     @patch("polytext.converter.audio_to_text.genai.Client")
-    def test_repetitive_max_tokens_is_treated_as_loop_before_adaptive_split(
+    def test_repetitive_max_tokens_adaptively_splits_before_fallback(
         self,
         mock_client_cls,
         mock_transcribe_halves,
     ):
         repetitive = " ".join(["Repeated generated sentence."] * 8)
         fake_client = _FakeClient(
-            responses=[
-                _make_response(repetitive, finish_reason="MAX_TOKENS"),
-                _make_response("clean fallback transcript", finish_reason="STOP"),
-            ]
+            responses=[_make_response(repetitive, finish_reason="MAX_TOKENS")]
         )
         mock_client_cls.return_value = fake_client
+        mock_transcribe_halves.return_value = {
+            "transcript": "clean split transcript",
+            "completion_tokens": 20,
+            "prompt_tokens": 30,
+        }
 
         converter = AudioToTextConverter()
+        converter.long_audio_protections_enabled = True
         with tempfile.NamedTemporaryFile(suffix=".mp3") as temp_audio:
             temp_audio.write(b"fake-audio")
             temp_audio.flush()
             result = converter.transcribe_audio(temp_audio.name)
 
-        self.assertEqual(result["transcript"], "clean fallback transcript")
-        self.assertIn("repetitive", result["fallback_reason"].lower())
-        mock_transcribe_halves.assert_not_called()
+        self.assertEqual(result["transcript"], "clean split transcript")
+        mock_transcribe_halves.assert_called_once_with(temp_audio.name, temperature=0.0)
 
     def test_adaptive_split_transcribes_and_merges_both_halves(self):
         split_responses = [
@@ -581,29 +628,72 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
         self.assertIn("seconda metà", result["transcript"])
 
     @patch("polytext.converter.audio_to_text.genai.Client")
-    def test_repetitive_tail_retries_with_non_literal_prompt_before_fallback_model(self, mock_client_cls):
+    @patch.object(AudioToTextConverter, "transcribe_audio_halves")
+    def test_repetitive_tail_adaptively_splits_before_fallback(
+        self,
+        mock_transcribe_halves,
+        mock_client_cls,
+    ):
         repetitive_transcript = "\n".join(["Repeated tail line."] * 6)
         fake_client = _FakeClient(
-            responses=[
-                _make_response(repetitive_transcript, finish_reason="STOP"),
-                _make_response("prompt fallback transcript", finish_reason="STOP"),
-            ]
+            responses=[_make_response(repetitive_transcript, finish_reason="STOP")]
         )
         mock_client_cls.return_value = fake_client
+        mock_transcribe_halves.return_value = {
+            "transcript": "clean split transcript",
+            "completion_tokens": 20,
+            "prompt_tokens": 30,
+        }
 
         converter = AudioToTextConverter()
+        converter.long_audio_protections_enabled = True
         with tempfile.NamedTemporaryFile(suffix=".mp3") as temp_audio:
             temp_audio.write(b"fake-audio")
             temp_audio.flush()
             result = converter.transcribe_audio(temp_audio.name)
 
-        self.assertEqual(result["transcript"], "prompt fallback transcript")
-        self.assertEqual(
-            fake_client.models.generate_content_models,
-            ["gemini-3.1-flash-lite", "gemini-3.1-flash-lite"],
+        self.assertEqual(result["transcript"], "clean split transcript")
+        mock_transcribe_halves.assert_called_once_with(temp_audio.name, temperature=0.0)
+
+    @patch("polytext.converter.audio_to_text.genai.Client")
+    def test_empty_stop_response_is_retried_instead_of_returned(self, mock_client_cls):
+        fake_client = _FakeClient(
+            responses=[
+                _make_response("", finish_reason="STOP", completion_tokens=4),
+                _make_response("recovered transcript", finish_reason="STOP"),
+            ]
         )
+        mock_client_cls.return_value = fake_client
+
+        converter = AudioToTextConverter(adaptive_split_depth=1)
+        converter.long_audio_protections_enabled = True
+        with tempfile.NamedTemporaryFile(suffix=".mp3") as temp_audio:
+            temp_audio.write(b"fake-audio")
+            temp_audio.flush()
+            result = converter.transcribe_audio(temp_audio.name)
+
+        self.assertEqual(result["transcript"], "recovered transcript")
         self.assertEqual(result["prompt_variant"], "non_literal_fallback")
-        self.assertIn("repetitive tail", result["fallback_reason"].lower())
+
+    @patch("polytext.converter.audio_to_text.genai.Client")
+    def test_insignificant_stop_response_is_retried_instead_of_returned(self, mock_client_cls):
+        fake_client = _FakeClient(
+            responses=[
+                _make_response("e quindi", finish_reason="STOP", completion_tokens=2),
+                _make_response("recovered transcript", finish_reason="STOP"),
+            ]
+        )
+        mock_client_cls.return_value = fake_client
+
+        converter = AudioToTextConverter(adaptive_split_depth=1)
+        converter.long_audio_protections_enabled = True
+        with tempfile.NamedTemporaryFile(suffix=".mp3") as temp_audio:
+            temp_audio.write(b"fake-audio")
+            temp_audio.flush()
+            result = converter.transcribe_audio(temp_audio.name)
+
+        self.assertEqual(result["transcript"], "recovered transcript")
+        self.assertEqual(result["prompt_variant"], "non_literal_fallback")
 
     @patch("polytext.converter.audio_to_text.genai.Client")
     def test_internal_consecutive_word_loop_retries_with_fallback_model(self, mock_client_cls):
@@ -779,6 +869,7 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
 
         fake_chunker = MagicMock()
         mock_chunker_cls.return_value = fake_chunker
+        fake_chunker.duration_ms = 60 * 60 * 1000
         mock_text_merger_cls.return_value.merge_chunks_with_llm_sequential.return_value = {
             "full_text_merged": "chunk one transcript\nchunk two fallback transcript",
             "completion_tokens": 0,
@@ -825,6 +916,7 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
     ):
         fake_chunker = MagicMock()
         mock_chunker_cls.return_value = fake_chunker
+        fake_chunker.duration_ms = 60 * 60 * 1000
         fake_chunker.extract_chunks.return_value = [
             {"file_path": "/tmp/fake_chunk.mp3"},
         ]
@@ -846,7 +938,6 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
                 converter.transcribe_full_audio(source_audio.name)
 
         self.assertEqual(mock_chunker_cls.call_args.kwargs["max_llm_tokens"], 4250)
-
 
 if __name__ == "__main__":
     unittest.main()

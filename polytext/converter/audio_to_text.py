@@ -56,6 +56,7 @@ AUDIO_MIN_OUTPUT_TOKENS = 500
 AUDIO_DEFAULT_MAX_OUTPUT_TOKENS = 4096
 AUDIO_MAX_ADAPTIVE_SPLIT_DEPTH = 1
 AUDIO_ADAPTIVE_SPLIT_OVERLAP_MS = 2000
+AUDIO_LONG_DURATION_THRESHOLD_MS = 80 * 60 * 1000
 AUDIO_TAIL_REPETITION_LINES = int(os.getenv("AUDIO_TAIL_REPETITION_LINES", "200"))
 AUDIO_TAIL_REPETITION_THRESHOLD = float(os.getenv("AUDIO_TAIL_REPETITION_THRESHOLD", "0.35"))
 AUDIO_FALLBACK_SOURCE_PATTERN = os.getenv("AUDIO_FALLBACK_SOURCE_PATTERN", "flash-lite")
@@ -65,7 +66,7 @@ AUDIO_FINAL_FALLBACK_MODEL = os.getenv("AUDIO_FINAL_FALLBACK_MODEL", "gemini-3.5
 AUDIO_FILE_UPLOAD_THRESHOLD_BYTES = 20 * 1024 * 1024
 AUDIO_PROMPT_VARIANT_DEFAULT = "default"
 AUDIO_PROMPT_VARIANT_NON_LITERAL_FALLBACK = "non_literal_fallback"
-AUDIO_RETRIABLE_OUTPUT_ERROR_CODES = (996, 997, 999)
+AUDIO_RETRIABLE_OUTPUT_ERROR_CODES = (996, 997, 998, 999)
 NO_HUMAN_SPEECH_MARKER = "no human speech detected"
 
 
@@ -220,6 +221,7 @@ class AudioToTextConverter:
                  bitrate_quality: int = 9, timeout_minutes: int = None,
                  fallback_stage: int = 0,
                  adaptive_split_depth: int = 0,
+                 long_audio_protections_enabled: bool = False,
                  prompt_variant: str = AUDIO_PROMPT_VARIANT_DEFAULT,
                  is_output_audio_raw: bool  = True):
         """
@@ -240,6 +242,8 @@ class AudioToTextConverter:
             timeout_minutes (int): Number of minutes to wait for a response.
             fallback_stage (int, optional): Internal retry stage used by fallback attempts.
                 Defaults to 0.
+            long_audio_protections_enabled (bool, optional): Apply stricter recovery rules inherited
+                from an original audio longer than 80 minutes. Defaults to False.
             prompt_variant (str, optional): Prompt variant used by this attempt.
                 Defaults to "default".
             is_output_audio_raw (bool, optional): If True, use the raw Markdown audio prompt.
@@ -267,6 +271,7 @@ class AudioToTextConverter:
         self.timeout_minutes = timeout_minutes
         self.fallback_stage = fallback_stage
         self.adaptive_split_depth = adaptive_split_depth
+        self.long_audio_protections_enabled = long_audio_protections_enabled
         self.prompt_variant = prompt_variant
         self.fallback_source_pattern = AUDIO_FALLBACK_SOURCE_PATTERN
         self.fallback_model = AUDIO_FALLBACK_MODEL
@@ -289,6 +294,9 @@ class AudioToTextConverter:
         if self.markdown_output:
             return AUDIO_TO_MARKDOWN_PROMPT
         return AUDIO_TO_PLAIN_TEXT_PROMPT
+
+    def set_long_audio_protections(self, duration_ms: int) -> None:
+        self.long_audio_protections_enabled = duration_ms > AUDIO_LONG_DURATION_THRESHOLD_MS
 
     def should_prompt_fallback_retry(self, error: EmptyDocument) -> bool:
         if self.fallback_stage != 0:
@@ -353,6 +361,7 @@ class AudioToTextConverter:
             timeout_minutes=self.timeout_minutes,
             fallback_stage=fallback_stage,
             adaptive_split_depth=self.adaptive_split_depth,
+            long_audio_protections_enabled=self.long_audio_protections_enabled,
             prompt_variant=resolved_prompt_variant,
             is_output_audio_raw=self.is_output_audio_raw,
         )
@@ -404,6 +413,7 @@ class AudioToTextConverter:
                     timeout_minutes=self.timeout_minutes,
                     fallback_stage=self.fallback_stage,
                     adaptive_split_depth=self.adaptive_split_depth + 1,
+                    long_audio_protections_enabled=self.long_audio_protections_enabled,
                     prompt_variant=self.prompt_variant,
                     is_output_audio_raw=self.is_output_audio_raw,
                 )
@@ -614,6 +624,15 @@ class AudioToTextConverter:
                 )
 
             if finish_reason and "MAX_TOKENS" in finish_reason:
+                if (
+                    self.long_audio_protections_enabled
+                    and self.adaptive_split_depth < AUDIO_MAX_ADAPTIVE_SPLIT_DEPTH
+                ):
+                    logger.info(
+                        "Splitting long-audio chunk before fallback after MAX_TOKENS response: %s",
+                        audio_file,
+                    )
+                    return self.transcribe_audio_halves(audio_file, temperature=temperature)
                 if has_repetitive_tail or has_repetitive_word_loop:
                     raise EmptyDocument(
                         message=f"Transcript discarded because repetitive output reached max tokens for audio: {audio_file}",
@@ -631,18 +650,57 @@ class AudioToTextConverter:
                 )
 
             if has_repetitive_tail:
+                if (
+                    self.long_audio_protections_enabled
+                    and self.adaptive_split_depth < AUDIO_MAX_ADAPTIVE_SPLIT_DEPTH
+                ):
+                    logger.info(
+                        "Splitting long-audio chunk before fallback after repetitive tail: %s",
+                        audio_file,
+                    )
+                    return self.transcribe_audio_halves(audio_file, temperature=temperature)
                 raise EmptyDocument(
                     message=f"Transcript discarded because repetitive tail was detected for audio: {audio_file}",
                     code=997,
                 )
 
             if has_repetitive_word_loop:
+                if (
+                    self.long_audio_protections_enabled
+                    and self.adaptive_split_depth < AUDIO_MAX_ADAPTIVE_SPLIT_DEPTH
+                ):
+                    logger.info(
+                        "Splitting long-audio chunk before fallback after repetitive word loop: %s",
+                        audio_file,
+                    )
+                    return self.transcribe_audio_halves(audio_file, temperature=temperature)
                 raise EmptyDocument(
                     message=f"Transcript discarded because repetitive word loop was detected for audio: {audio_file}",
                     code=997,
                 )
 
             response_text, marker_only = normalize_no_human_speech_marker(response_text)
+
+            is_insignificant_stop = (
+                finish_reason
+                and "STOP" in finish_reason
+                and (
+                    not response_text.strip()
+                    or (
+                        completion_tokens <= 4
+                        and len(response_text.split()) <= 2
+                    )
+                )
+            )
+            if (
+                self.long_audio_protections_enabled
+                and not marker_only
+                and is_insignificant_stop
+            ):
+                raise EmptyDocument(
+                    message=f"Transcript discarded because STOP returned empty or insignificant output for audio: {audio_file}",
+                    code=998,
+                )
 
             response_dict = {
                 "transcript": "" if marker_only else response_text,
@@ -771,6 +829,13 @@ class AudioToTextConverter:
         # Create chunker and extract chunks
         logger.info("Creating AudioChunker instance...")
         chunker = AudioChunker(used_file, max_llm_tokens=self.max_llm_tokens)
+        self.set_long_audio_protections(chunker.duration_ms)
+        logger.info(
+            "Long-audio transcription protections enabled: %s (duration: %sms, threshold: %sms)",
+            self.long_audio_protections_enabled,
+            chunker.duration_ms,
+            AUDIO_LONG_DURATION_THRESHOLD_MS,
+        )
         chunks = chunker.extract_chunks()
 
         logger.info(f"chunks: {chunks}")
