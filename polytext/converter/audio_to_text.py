@@ -36,7 +36,12 @@ logger = logging.getLogger(__name__)
 
 SUPPORTED_MIME_TYPES = {
     'audio/x-aac', 'audio/flac', 'audio/mp3', 'audio/m4a', 'audio/mpeg',
-    'audio/mpga', 'audio/mp4', 'audio/opus', 'audio/pcm', 'audio/wav', 'audio/webm'
+    'audio/mpga', 'audio/mp4', 'audio/opus', 'audio/pcm', 'audio/wav', 'audio/x-wav', 'audio/webm'
+}
+
+GEMINI_AUDIO_MIME_ALIASES = {
+    'audio/x-aac': 'audio/aac',
+    'audio/x-wav': 'audio/wav',
 }
 
 INJECTION_GUARD_SYSTEM_INSTRUCTION = (
@@ -132,33 +137,32 @@ def create_ascii_safe_upload_copy(audio_file: str) -> tuple[str, str | None]:
 
 def compress_and_convert_audio(input_path: str, bitrate_quality: int = 9) -> str:
     """
-    Compress and convert an audio file to MP3 using ffmpeg.
+    Normalize an audio file to lossless 16 kHz mono WAV using ffmpeg.
 
     Args:
         input_path (str): Path to the original audio file
-        bitrate_quality (int, optional): Variable bitrate quality from 0-9 (9 being lowest). Defaults to 9
+        bitrate_quality (int, optional): Retained for backward compatibility; WAV output is lossless.
 
     Returns:
-        str: Path to the temporary compressed/converted MP3 file
+        str: Path to the temporary normalized WAV file
 
     Raises:
         RuntimeError: If FFmpeg compression/conversion fails
 
     Notes:
-        - Creates a temporary MP3 file that should be deleted after use
-        - Converts audio to mono and 16kHz sample rate for smaller file size
+        - Creates a temporary WAV file that should be deleted after use
+        - Converts audio to 16-bit PCM mono at 16kHz
         - Uses maximum available CPU threads for faster processing
     """
     # Create temporary file for audio output
-    fd, temp_audio_path = tempfile.mkstemp(suffix='.mp3')
+    fd, temp_audio_path = tempfile.mkstemp(suffix='.wav')
     os.close(fd)
 
-    logger.info(f"Compressing audio to bitrate quality: {bitrate_quality}")
+    logger.info("Normalizing audio to lossless 16 kHz mono WAV")
     try:
         ffmpeg.input(input_path).output(
             temp_audio_path,
-            q=bitrate_quality,  # Variable bitrate quality (0-9, 9 being lowest)
-            acodec='libmp3lame',
+            acodec='pcm_s16le',
             ac=1,  # Convert to mono
             ar=16000,  # Lower sample rate
             vn=None,
@@ -171,7 +175,7 @@ def compress_and_convert_audio(input_path: str, bitrate_quality: int = 9) -> str
             os.unlink(temp_audio_path)
         raise
 
-    logger.info(f"Successfully converted and compressed audio: {temp_audio_path}")
+    logger.info(f"Successfully normalized audio: {temp_audio_path}")
     return temp_audio_path
 
 
@@ -392,12 +396,19 @@ class AudioToTextConverter:
             for start_ms, end_ms in ranges:
                 fd, split_path = tempfile.mkstemp(
                     prefix="adaptive-audio-split-",
-                    suffix=".mp3",
+                    suffix=".wav",
                     dir=self.temp_dir,
                 )
                 os.close(fd)
                 split_paths.append(split_path)
-                audio[start_ms:end_ms].export(split_path, format="mp3").close()
+                (
+                    audio[start_ms:end_ms]
+                    .set_frame_rate(16000)
+                    .set_channels(1)
+                    .set_sample_width(2)
+                    .export(split_path, format="wav", codec="pcm_s16le")
+                    .close()
+                )
 
                 split_converter = AudioToTextConverter(
                     transcription_model=self.transcription_model,
@@ -523,6 +534,7 @@ class AudioToTextConverter:
             except ValueError:
                 logger.exception("Unsupported audio format for %s", audio_file)
                 raise
+        mime_type = GEMINI_AUDIO_MIME_ALIASES.get(mime_type, mime_type)
 
         return client.models.generate_content(
             model=self.transcription_model,

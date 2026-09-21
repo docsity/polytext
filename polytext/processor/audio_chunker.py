@@ -78,7 +78,7 @@ class AudioChunker:
         # when multiple models transcribe in parallel.
         fd, temp_filename = tempfile.mkstemp(
             prefix=f"temp_chunk_{self.chunk_run_id}_{i}_",
-            suffix=".mp3",
+            suffix=".wav",
             dir=self.chunk_temp_dir,
         )
         os.close(fd)
@@ -92,10 +92,9 @@ class AudioChunker:
             ffmpeg
             .input(self.audio_path, ss=start_seconds, t=duration)
             .output(temp_filename,
-                    acodec='libmp3lame',
+                    acodec='pcm_s16le',
                     ar=16000,
-                    ac=1,
-                    q=9)
+                    ac=1)
             .overwrite_output()
         )
 

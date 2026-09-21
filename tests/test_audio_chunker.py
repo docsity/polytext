@@ -40,6 +40,12 @@ class TestAudioChunker(unittest.TestCase):
 
         try:
             self.assertNotEqual(chunk_a["file_path"], chunk_b["file_path"])
+            self.assertTrue(chunk_a["file_path"].endswith(".wav"))
+            output_kwargs = mock_ffmpeg_input.return_value.output.call_args.kwargs
+            self.assertEqual(output_kwargs["acodec"], "pcm_s16le")
+            self.assertEqual(output_kwargs["ar"], 16000)
+            self.assertEqual(output_kwargs["ac"], 1)
+            self.assertNotIn("q", output_kwargs)
         finally:
             for file_path in (chunk_a["file_path"], chunk_b["file_path"]):
                 if os.path.exists(file_path):
