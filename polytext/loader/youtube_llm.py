@@ -148,6 +148,8 @@ class YoutubeTranscriptLoaderWithLlm:
 
     def build_config(self, output_budget: int, prompt_template: str, temperature: float = 0.0) -> types.GenerateContentConfig:
         return types.GenerateContentConfig(
+            tools=[],
+            automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
             safety_settings=[
                 types.SafetySetting(
                     category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,

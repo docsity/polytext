@@ -352,6 +352,8 @@ class OCRToTextConverter:
             config = types.GenerateContentConfig(
                 temperature=temperature,
                 max_output_tokens=self.max_output_tokens,
+                tools=[],
+                automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
                 safety_settings=[
                     types.SafetySetting(
                         category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
