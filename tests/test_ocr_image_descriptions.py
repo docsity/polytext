@@ -138,6 +138,23 @@ class TestOCRImageDescriptions(unittest.TestCase):
         self.assertIsInstance(document_ocr_loader, DocumentOCRLoader)
         self.assertFalse(document_ocr_loader.allow_partial_ocr_failures)
 
+    def test_forced_document_ocr_passes_custom_render_dpi(self):
+        loader = BaseLoader(
+            source="local",
+            force_ocr=True,
+            ocr_render_dpi=200,
+        )
+
+        document_ocr_loader = loader.init_loader_class(
+            input="/tmp/example.pdf",
+            storage_client={},
+            llm_api_key=None,
+            source="local",
+        )
+
+        self.assertIsInstance(document_ocr_loader, DocumentOCRLoader)
+        self.assertEqual(document_ocr_loader.ocr_render_dpi, 200)
+
     def test_google_ocr_converter_builds_augmented_markdown_prompt(self):
         converter = OCRToTextConverter(include_image_descriptions=True)
 

@@ -115,6 +115,7 @@ def get_document_ocr(
     max_output_tokens: int | None = None,
     include_image_descriptions: bool = False,
     allow_partial_ocr_failures: bool = False,
+    ocr_render_dpi: int | None = None,
 ):
     """
     Convenience function to extract text from an image file using OCR, optionally formatted as Markdown.
@@ -141,6 +142,8 @@ def get_document_ocr(
         allow_partial_ocr_failures (bool, optional): If True, pages that still
             fail OCR after all retries are recorded inline instead of aborting
             the whole document extraction. Defaults to False.
+        ocr_render_dpi (int | None, optional): Render PDF pages at this DPI before
+            OCR. When omitted, preserves PyMuPDF's default rendering behavior.
 
     Returns:
         dict: Dictionary containing the OCR results and metadata.
@@ -155,6 +158,7 @@ def get_document_ocr(
         max_output_tokens=max_output_tokens,
         include_image_descriptions=include_image_descriptions,
         allow_partial_ocr_failures=allow_partial_ocr_failures,
+        ocr_render_dpi=ocr_render_dpi,
     )
     return converter.get_document_ocr(document_for_ocr)
 
@@ -164,7 +168,8 @@ class DocumentOCRToTextConverter:
                  page_range=None, timeout_minutes: int = None, fallback_stage: int = 0,
                  max_output_tokens: int | None = None, include_image_descriptions: bool = False,
                  prompt_variant: str = OCR_PROMPT_VARIANT_DEFAULT,
-                 allow_partial_ocr_failures: bool = False):
+                 allow_partial_ocr_failures: bool = False,
+                 ocr_render_dpi: int | None = None):
         """
         Initialize the DocumentOCRToTextConverter class with specified OCR model and formatting options.
 
@@ -192,6 +197,8 @@ class DocumentOCRToTextConverter:
             allow_partial_ocr_failures (bool, optional): If True, pages that still
                 fail OCR after all retries are recorded inline instead of aborting
                 the whole document extraction. Defaults to False.
+            ocr_render_dpi (int | None, optional): Render PDF pages at this DPI
+                before OCR. Defaults to PyMuPDF's native rendering behavior.
 
         Raises:
             OSError: If temp directory creation fails
@@ -207,6 +214,7 @@ class DocumentOCRToTextConverter:
         self.include_image_descriptions = include_image_descriptions
         self.prompt_variant = prompt_variant
         self.allow_partial_ocr_failures = allow_partial_ocr_failures
+        self.ocr_render_dpi = ocr_render_dpi
         requested_output_tokens = OCR_MAX_OUTPUT_TOKENS if max_output_tokens is None else max_output_tokens
         self.max_output_tokens = max(requested_output_tokens, OCR_MIN_OUTPUT_TOKENS)
         self.fallback_stage = fallback_stage
@@ -297,6 +305,7 @@ class DocumentOCRToTextConverter:
             include_image_descriptions=self.include_image_descriptions,
             prompt_variant=resolved_prompt_variant,
             allow_partial_ocr_failures=self.allow_partial_ocr_failures,
+            ocr_render_dpi=self.ocr_render_dpi,
         )
         result = fallback_converter.get_ocr(
             file_for_ocr=file_for_ocr,
@@ -551,7 +560,10 @@ class DocumentOCRToTextConverter:
 
             try:
                 # Convert page to image
-                pix = page.get_pixmap()
+                if self.ocr_render_dpi is None:
+                    pix = page.get_pixmap()
+                else:
+                    pix = page.get_pixmap(dpi=self.ocr_render_dpi, alpha=False)
                 pix.save(temp_image_path)
 
                 # Perform OCR on the page

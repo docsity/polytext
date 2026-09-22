@@ -47,6 +47,7 @@ class DocumentOCRLoader:
                  ocr_model: str | None = None,
                  include_image_descriptions: bool = False,
                  allow_partial_ocr_failures: bool = False,
+                 ocr_render_dpi: int | None = None,
                  **kwargs
                  ):
         """
@@ -86,6 +87,8 @@ class DocumentOCRLoader:
             allow_partial_ocr_failures (bool, optional): If True, pages that still
                 fail OCR after all retries are recorded inline instead of aborting
                 the whole document extraction. Defaults to False.
+            ocr_render_dpi (int | None, optional): Render PDF pages at this DPI
+                before OCR. Defaults to the existing PyMuPDF rendering behavior.
             **kwargs:
                 max_output_tokens (int, optional): Maximum Gemini output tokens for
                     Google document OCR generation.
@@ -110,6 +113,7 @@ class DocumentOCRLoader:
         self.ocr_model = ocr_model
         self.include_image_descriptions = include_image_descriptions
         self.allow_partial_ocr_failures = allow_partial_ocr_failures
+        self.ocr_render_dpi = ocr_render_dpi
         self.max_output_tokens = kwargs.get("max_output_tokens")
 
         # Set up custom temp directory
@@ -277,6 +281,7 @@ class DocumentOCRLoader:
                 max_output_tokens=self.max_output_tokens,
                 include_image_descriptions=self.include_image_descriptions,
                 allow_partial_ocr_failures=self.allow_partial_ocr_failures,
+                ocr_render_dpi=self.ocr_render_dpi,
             )
 
         result_dict["type"] = self.type

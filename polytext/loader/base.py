@@ -92,6 +92,7 @@ class BaseLoader:
                  ocr_model: str = "gpt-5-mini", timeout_minutes: int | None = None,
                  include_image_descriptions: bool | None = None,
                  force_ocr: bool = False,
+                 ocr_render_dpi: int | None = None,
                  **kwargs):
         """
         Initialize the BaseLoader with cloud storage and LLM configurations.
@@ -112,6 +113,8 @@ class BaseLoader:
                 If None, defaults from OCR_INCLUDE_IMAGE_DESCRIPTIONS. Defaults to None.
             force_ocr (bool, optional): If True, supported document files are routed to
                 OCRLoader instead of the standard DocumentLoader. Defaults to False.
+            ocr_render_dpi (int | None, optional): Render document pages at this DPI
+                before OCR. Defaults to the existing renderer behavior.
              **kwargs: Additional keyword arguments to pass to the underlying loader or extraction logic.
                 - target_size (int, optional): Target file size in bytes. Defaults to 1MB
                 - source (str): Source of the document. Must be either "cloud" or "local"
@@ -136,6 +139,7 @@ class BaseLoader:
             else include_image_descriptions
         )
         self.force_ocr = force_ocr
+        self.ocr_render_dpi = ocr_render_dpi
         self.kwargs = kwargs
         self.target_size = kwargs.get("target_size", 1)
         self.source = kwargs.get("source", "cloud")
@@ -422,7 +426,7 @@ class BaseLoader:
             file_extension = file_extension.lower()
 
         if is_document_fallback:
-            return DocumentOCRLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, timeout_minutes=self.timeout_minutes, ocr_provider=self.provider, ocr_model=self.ocr_model, include_image_descriptions=self.include_image_descriptions, **kwargs)
+            return DocumentOCRLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, timeout_minutes=self.timeout_minutes, ocr_provider=self.provider, ocr_model=self.ocr_model, include_image_descriptions=self.include_image_descriptions, ocr_render_dpi=self.ocr_render_dpi, **kwargs)
 
         if file_extension in [".xml", ".xbrl"]:
             return XmlXbrlLoader(temp_dir=self.temp_dir, markdown_output=self.markdown_output, **kwargs)
@@ -458,6 +462,7 @@ class BaseLoader:
                         ocr_provider=self.provider,
                         ocr_model=self.ocr_model,
                         include_image_descriptions=self.include_image_descriptions,
+                        ocr_render_dpi=self.ocr_render_dpi,
                         **document_kwargs,
                     )
 

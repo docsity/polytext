@@ -88,8 +88,10 @@ class _FakePixmap:
 class _FakePage:
     def __init__(self, payload: bytes = b"fake-page-image"):
         self.payload = payload
+        self.pixmap_calls = []
 
-    def get_pixmap(self):
+    def get_pixmap(self, **kwargs):
+        self.pixmap_calls.append(kwargs)
         return _FakePixmap(payload=self.payload)
 
 
@@ -112,6 +114,44 @@ def _immediate_as_completed(futures):
 
 
 class TestOcrFallbacks(unittest.TestCase):
+    @patch("polytext.converter.document_ocr_to_text.genai.Client")
+    @patch("concurrent.futures.as_completed", side_effect=_immediate_as_completed)
+    @patch("concurrent.futures.ThreadPoolExecutor", _ImmediateExecutor)
+    @patch("fitz.open")
+    def test_document_ocr_renders_pages_at_requested_dpi(
+        self,
+        mock_fitz_open,
+        _mock_as_completed,
+        mock_client_cls,
+    ):
+        page = _FakePage()
+        mock_fitz_open.return_value = _FakePdf([page])
+        mock_client_cls.return_value = _FakeClient()
+
+        converter = DocumentOCRToTextConverter(ocr_render_dpi=200)
+        converter.get_document_ocr("dummy.pdf")
+
+        self.assertEqual(page.pixmap_calls, [{"dpi": 200, "alpha": False}])
+
+    @patch("polytext.converter.document_ocr_to_text.genai.Client")
+    @patch("concurrent.futures.as_completed", side_effect=_immediate_as_completed)
+    @patch("concurrent.futures.ThreadPoolExecutor", _ImmediateExecutor)
+    @patch("fitz.open")
+    def test_document_ocr_preserves_default_pixmap_rendering(
+        self,
+        mock_fitz_open,
+        _mock_as_completed,
+        mock_client_cls,
+    ):
+        page = _FakePage()
+        mock_fitz_open.return_value = _FakePdf([page])
+        mock_client_cls.return_value = _FakeClient()
+
+        converter = DocumentOCRToTextConverter()
+        converter.get_document_ocr("dummy.pdf")
+
+        self.assertEqual(page.pixmap_calls, [{}])
+
     def test_default_ocr_max_output_tokens_is_8192(self):
         converter = OCRToTextConverter()
         self.assertEqual(converter.max_output_tokens, 8192)
