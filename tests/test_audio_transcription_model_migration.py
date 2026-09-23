@@ -13,6 +13,8 @@ from polytext.converter.audio_to_text import (
     AUDIO_TO_MARKDOWN_PROMPT_IS_RAW,
     AUDIO_TO_PLAIN_TEXT_PROMPT,
     AudioToTextConverter,
+    detect_dominant_language,
+    find_suspicious_fallback_language_indices,
     normalize_no_human_speech_marker,
     transcribe_full_audio,
 )
@@ -82,6 +84,115 @@ class _FakeClient:
     def __init__(self, responses=None):
         self.files = _FakeFiles()
         self.models = _FakeModels(responses=responses)
+
+
+class TestFallbackLanguageValidation(unittest.TestCase):
+    @patch("polytext.converter.audio_to_text.detect")
+    def test_detect_dominant_language_aggregates_multiple_text_windows(self, mock_detect):
+        mock_detect.side_effect = [
+            {"lang": "it", "score": 0.96},
+            {"lang": "it", "score": 0.93},
+            {"lang": "en", "score": 0.60},
+        ]
+
+        text = " ".join(f"parola{i}" for i in range(120))
+
+        result = detect_dominant_language(text, max_windows=3, window_chars=120)
+
+        self.assertEqual(result["lang"], "it")
+        self.assertGreater(result["support"], 0.60)
+        self.assertEqual(result["windows"], 3)
+
+    @patch("polytext.converter.audio_to_text.detect_dominant_language")
+    def test_flags_internal_fallback_when_both_neighbours_agree(self, mock_detect):
+        mock_detect.side_effect = [
+            {"lang": "en", "score": 0.98, "support": 1.0, "windows": 3},
+            {"lang": "it", "score": 0.97, "support": 1.0, "windows": 3},
+            {"lang": "it", "score": 0.96, "support": 1.0, "windows": 3},
+        ]
+        transcripts = [
+            "testo italiano " * 60,
+            "unexpected English transcript " * 60,
+            "altro testo italiano " * 60,
+        ]
+        results = [
+            {"transcript": transcripts[0]},
+            {
+                "transcript": transcripts[1],
+                "adaptive_split": True,
+                "split_results": [
+                    {
+                        "transcript": transcripts[1],
+                        "fallback_from_model": "gemini-3.1-flash-lite",
+                    }
+                ],
+            },
+            {"transcript": transcripts[2]},
+        ]
+
+        suspicious = find_suspicious_fallback_language_indices(transcripts, results)
+
+        self.assertEqual(suspicious, [1])
+
+    @patch("polytext.converter.audio_to_text.detect_dominant_language")
+    def test_preserves_possible_multilingual_transition_when_neighbours_disagree(self, mock_detect):
+        mock_detect.side_effect = [
+            {"lang": "en", "score": 0.98, "support": 1.0, "windows": 3},
+            {"lang": "it", "score": 0.97, "support": 1.0, "windows": 3},
+            {"lang": "fr", "score": 0.96, "support": 1.0, "windows": 3},
+        ]
+        transcripts = ["italiano " * 60, "english " * 60, "francais " * 60]
+        results = [
+            {"transcript": transcripts[0]},
+            {"transcript": transcripts[1], "fallback_to_model": "gemini-3.5-flash-lite"},
+            {"transcript": transcripts[2]},
+        ]
+
+        suspicious = find_suspicious_fallback_language_indices(transcripts, results)
+
+        self.assertEqual(suspicious, [])
+
+    @patch(
+        "polytext.converter.audio_to_text.find_suspicious_fallback_language_indices",
+        return_value=[1],
+    )
+    def test_suspicious_fallback_is_retranscribed_with_adaptive_split(self, _mock_find):
+        converter = AudioToTextConverter()
+        chunks = [
+            {"file_path": "/tmp/chunk-0.wav"},
+            {"file_path": "/tmp/chunk-1.wav"},
+            {"file_path": "/tmp/chunk-2.wav"},
+        ]
+        transcripts = ["prima", "wrong English fallback", "dopo"]
+        results = [
+            {"transcript": "prima", "completion_tokens": 1, "prompt_tokens": 1},
+            {
+                "transcript": "wrong English fallback",
+                "completion_tokens": 2,
+                "prompt_tokens": 2,
+                "completion_model": "gemini-3.5-flash-lite",
+                "fallback_from_model": "gemini-3.1-flash-lite",
+            },
+            {"transcript": "dopo", "completion_tokens": 1, "prompt_tokens": 1},
+        ]
+        recovered = {
+            "transcript": "testo italiano recuperato",
+            "completion_tokens": 4,
+            "prompt_tokens": 3,
+            "completion_model": "gemini-3.1-flash-lite",
+        }
+
+        with patch.object(converter, "transcribe_audio_halves", return_value=recovered) as mock_split:
+            converter.recover_suspicious_fallback_languages(chunks, transcripts, results)
+
+        mock_split.assert_called_once_with("/tmp/chunk-1.wav")
+        self.assertEqual(transcripts[1], "testo italiano recuperato")
+        self.assertEqual(results[1]["transcript"], "testo italiano recuperato")
+        self.assertTrue(results[1]["language_validation_triggered"])
+        self.assertEqual(
+            results[1]["language_validation_original_model"],
+            "gemini-3.5-flash-lite",
+        )
 
 
 class _FlakyServerErrorModels:

@@ -26,6 +26,7 @@ botocore>=1.42.64
 # audio video processing
 ffmpeg-python==0.2.0
 pydub==0.25.1
+fast-langdetect==0.2.5
 
 # youtube
 youtube-transcript-api==1.0.3

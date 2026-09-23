@@ -15,6 +15,7 @@ from google.genai import errors as genai_errors
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from google.api_core import exceptions as google_exceptions
 from pydub import AudioSegment
+from fast_langdetect import detect
 
 from ..exceptions import EmptyDocument
 from ..prompts.transcription import (
@@ -73,6 +74,124 @@ AUDIO_PROMPT_VARIANT_DEFAULT = "default"
 AUDIO_PROMPT_VARIANT_NON_LITERAL_FALLBACK = "non_literal_fallback"
 AUDIO_RETRIABLE_OUTPUT_ERROR_CODES = (996, 997, 998, 999)
 NO_HUMAN_SPEECH_MARKER = "no human speech detected"
+AUDIO_LANGUAGE_VALIDATION_MIN_WORDS = int(os.getenv("AUDIO_LANGUAGE_VALIDATION_MIN_WORDS", "50"))
+AUDIO_LANGUAGE_VALIDATION_MIN_CONFIDENCE = float(
+    os.getenv("AUDIO_LANGUAGE_VALIDATION_MIN_CONFIDENCE", "0.80")
+)
+AUDIO_LANGUAGE_VALIDATION_MIN_SUPPORT = float(
+    os.getenv("AUDIO_LANGUAGE_VALIDATION_MIN_SUPPORT", "0.67")
+)
+
+
+def _normalize_language_detection(result) -> tuple[str, float]:
+    if isinstance(result, list):
+        result = result[0] if result else {}
+    if not isinstance(result, dict):
+        return "", 0.0
+    language = str(result.get("lang", "")).lower().split("-")[0]
+    return language, float(result.get("score", 0.0) or 0.0)
+
+
+def detect_dominant_language(
+        text: str,
+        max_windows: int = 5,
+        window_chars: int = 160,
+) -> dict:
+    """Detect the dominant language over multiple short, evenly spaced text windows."""
+    normalized_text = re.sub(r"\s+", " ", text or "").strip()
+    if not normalized_text:
+        return {"lang": "", "score": 0.0, "support": 0.0, "windows": 0}
+
+    if len(normalized_text) <= window_chars:
+        samples = [normalized_text]
+    else:
+        last_start = len(normalized_text) - window_chars
+        sample_count = min(max_windows, max(2, len(normalized_text) // window_chars))
+        starts = {
+            round(index * last_start / (sample_count - 1))
+            for index in range(sample_count)
+        }
+        samples = [normalized_text[start:start + window_chars] for start in sorted(starts)]
+
+    language_scores = {}
+    language_counts = {}
+    valid_windows = 0
+    for sample in samples:
+        try:
+            detected = detect(sample, low_memory=True)
+        except TypeError:
+            # fast-langdetect >= 1.0 uses model/k instead of low_memory.
+            detected = detect(sample, model="lite", k=1)
+        except Exception:
+            logger.exception("Language detection failed for an audio transcript window")
+            continue
+
+        language, score = _normalize_language_detection(detected)
+        if not language:
+            continue
+        valid_windows += 1
+        language_scores[language] = language_scores.get(language, 0.0) + score
+        language_counts[language] = language_counts.get(language, 0) + 1
+
+    if not valid_windows:
+        return {"lang": "", "score": 0.0, "support": 0.0, "windows": 0}
+
+    dominant_language = max(language_scores, key=language_scores.get)
+    count = language_counts[dominant_language]
+    return {
+        "lang": dominant_language,
+        "score": language_scores[dominant_language] / count,
+        "support": count / valid_windows,
+        "windows": valid_windows,
+    }
+
+
+def find_suspicious_fallback_language_indices(
+        transcripts: list[str],
+        chunk_results: list[dict | None],
+) -> list[int]:
+    """Find internal fallback chunks whose language conflicts with two agreeing neighbours."""
+    suspicious_indices = []
+
+    def has_fallback(result: dict | None) -> bool:
+        if not result:
+            return False
+        if result.get("fallback_from_model") or result.get("fallback_to_model"):
+            return True
+        return any(has_fallback(item) for item in result.get("split_results", []))
+
+    for index in range(1, len(transcripts) - 1):
+        result = chunk_results[index] or {}
+        if not has_fallback(result):
+            continue
+
+        text = transcripts[index]
+        if len(re.findall(r"\b\w+\b", text, flags=re.UNICODE)) < AUDIO_LANGUAGE_VALIDATION_MIN_WORDS:
+            continue
+
+        previous_result = chunk_results[index - 1] or {}
+        next_result = chunk_results[index + 1] or {}
+        if has_fallback(previous_result) or has_fallback(next_result):
+            continue
+
+        candidate_language = detect_dominant_language(text)
+        previous_language = detect_dominant_language(transcripts[index - 1])
+        next_language = detect_dominant_language(transcripts[index + 1])
+        profiles = (candidate_language, previous_language, next_language)
+        if any(
+            profile["score"] < AUDIO_LANGUAGE_VALIDATION_MIN_CONFIDENCE
+            or profile["support"] < AUDIO_LANGUAGE_VALIDATION_MIN_SUPPORT
+            for profile in profiles
+        ):
+            continue
+
+        if (
+            previous_language["lang"] == next_language["lang"]
+            and candidate_language["lang"] != previous_language["lang"]
+        ):
+            suspicious_indices.append(index)
+
+    return suspicious_indices
 
 
 def normalize_no_human_speech_marker(text: str) -> tuple[str, bool]:
@@ -782,6 +901,41 @@ class AudioToTextConverter:
         transcript_dict = self.transcribe_audio(chunk["file_path"])
         return index, transcript_dict
 
+    def recover_suspicious_fallback_languages(
+            self,
+            chunks: list[dict],
+            transcript_chunks: list[str],
+            chunk_results: list[dict | None],
+    ) -> None:
+        """Re-transcribe suspicious fallback chunks in smaller parts, in place."""
+        suspicious_indices = find_suspicious_fallback_language_indices(
+            transcript_chunks,
+            chunk_results,
+        )
+        for index in suspicious_indices:
+            original_result = chunk_results[index] or {}
+            logger.warning(
+                "Fallback transcript language conflicts with both neighbouring chunks; "
+                "re-transcribing chunk %s with adaptive split",
+                index + 1,
+            )
+            try:
+                recovered_result = self.transcribe_audio_halves(chunks[index]["file_path"])
+            except Exception:
+                logger.exception(
+                    "Language-based recovery failed for chunk %s; preserving the original transcript",
+                    index + 1,
+                )
+                continue
+
+            recovered_result["language_validation_triggered"] = True
+            recovered_result["language_validation_original_model"] = original_result.get(
+                "completion_model"
+            )
+            transcript_chunks[index] = recovered_result["transcript"]
+            chunks[index]["transcript"] = recovered_result["transcript"]
+            chunk_results[index] = recovered_result
+
     def format_audio_output_text(self, text: str) -> str:
         return add_line_break_after_each_sentence(text)
 
@@ -869,15 +1023,19 @@ class AudioToTextConverter:
             }
 
             # Process completed transcriptions in order of completion
-            completion_tokens = 0
-            prompt_tokens = 0
             for future in as_completed(future_to_chunk):
                 index, transcript_dict = future.result()
                 chunks[index]["transcript"] = transcript_dict["transcript"]
                 transcript_chunks[index] = transcript_dict["transcript"]
                 chunk_results[index] = transcript_dict
-                completion_tokens += transcript_dict["completion_tokens"]
-                prompt_tokens += transcript_dict["prompt_tokens"]
+
+        self.recover_suspicious_fallback_languages(
+            chunks,
+            transcript_chunks,
+            chunk_results,
+        )
+        completion_tokens = sum(result["completion_tokens"] for result in chunk_results)
+        prompt_tokens = sum(result["prompt_tokens"] for result in chunk_results)
 
         text_merger = TextMerger(llm_api_key=self.llm_api_key)
         # Merge all transcripts
