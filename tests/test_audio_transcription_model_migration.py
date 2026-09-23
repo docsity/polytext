@@ -1,6 +1,7 @@
 import unittest
 import tempfile
 import os
+import wave
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 from pydub import AudioSegment
@@ -116,7 +117,10 @@ class TestFallbackLanguageValidation(unittest.TestCase):
             "altro testo italiano " * 60,
         ]
         results = [
-            {"transcript": transcripts[0]},
+            {
+                "transcript": transcripts[0],
+                "fallback_from_model": "gemini-3.1-flash-lite",
+            },
             {
                 "transcript": transcripts[1],
                 "adaptive_split": True,
@@ -127,7 +131,10 @@ class TestFallbackLanguageValidation(unittest.TestCase):
                     }
                 ],
             },
-            {"transcript": transcripts[2]},
+            {
+                "transcript": transcripts[2],
+                "fallback_to_model": "gemini-3.5-flash-lite",
+            },
         ]
 
         suspicious = find_suspicious_fallback_language_indices(transcripts, results)
@@ -151,6 +158,33 @@ class TestFallbackLanguageValidation(unittest.TestCase):
         suspicious = find_suspicious_fallback_language_indices(transcripts, results)
 
         self.assertEqual(suspicious, [])
+
+    @patch("polytext.converter.audio_to_text.detect_dominant_language")
+    def test_flags_fallback_with_two_confident_foreign_windows(self, mock_detect):
+        mock_detect.side_effect = [
+            {
+                "lang": "it",
+                "score": 0.99,
+                "support": 0.6,
+                "windows": 5,
+                "language_windows": {
+                    "it": {"windows": 3, "score": 0.99},
+                    "en": {"windows": 2, "score": 0.95},
+                },
+            },
+            {"lang": "it", "score": 0.98, "support": 1.0, "windows": 5},
+            {"lang": "it", "score": 0.97, "support": 1.0, "windows": 5},
+        ]
+        transcripts = ["italiano " * 60, "testo misto " * 60, "italiano " * 60]
+        results = [
+            {"transcript": transcripts[0]},
+            {"transcript": transcripts[1], "fallback_to_model": "gemini-3.5-flash-lite"},
+            {"transcript": transcripts[2]},
+        ]
+
+        suspicious = find_suspicious_fallback_language_indices(transcripts, results)
+
+        self.assertEqual(suspicious, [1])
 
     @patch(
         "polytext.converter.audio_to_text.find_suspicious_fallback_language_indices",
@@ -566,6 +600,20 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
         audio_part = fake_client.models.generate_content_contents[2]
         self.assertEqual(audio_part.inline_data.mime_type, "audio/aac")
 
+    @patch("polytext.converter.audio_to_text.genai.Client")
+    def test_inline_wav_uses_gemini_supported_mime_type(self, mock_client_cls):
+        fake_client = _FakeClient()
+        mock_client_cls.return_value = fake_client
+
+        converter = AudioToTextConverter()
+        with tempfile.NamedTemporaryFile(suffix=".wav") as temp_audio:
+            temp_audio.write(b"fake-audio")
+            temp_audio.flush()
+            converter.transcribe_audio(temp_audio.name)
+
+        audio_part = fake_client.models.generate_content_contents[2]
+        self.assertEqual(audio_part.inline_data.mime_type, "audio/wav")
+
     @patch("retry.api.time.sleep")
     def test_does_not_retry_genai_client_error_for_audio_transcription(self, _mock_sleep):
         fake_client = _ClientErrorClient()
@@ -724,10 +772,18 @@ class TestAudioTranscriptionModelMigration(unittest.TestCase):
         with tempfile.NamedTemporaryFile(suffix=".mp3") as source_audio:
             AudioSegment.silent(duration=10_000).export(source_audio.name, format="mp3").close()
             converter = AudioToTextConverter()
+            def transcribe_split(split_path, temperature=0.0):
+                self.assertTrue(split_path.endswith(".wav"))
+                with wave.open(split_path, "rb") as split_audio:
+                    self.assertEqual(split_audio.getframerate(), 16000)
+                    self.assertEqual(split_audio.getnchannels(), 1)
+                    self.assertEqual(split_audio.getsampwidth(), 2)
+                return split_responses.pop(0)
+
             with patch.object(
                 AudioToTextConverter,
                 "transcribe_audio",
-                side_effect=split_responses,
+                side_effect=transcribe_split,
             ) as mock_transcribe:
                 result = converter.transcribe_audio_halves(source_audio.name)
 

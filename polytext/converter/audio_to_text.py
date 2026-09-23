@@ -81,6 +81,9 @@ AUDIO_LANGUAGE_VALIDATION_MIN_CONFIDENCE = float(
 AUDIO_LANGUAGE_VALIDATION_MIN_SUPPORT = float(
     os.getenv("AUDIO_LANGUAGE_VALIDATION_MIN_SUPPORT", "0.67")
 )
+AUDIO_LANGUAGE_VALIDATION_MIN_FOREIGN_WINDOWS = int(
+    os.getenv("AUDIO_LANGUAGE_VALIDATION_MIN_FOREIGN_WINDOWS", "2")
+)
 
 
 def _normalize_language_detection(result) -> tuple[str, float]:
@@ -100,7 +103,13 @@ def detect_dominant_language(
     """Detect the dominant language over multiple short, evenly spaced text windows."""
     normalized_text = re.sub(r"\s+", " ", text or "").strip()
     if not normalized_text:
-        return {"lang": "", "score": 0.0, "support": 0.0, "windows": 0}
+        return {
+            "lang": "",
+            "score": 0.0,
+            "support": 0.0,
+            "windows": 0,
+            "language_windows": {},
+        }
 
     if len(normalized_text) <= window_chars:
         samples = [normalized_text]
@@ -134,7 +143,13 @@ def detect_dominant_language(
         language_counts[language] = language_counts.get(language, 0) + 1
 
     if not valid_windows:
-        return {"lang": "", "score": 0.0, "support": 0.0, "windows": 0}
+        return {
+            "lang": "",
+            "score": 0.0,
+            "support": 0.0,
+            "windows": 0,
+            "language_windows": {},
+        }
 
     dominant_language = max(language_scores, key=language_scores.get)
     count = language_counts[dominant_language]
@@ -143,6 +158,13 @@ def detect_dominant_language(
         "score": language_scores[dominant_language] / count,
         "support": count / valid_windows,
         "windows": valid_windows,
+        "language_windows": {
+            language: {
+                "windows": language_counts[language],
+                "score": language_scores[language] / language_counts[language],
+            }
+            for language in language_counts
+        },
     }
 
 
@@ -152,6 +174,7 @@ def find_suspicious_fallback_language_indices(
 ) -> list[int]:
     """Find internal fallback chunks whose language conflicts with two agreeing neighbours."""
     suspicious_indices = []
+    logger.info("Starting fallback language validation for %s transcript chunks", len(transcripts))
 
     def has_fallback(result: dict | None) -> bool:
         if not result:
@@ -166,30 +189,82 @@ def find_suspicious_fallback_language_indices(
             continue
 
         text = transcripts[index]
-        if len(re.findall(r"\b\w+\b", text, flags=re.UNICODE)) < AUDIO_LANGUAGE_VALIDATION_MIN_WORDS:
-            continue
-
-        previous_result = chunk_results[index - 1] or {}
-        next_result = chunk_results[index + 1] or {}
-        if has_fallback(previous_result) or has_fallback(next_result):
+        word_count = len(re.findall(r"\b\w+\b", text, flags=re.UNICODE))
+        if word_count < AUDIO_LANGUAGE_VALIDATION_MIN_WORDS:
+            logger.info(
+                "Skipping language validation for fallback chunk %s: only %s words (minimum %s)",
+                index + 1,
+                word_count,
+                AUDIO_LANGUAGE_VALIDATION_MIN_WORDS,
+            )
             continue
 
         candidate_language = detect_dominant_language(text)
         previous_language = detect_dominant_language(transcripts[index - 1])
         next_language = detect_dominant_language(transcripts[index + 1])
-        profiles = (candidate_language, previous_language, next_language)
+        logger.info(
+            "Language validation for fallback chunk %s: previous=%s, candidate=%s, next=%s",
+            index + 1,
+            previous_language,
+            candidate_language,
+            next_language,
+        )
+        neighbour_profiles = (previous_language, next_language)
         if any(
             profile["score"] < AUDIO_LANGUAGE_VALIDATION_MIN_CONFIDENCE
             or profile["support"] < AUDIO_LANGUAGE_VALIDATION_MIN_SUPPORT
-            for profile in profiles
+            for profile in neighbour_profiles
         ):
+            logger.info(
+                "Skipping language comparison for fallback chunk %s: neighbour confidence or support below threshold",
+                index + 1,
+            )
+            continue
+
+        if previous_language["lang"] != next_language["lang"]:
+            logger.info(
+                "Skipping language comparison for fallback chunk %s: neighbouring languages disagree",
+                index + 1,
+            )
+            continue
+
+        expected_language = previous_language["lang"]
+        foreign_windows = {
+            language: profile
+            for language, profile in candidate_language.get("language_windows", {}).items()
+            if (
+                language != expected_language
+                and profile["windows"] >= AUDIO_LANGUAGE_VALIDATION_MIN_FOREIGN_WINDOWS
+                and profile["score"] >= AUDIO_LANGUAGE_VALIDATION_MIN_CONFIDENCE
+            )
+        }
+        if foreign_windows:
+            logger.warning(
+                "Mixed-language anomaly detected for fallback chunk %s: expected %s, foreign windows=%s",
+                index + 1,
+                expected_language,
+                foreign_windows,
+            )
+            suspicious_indices.append(index)
             continue
 
         if (
-            previous_language["lang"] == next_language["lang"]
-            and candidate_language["lang"] != previous_language["lang"]
+            candidate_language["score"] >= AUDIO_LANGUAGE_VALIDATION_MIN_CONFIDENCE
+            and candidate_language["support"] >= AUDIO_LANGUAGE_VALIDATION_MIN_SUPPORT
+            and candidate_language["lang"] != expected_language
         ):
+            logger.warning(
+                "Language anomaly detected for fallback chunk %s: %s between two %s chunks",
+                index + 1,
+                candidate_language["lang"],
+                expected_language,
+            )
             suspicious_indices.append(index)
+        elif candidate_language["support"] < AUDIO_LANGUAGE_VALIDATION_MIN_SUPPORT:
+            logger.info(
+                "No actionable language anomaly for fallback chunk %s: mixed windows remain below thresholds",
+                index + 1,
+            )
 
     return suspicious_indices
 
