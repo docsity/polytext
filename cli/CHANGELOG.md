@@ -1,5 +1,9 @@
 
-1.0.23 (unreleased)
+1.0.24 (24/09/2026 10:00)
+-------------------------
+- fix(audio-to-text): detect and recover anomalous fallback translations
+
+1.0.23 (08/09/2026 11:00)
 -------------------------
 - add fairCopy command
 
