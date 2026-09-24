@@ -14,6 +14,8 @@ from google.genai import types
 from google.genai import errors as genai_errors
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from google.api_core import exceptions as google_exceptions
+from pydub import AudioSegment
+from fast_langdetect import detect
 
 from ..exceptions import EmptyDocument
 from ..prompts.transcription import (
@@ -25,13 +27,22 @@ from ..prompts.transcription import (
 )
 from ..processor.audio_chunker import AudioChunker
 from ..processor.text_merger import TextMerger
-from .gemini_quality_guards import extract_finish_reason, tail_has_excessive_repetition
+from .gemini_quality_guards import (
+    extract_finish_reason,
+    has_excessive_consecutive_word_repetition,
+    tail_has_excessive_repetition,
+)
 
 logger = logging.getLogger(__name__)
 
 SUPPORTED_MIME_TYPES = {
     'audio/x-aac', 'audio/flac', 'audio/mp3', 'audio/m4a', 'audio/mpeg',
-    'audio/mpga', 'audio/mp4', 'audio/opus', 'audio/pcm', 'audio/wav', 'audio/webm'
+    'audio/mpga', 'audio/mp4', 'audio/opus', 'audio/pcm', 'audio/wav', 'audio/x-wav', 'audio/webm'
+}
+
+GEMINI_AUDIO_MIME_ALIASES = {
+    'audio/x-aac': 'audio/aac',
+    'audio/x-wav': 'audio/wav',
 }
 
 INJECTION_GUARD_SYSTEM_INSTRUCTION = (
@@ -48,17 +59,214 @@ INJECTION_GUARD_SYSTEM_INSTRUCTION = (
 )
 
 AUDIO_MIN_OUTPUT_TOKENS = 500
+AUDIO_DEFAULT_MAX_OUTPUT_TOKENS = 4096
+AUDIO_MAX_ADAPTIVE_SPLIT_DEPTH = 1
+AUDIO_ADAPTIVE_SPLIT_OVERLAP_MS = 2000
+AUDIO_LONG_DURATION_THRESHOLD_MS = 80 * 60 * 1000
 AUDIO_TAIL_REPETITION_LINES = int(os.getenv("AUDIO_TAIL_REPETITION_LINES", "200"))
 AUDIO_TAIL_REPETITION_THRESHOLD = float(os.getenv("AUDIO_TAIL_REPETITION_THRESHOLD", "0.35"))
 AUDIO_FALLBACK_SOURCE_PATTERN = os.getenv("AUDIO_FALLBACK_SOURCE_PATTERN", "flash-lite")
-AUDIO_FALLBACK_MODEL = os.getenv("AUDIO_FALLBACK_MODEL", "gemini-3-flash-preview")
+AUDIO_FALLBACK_MODEL = os.getenv("AUDIO_FALLBACK_MODEL", "gemini-3.5-flash-lite")
 AUDIO_FALLBACK_TEMPERATURE = float(os.getenv("AUDIO_FALLBACK_TEMPERATURE", "1.0"))
 AUDIO_FINAL_FALLBACK_MODEL = os.getenv("AUDIO_FINAL_FALLBACK_MODEL", "gemini-3.5-flash")
 AUDIO_FILE_UPLOAD_THRESHOLD_BYTES = 20 * 1024 * 1024
 AUDIO_PROMPT_VARIANT_DEFAULT = "default"
 AUDIO_PROMPT_VARIANT_NON_LITERAL_FALLBACK = "non_literal_fallback"
-AUDIO_RETRIABLE_OUTPUT_ERROR_CODES = (996, 997, 999)
+AUDIO_RETRIABLE_OUTPUT_ERROR_CODES = (996, 997, 998, 999)
 NO_HUMAN_SPEECH_MARKER = "no human speech detected"
+AUDIO_LANGUAGE_VALIDATION_MIN_WORDS = int(os.getenv("AUDIO_LANGUAGE_VALIDATION_MIN_WORDS", "50"))
+AUDIO_LANGUAGE_VALIDATION_MIN_CONFIDENCE = float(
+    os.getenv("AUDIO_LANGUAGE_VALIDATION_MIN_CONFIDENCE", "0.80")
+)
+AUDIO_LANGUAGE_VALIDATION_MIN_SUPPORT = float(
+    os.getenv("AUDIO_LANGUAGE_VALIDATION_MIN_SUPPORT", "0.67")
+)
+AUDIO_LANGUAGE_VALIDATION_MIN_FOREIGN_WINDOWS = int(
+    os.getenv("AUDIO_LANGUAGE_VALIDATION_MIN_FOREIGN_WINDOWS", "2")
+)
+
+
+def _normalize_language_detection(result) -> tuple[str, float]:
+    if isinstance(result, list):
+        result = result[0] if result else {}
+    if not isinstance(result, dict):
+        return "", 0.0
+    language = str(result.get("lang", "")).lower().split("-")[0]
+    return language, float(result.get("score", 0.0) or 0.0)
+
+
+def detect_dominant_language(
+        text: str,
+        max_windows: int = 5,
+        window_chars: int = 160,
+) -> dict:
+    """Detect the dominant language over multiple short, evenly spaced text windows."""
+    normalized_text = re.sub(r"\s+", " ", text or "").strip()
+    if not normalized_text:
+        return {
+            "lang": "",
+            "score": 0.0,
+            "support": 0.0,
+            "windows": 0,
+            "language_windows": {},
+        }
+
+    if len(normalized_text) <= window_chars:
+        samples = [normalized_text]
+    else:
+        last_start = len(normalized_text) - window_chars
+        sample_count = min(max_windows, max(2, len(normalized_text) // window_chars))
+        starts = {
+            round(index * last_start / (sample_count - 1))
+            for index in range(sample_count)
+        }
+        samples = [normalized_text[start:start + window_chars] for start in sorted(starts)]
+
+    language_scores = {}
+    language_counts = {}
+    valid_windows = 0
+    for sample in samples:
+        try:
+            detected = detect(sample, low_memory=True)
+        except TypeError:
+            # fast-langdetect >= 1.0 uses model/k instead of low_memory.
+            detected = detect(sample, model="lite", k=1)
+        except Exception:
+            logger.exception("Language detection failed for an audio transcript window")
+            continue
+
+        language, score = _normalize_language_detection(detected)
+        if not language:
+            continue
+        valid_windows += 1
+        language_scores[language] = language_scores.get(language, 0.0) + score
+        language_counts[language] = language_counts.get(language, 0) + 1
+
+    if not valid_windows:
+        return {
+            "lang": "",
+            "score": 0.0,
+            "support": 0.0,
+            "windows": 0,
+            "language_windows": {},
+        }
+
+    dominant_language = max(language_scores, key=language_scores.get)
+    count = language_counts[dominant_language]
+    return {
+        "lang": dominant_language,
+        "score": language_scores[dominant_language] / count,
+        "support": count / valid_windows,
+        "windows": valid_windows,
+        "language_windows": {
+            language: {
+                "windows": language_counts[language],
+                "score": language_scores[language] / language_counts[language],
+            }
+            for language in language_counts
+        },
+    }
+
+
+def find_suspicious_fallback_language_indices(
+        transcripts: list[str],
+        chunk_results: list[dict | None],
+) -> list[int]:
+    """Find internal fallback chunks whose language conflicts with two agreeing neighbours."""
+    suspicious_indices = []
+    logger.info("Starting fallback language validation for %s transcript chunks", len(transcripts))
+
+    def has_fallback(result: dict | None) -> bool:
+        if not result:
+            return False
+        if result.get("fallback_from_model") or result.get("fallback_to_model"):
+            return True
+        return any(has_fallback(item) for item in result.get("split_results", []))
+
+    for index in range(1, len(transcripts) - 1):
+        result = chunk_results[index] or {}
+        if not has_fallback(result):
+            continue
+
+        text = transcripts[index]
+        word_count = len(re.findall(r"\b\w+\b", text, flags=re.UNICODE))
+        if word_count < AUDIO_LANGUAGE_VALIDATION_MIN_WORDS:
+            logger.info(
+                "Skipping language validation for fallback chunk %s: only %s words (minimum %s)",
+                index + 1,
+                word_count,
+                AUDIO_LANGUAGE_VALIDATION_MIN_WORDS,
+            )
+            continue
+
+        candidate_language = detect_dominant_language(text)
+        previous_language = detect_dominant_language(transcripts[index - 1])
+        next_language = detect_dominant_language(transcripts[index + 1])
+        logger.info(
+            "Language validation for fallback chunk %s: previous=%s, candidate=%s, next=%s",
+            index + 1,
+            previous_language,
+            candidate_language,
+            next_language,
+        )
+        neighbour_profiles = (previous_language, next_language)
+        if any(
+            profile["score"] < AUDIO_LANGUAGE_VALIDATION_MIN_CONFIDENCE
+            or profile["support"] < AUDIO_LANGUAGE_VALIDATION_MIN_SUPPORT
+            for profile in neighbour_profiles
+        ):
+            logger.info(
+                "Skipping language comparison for fallback chunk %s: neighbour confidence or support below threshold",
+                index + 1,
+            )
+            continue
+
+        if previous_language["lang"] != next_language["lang"]:
+            logger.info(
+                "Skipping language comparison for fallback chunk %s: neighbouring languages disagree",
+                index + 1,
+            )
+            continue
+
+        expected_language = previous_language["lang"]
+        foreign_windows = {
+            language: profile
+            for language, profile in candidate_language.get("language_windows", {}).items()
+            if (
+                language != expected_language
+                and profile["windows"] >= AUDIO_LANGUAGE_VALIDATION_MIN_FOREIGN_WINDOWS
+                and profile["score"] >= AUDIO_LANGUAGE_VALIDATION_MIN_CONFIDENCE
+            )
+        }
+        if foreign_windows:
+            logger.warning(
+                "Mixed-language anomaly detected for fallback chunk %s: expected %s, foreign windows=%s",
+                index + 1,
+                expected_language,
+                foreign_windows,
+            )
+            suspicious_indices.append(index)
+            continue
+
+        if (
+            candidate_language["score"] >= AUDIO_LANGUAGE_VALIDATION_MIN_CONFIDENCE
+            and candidate_language["support"] >= AUDIO_LANGUAGE_VALIDATION_MIN_SUPPORT
+            and candidate_language["lang"] != expected_language
+        ):
+            logger.warning(
+                "Language anomaly detected for fallback chunk %s: %s between two %s chunks",
+                index + 1,
+                candidate_language["lang"],
+                expected_language,
+            )
+            suspicious_indices.append(index)
+        elif candidate_language["support"] < AUDIO_LANGUAGE_VALIDATION_MIN_SUPPORT:
+            logger.info(
+                "No actionable language anomaly for fallback chunk %s: mixed windows remain below thresholds",
+                index + 1,
+            )
+
+    return suspicious_indices
 
 
 def normalize_no_human_speech_marker(text: str) -> tuple[str, bool]:
@@ -123,33 +331,32 @@ def create_ascii_safe_upload_copy(audio_file: str) -> tuple[str, str | None]:
 
 def compress_and_convert_audio(input_path: str, bitrate_quality: int = 9) -> str:
     """
-    Compress and convert an audio file to MP3 using ffmpeg.
+    Normalize an audio file to lossless 16 kHz mono WAV using ffmpeg.
 
     Args:
         input_path (str): Path to the original audio file
-        bitrate_quality (int, optional): Variable bitrate quality from 0-9 (9 being lowest). Defaults to 9
+        bitrate_quality (int, optional): Retained for backward compatibility; WAV output is lossless.
 
     Returns:
-        str: Path to the temporary compressed/converted MP3 file
+        str: Path to the temporary normalized WAV file
 
     Raises:
         RuntimeError: If FFmpeg compression/conversion fails
 
     Notes:
-        - Creates a temporary MP3 file that should be deleted after use
-        - Converts audio to mono and 16kHz sample rate for smaller file size
+        - Creates a temporary WAV file that should be deleted after use
+        - Converts audio to 16-bit PCM mono at 16kHz
         - Uses maximum available CPU threads for faster processing
     """
     # Create temporary file for audio output
-    fd, temp_audio_path = tempfile.mkstemp(suffix='.mp3')
+    fd, temp_audio_path = tempfile.mkstemp(suffix='.wav')
     os.close(fd)
 
-    logger.info(f"Compressing audio to bitrate quality: {bitrate_quality}")
+    logger.info("Normalizing audio to lossless 16 kHz mono WAV")
     try:
         ffmpeg.input(input_path).output(
             temp_audio_path,
-            q=bitrate_quality,  # Variable bitrate quality (0-9, 9 being lowest)
-            acodec='libmp3lame',
+            acodec='pcm_s16le',
             ac=1,  # Convert to mono
             ar=16000,  # Lower sample rate
             vn=None,
@@ -162,7 +369,7 @@ def compress_and_convert_audio(input_path: str, bitrate_quality: int = 9) -> str
             os.unlink(temp_audio_path)
         raise
 
-    logger.info(f"Successfully converted and compressed audio: {temp_audio_path}")
+    logger.info(f"Successfully normalized audio: {temp_audio_path}")
     return temp_audio_path
 
 
@@ -189,7 +396,7 @@ def transcribe_full_audio(audio_file, markdown_output: bool = False,
         bitrate_quality (int, optional): Variable bitrate quality from 0-9 (9 being lowest). Defaults to 9
         timeout_minutes (int, optional): Number of minutes to wait for a response. Defaults to None.
         max_llm_tokens (int, optional): Token budget used for audio chunk sizing. Defaults to 4250.
-        max_output_tokens (int | None, optional): Maximum Gemini output tokens. Defaults to `max_llm_tokens`.
+        max_output_tokens (int | None, optional): Maximum Gemini output tokens. Defaults to 4096.
         is_output_audio_raw (bool, optional): If True, use the raw Markdown audio prompt.
             If False, use the formatted Markdown audio prompt. Defaults to True.
 
@@ -211,6 +418,8 @@ class AudioToTextConverter:
                  max_output_tokens: int | None = None, temp_dir: str = "temp",
                  bitrate_quality: int = 9, timeout_minutes: int = None,
                  fallback_stage: int = 0,
+                 adaptive_split_depth: int = 0,
+                 long_audio_protections_enabled: bool = False,
                  prompt_variant: str = AUDIO_PROMPT_VARIANT_DEFAULT,
                  is_output_audio_raw: bool  = True):
         """
@@ -225,12 +434,14 @@ class AudioToTextConverter:
             llm_api_key (str, optional): Override API key for language model. Defaults to None.
             max_llm_tokens (int): Token budget used to size audio chunks. Defaults to 4250.
             max_output_tokens (int | None): Maximum number of output tokens for Gemini generation.
-                Defaults to `max_llm_tokens`.
+                Defaults to 4096.
             temp_dir (str): Directory for temporary files. Defaults to "temp".
             bitrate_quality (int, optional): Variable bitrate quality from 0-9 (9 being lowest). Defaults to 9
             timeout_minutes (int): Number of minutes to wait for a response.
             fallback_stage (int, optional): Internal retry stage used by fallback attempts.
                 Defaults to 0.
+            long_audio_protections_enabled (bool, optional): Apply stricter recovery rules inherited
+                from an original audio longer than 80 minutes. Defaults to False.
             prompt_variant (str, optional): Prompt variant used by this attempt.
                 Defaults to "default".
             is_output_audio_raw (bool, optional): If True, use the raw Markdown audio prompt.
@@ -247,12 +458,18 @@ class AudioToTextConverter:
         self.markdown_output = markdown_output
         self.llm_api_key = llm_api_key
         self.max_llm_tokens = max(max_llm_tokens, AUDIO_MIN_OUTPUT_TOKENS)
-        requested_output_tokens = self.max_llm_tokens if max_output_tokens is None else max_output_tokens
+        requested_output_tokens = (
+            AUDIO_DEFAULT_MAX_OUTPUT_TOKENS
+            if max_output_tokens is None
+            else max_output_tokens
+        )
         self.max_output_tokens = max(requested_output_tokens, AUDIO_MIN_OUTPUT_TOKENS)
         self.chunked_audio = False
         self.bitrate_quality = bitrate_quality
         self.timeout_minutes = timeout_minutes
         self.fallback_stage = fallback_stage
+        self.adaptive_split_depth = adaptive_split_depth
+        self.long_audio_protections_enabled = long_audio_protections_enabled
         self.prompt_variant = prompt_variant
         self.fallback_source_pattern = AUDIO_FALLBACK_SOURCE_PATTERN
         self.fallback_model = AUDIO_FALLBACK_MODEL
@@ -275,6 +492,9 @@ class AudioToTextConverter:
         if self.markdown_output:
             return AUDIO_TO_MARKDOWN_PROMPT
         return AUDIO_TO_PLAIN_TEXT_PROMPT
+
+    def set_long_audio_protections(self, duration_ms: int) -> None:
+        self.long_audio_protections_enabled = duration_ms > AUDIO_LONG_DURATION_THRESHOLD_MS
 
     def should_prompt_fallback_retry(self, error: EmptyDocument) -> bool:
         if self.fallback_stage != 0:
@@ -338,6 +558,8 @@ class AudioToTextConverter:
             bitrate_quality=self.bitrate_quality,
             timeout_minutes=self.timeout_minutes,
             fallback_stage=fallback_stage,
+            adaptive_split_depth=self.adaptive_split_depth,
+            long_audio_protections_enabled=self.long_audio_protections_enabled,
             prompt_variant=resolved_prompt_variant,
             is_output_audio_raw=self.is_output_audio_raw,
         )
@@ -353,10 +575,83 @@ class AudioToTextConverter:
         result.setdefault("fallback_to_prompt_variant", resolved_prompt_variant)
         return result
 
+    def transcribe_audio_halves(self, audio_file: str, temperature: float = 0.0) -> dict:
+        """Split one genuinely overlong chunk and transcribe both halves once."""
+        audio = AudioSegment.from_file(audio_file)
+        midpoint = len(audio) // 2
+        ranges = (
+            (0, min(len(audio), midpoint + AUDIO_ADAPTIVE_SPLIT_OVERLAP_MS)),
+            (max(0, midpoint - AUDIO_ADAPTIVE_SPLIT_OVERLAP_MS), len(audio)),
+        )
+        split_paths = []
+        split_results = []
+
+        try:
+            for start_ms, end_ms in ranges:
+                fd, split_path = tempfile.mkstemp(
+                    prefix="adaptive-audio-split-",
+                    suffix=".wav",
+                    dir=self.temp_dir,
+                )
+                os.close(fd)
+                split_paths.append(split_path)
+                (
+                    audio[start_ms:end_ms]
+                    .set_frame_rate(16000)
+                    .set_channels(1)
+                    .set_sample_width(2)
+                    .export(split_path, format="wav", codec="pcm_s16le")
+                    .close()
+                )
+
+                split_converter = AudioToTextConverter(
+                    transcription_model=self.transcription_model,
+                    transcription_model_provider=self.transcription_model_provider,
+                    k=self.k,
+                    min_matches=self.min_matches,
+                    markdown_output=self.markdown_output,
+                    llm_api_key=self.llm_api_key,
+                    max_llm_tokens=self.max_llm_tokens,
+                    max_output_tokens=self.max_output_tokens,
+                    temp_dir=self.temp_dir,
+                    bitrate_quality=self.bitrate_quality,
+                    timeout_minutes=self.timeout_minutes,
+                    fallback_stage=self.fallback_stage,
+                    adaptive_split_depth=self.adaptive_split_depth + 1,
+                    long_audio_protections_enabled=self.long_audio_protections_enabled,
+                    prompt_variant=self.prompt_variant,
+                    is_output_audio_raw=self.is_output_audio_raw,
+                )
+                split_results.append(
+                    split_converter.transcribe_audio(split_path, temperature=temperature)
+                )
+
+            merged_transcript = TextMerger(k=self.k, min_matches=self.min_matches).merge_texts(
+                split_results[0]["transcript"],
+                split_results[1]["transcript"],
+            )
+            return {
+                "transcript": merged_transcript,
+                "completion_tokens": sum(item["completion_tokens"] for item in split_results),
+                "prompt_tokens": sum(item["prompt_tokens"] for item in split_results),
+                "completion_model": self.transcription_model,
+                "completion_model_provider": self.transcription_model_provider,
+                "finish_reason": "ADAPTIVE_SPLIT",
+                "max_output_tokens": self.max_output_tokens,
+                "temperature": temperature,
+                "prompt_variant": self.prompt_variant,
+                "adaptive_split": True,
+                "split_results": split_results,
+            }
+        finally:
+            for split_path in split_paths:
+                if os.path.exists(split_path):
+                    os.remove(split_path)
+
     def build_config(self, output_budget: int, temperature: float = 0.0) -> types.GenerateContentConfig:
         return types.GenerateContentConfig(
             temperature=temperature,
-            thinking_config=types.ThinkingConfig(thinking_budget=0),
+            thinking_config=types.ThinkingConfig(thinking_level="minimal"),
             max_output_tokens=output_budget,
             system_instruction=INJECTION_GUARD_SYSTEM_INSTRUCTION,
             tools=[],
@@ -433,6 +728,7 @@ class AudioToTextConverter:
             except ValueError:
                 logger.exception("Unsupported audio format for %s", audio_file)
                 raise
+        mime_type = GEMINI_AUDIO_MIME_ALIASES.get(mime_type, mime_type)
 
         return client.models.generate_content(
             model=self.transcription_model,
@@ -455,7 +751,6 @@ class AudioToTextConverter:
                 google_exceptions.ServiceUnavailable,
                 google_exceptions.InternalServerError,
                 genai_errors.ServerError,
-                genai_errors.APIError,
         ),
         tries=8,
         delay=1,
@@ -518,6 +813,9 @@ class AudioToTextConverter:
                 tail_lines=AUDIO_TAIL_REPETITION_LINES,
                 threshold=AUDIO_TAIL_REPETITION_THRESHOLD,
             )
+            has_repetitive_word_loop = has_excessive_consecutive_word_repetition(
+                response_text,
+            )
             usage_metadata = getattr(response, "usage_metadata", None)
             completion_tokens = getattr(usage_metadata, "candidates_token_count", 0) or 0
             prompt_tokens = getattr(usage_metadata, "prompt_token_count", 0) or 0
@@ -532,18 +830,83 @@ class AudioToTextConverter:
                 )
 
             if finish_reason and "MAX_TOKENS" in finish_reason:
+                if (
+                    self.long_audio_protections_enabled
+                    and self.adaptive_split_depth < AUDIO_MAX_ADAPTIVE_SPLIT_DEPTH
+                ):
+                    logger.info(
+                        "Splitting long-audio chunk before fallback after MAX_TOKENS response: %s",
+                        audio_file,
+                    )
+                    return self.transcribe_audio_halves(audio_file, temperature=temperature)
+                if has_repetitive_tail or has_repetitive_word_loop:
+                    raise EmptyDocument(
+                        message=f"Transcript discarded because repetitive output reached max tokens for audio: {audio_file}",
+                        code=997,
+                    )
+                if self.adaptive_split_depth < AUDIO_MAX_ADAPTIVE_SPLIT_DEPTH:
+                    logger.info(
+                        "Splitting audio chunk after non-repetitive MAX_TOKENS response: %s",
+                        audio_file,
+                    )
+                    return self.transcribe_audio_halves(audio_file, temperature=temperature)
                 raise EmptyDocument(
                     message=f"Transcript truncated because max output tokens were reached for audio: {audio_file}",
                     code=999,
                 )
 
             if has_repetitive_tail:
+                if (
+                    self.long_audio_protections_enabled
+                    and self.adaptive_split_depth < AUDIO_MAX_ADAPTIVE_SPLIT_DEPTH
+                ):
+                    logger.info(
+                        "Splitting long-audio chunk before fallback after repetitive tail: %s",
+                        audio_file,
+                    )
+                    return self.transcribe_audio_halves(audio_file, temperature=temperature)
                 raise EmptyDocument(
                     message=f"Transcript discarded because repetitive tail was detected for audio: {audio_file}",
                     code=997,
                 )
 
+            if has_repetitive_word_loop:
+                if (
+                    self.long_audio_protections_enabled
+                    and self.adaptive_split_depth < AUDIO_MAX_ADAPTIVE_SPLIT_DEPTH
+                ):
+                    logger.info(
+                        "Splitting long-audio chunk before fallback after repetitive word loop: %s",
+                        audio_file,
+                    )
+                    return self.transcribe_audio_halves(audio_file, temperature=temperature)
+                raise EmptyDocument(
+                    message=f"Transcript discarded because repetitive word loop was detected for audio: {audio_file}",
+                    code=997,
+                )
+
             response_text, marker_only = normalize_no_human_speech_marker(response_text)
+
+            is_insignificant_stop = (
+                finish_reason
+                and "STOP" in finish_reason
+                and (
+                    not response_text.strip()
+                    or (
+                        completion_tokens <= 4
+                        and len(response_text.split()) <= 2
+                    )
+                )
+            )
+            if (
+                self.long_audio_protections_enabled
+                and not marker_only
+                and is_insignificant_stop
+            ):
+                raise EmptyDocument(
+                    message=f"Transcript discarded because STOP returned empty or insignificant output for audio: {audio_file}",
+                    code=998,
+                )
 
             response_dict = {
                 "transcript": "" if marker_only else response_text,
@@ -562,6 +925,24 @@ class AudioToTextConverter:
             )
             return response_dict
         except EmptyDocument as e:
+            if (
+                e.code == 999
+                and self.adaptive_split_depth >= AUDIO_MAX_ADAPTIVE_SPLIT_DEPTH
+                and self.fallback_stage == 0
+                and self.transcription_model != self.fallback_model
+            ):
+                return self.run_fallback(
+                    audio_file=audio_file,
+                    reason=e.message,
+                    fallback_model=self.fallback_model,
+                    fallback_temperature=self.fallback_temperature,
+                    fallback_stage=2 if self.markdown_output else 1,
+                    prompt_variant=(
+                        AUDIO_PROMPT_VARIANT_NON_LITERAL_FALLBACK
+                        if self.markdown_output
+                        else self.prompt_variant
+                    ),
+                )
             if self.should_prompt_fallback_retry(e):
                 return self.run_fallback(
                     audio_file=audio_file,
@@ -594,6 +975,41 @@ class AudioToTextConverter:
         logger.info(f"Transcribing chunk {index + 1}...")
         transcript_dict = self.transcribe_audio(chunk["file_path"])
         return index, transcript_dict
+
+    def recover_suspicious_fallback_languages(
+            self,
+            chunks: list[dict],
+            transcript_chunks: list[str],
+            chunk_results: list[dict | None],
+    ) -> None:
+        """Re-transcribe suspicious fallback chunks in smaller parts, in place."""
+        suspicious_indices = find_suspicious_fallback_language_indices(
+            transcript_chunks,
+            chunk_results,
+        )
+        for index in suspicious_indices:
+            original_result = chunk_results[index] or {}
+            logger.warning(
+                "Fallback transcript language conflicts with both neighbouring chunks; "
+                "re-transcribing chunk %s with adaptive split",
+                index + 1,
+            )
+            try:
+                recovered_result = self.transcribe_audio_halves(chunks[index]["file_path"])
+            except Exception:
+                logger.exception(
+                    "Language-based recovery failed for chunk %s; preserving the original transcript",
+                    index + 1,
+                )
+                continue
+
+            recovered_result["language_validation_triggered"] = True
+            recovered_result["language_validation_original_model"] = original_result.get(
+                "completion_model"
+            )
+            transcript_chunks[index] = recovered_result["transcript"]
+            chunks[index]["transcript"] = recovered_result["transcript"]
+            chunk_results[index] = recovered_result
 
     def format_audio_output_text(self, text: str) -> str:
         return add_line_break_after_each_sentence(text)
@@ -654,6 +1070,13 @@ class AudioToTextConverter:
         # Create chunker and extract chunks
         logger.info("Creating AudioChunker instance...")
         chunker = AudioChunker(used_file, max_llm_tokens=self.max_llm_tokens)
+        self.set_long_audio_protections(chunker.duration_ms)
+        logger.info(
+            "Long-audio transcription protections enabled: %s (duration: %sms, threshold: %sms)",
+            self.long_audio_protections_enabled,
+            chunker.duration_ms,
+            AUDIO_LONG_DURATION_THRESHOLD_MS,
+        )
         chunks = chunker.extract_chunks()
 
         logger.info(f"chunks: {chunks}")
@@ -675,15 +1098,19 @@ class AudioToTextConverter:
             }
 
             # Process completed transcriptions in order of completion
-            completion_tokens = 0
-            prompt_tokens = 0
             for future in as_completed(future_to_chunk):
                 index, transcript_dict = future.result()
                 chunks[index]["transcript"] = transcript_dict["transcript"]
                 transcript_chunks[index] = transcript_dict["transcript"]
                 chunk_results[index] = transcript_dict
-                completion_tokens += transcript_dict["completion_tokens"]
-                prompt_tokens += transcript_dict["prompt_tokens"]
+
+        self.recover_suspicious_fallback_languages(
+            chunks,
+            transcript_chunks,
+            chunk_results,
+        )
+        completion_tokens = sum(result["completion_tokens"] for result in chunk_results)
+        prompt_tokens = sum(result["prompt_tokens"] for result in chunk_results)
 
         text_merger = TextMerger(llm_api_key=self.llm_api_key)
         # Merge all transcripts

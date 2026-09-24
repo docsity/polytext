@@ -12,7 +12,7 @@ def convert_video_to_audio(video_file: str , bitrate_quality: int =9) -> str:
 
     Args:
         video_file (str): Path to the video file.
-        bitrate_quality (int, optional): Variable bitrate quality from 0-9 (9 being lowest). Defaults to 9.
+        bitrate_quality (int, optional): Retained for backward compatibility; WAV output is lossless.
 
     Returns:
         str: Path to the converted audio file.
@@ -22,12 +22,12 @@ def convert_video_to_audio(video_file: str , bitrate_quality: int =9) -> str:
         Exception: If any other error occurs during conversion
     """
 
-    logger.info(f"Converting video to audio with bitrate quality {bitrate_quality}.")
+    logger.info("Converting video to lossless 16 kHz mono WAV.")
 
     temp_audio_path = None
     try:
         # Create temporary file for audio output
-        fd, temp_audio_path = tempfile.mkstemp(suffix='.mp3')
+        fd, temp_audio_path = tempfile.mkstemp(suffix='.wav')
         os.close(fd)
 
         # Simple efficient pipeline
@@ -35,9 +35,7 @@ def convert_video_to_audio(video_file: str , bitrate_quality: int =9) -> str:
             ffmpeg
             .input(video_file)
             .output(temp_audio_path,
-                    acodec='libmp3lame',
-                    # ab='64k',
-                    q=bitrate_quality,  # Variable bitrate quality (0-9, 9 being lowest)
+                    acodec='pcm_s16le',
                     ac=1,  # Convert to mono
                     ar=16000,  # Lower sample rate
                     vn=None,

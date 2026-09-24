@@ -37,6 +37,14 @@ def has_consecutive_repetition(items: list[str], min_run_length: int = 3) -> boo
     return False
 
 
+def has_excessive_consecutive_word_repetition(
+    text: str,
+    min_run_length: int = 12,
+) -> bool:
+    words = re.findall(r"\b\w+\b", (text or "").casefold())
+    return has_consecutive_repetition(words, min_run_length=min_run_length)
+
+
 def tail_has_excessive_repetition(
     text: str,
     tail_lines: int,

@@ -88,8 +88,10 @@ class _FakePixmap:
 class _FakePage:
     def __init__(self, payload: bytes = b"fake-page-image"):
         self.payload = payload
+        self.pixmap_calls = []
 
-    def get_pixmap(self):
+    def get_pixmap(self, **kwargs):
+        self.pixmap_calls.append(kwargs)
         return _FakePixmap(payload=self.payload)
 
 
@@ -112,6 +114,44 @@ def _immediate_as_completed(futures):
 
 
 class TestOcrFallbacks(unittest.TestCase):
+    @patch("polytext.converter.document_ocr_to_text.genai.Client")
+    @patch("concurrent.futures.as_completed", side_effect=_immediate_as_completed)
+    @patch("concurrent.futures.ThreadPoolExecutor", _ImmediateExecutor)
+    @patch("fitz.open")
+    def test_document_ocr_renders_pages_at_requested_dpi(
+        self,
+        mock_fitz_open,
+        _mock_as_completed,
+        mock_client_cls,
+    ):
+        page = _FakePage()
+        mock_fitz_open.return_value = _FakePdf([page])
+        mock_client_cls.return_value = _FakeClient()
+
+        converter = DocumentOCRToTextConverter(ocr_render_dpi=200)
+        converter.get_document_ocr("dummy.pdf")
+
+        self.assertEqual(page.pixmap_calls, [{"dpi": 200, "alpha": False}])
+
+    @patch("polytext.converter.document_ocr_to_text.genai.Client")
+    @patch("concurrent.futures.as_completed", side_effect=_immediate_as_completed)
+    @patch("concurrent.futures.ThreadPoolExecutor", _ImmediateExecutor)
+    @patch("fitz.open")
+    def test_document_ocr_preserves_default_pixmap_rendering(
+        self,
+        mock_fitz_open,
+        _mock_as_completed,
+        mock_client_cls,
+    ):
+        page = _FakePage()
+        mock_fitz_open.return_value = _FakePdf([page])
+        mock_client_cls.return_value = _FakeClient()
+
+        converter = DocumentOCRToTextConverter()
+        converter.get_document_ocr("dummy.pdf")
+
+        self.assertEqual(page.pixmap_calls, [{}])
+
     def test_default_ocr_max_output_tokens_is_8192(self):
         converter = OCRToTextConverter()
         self.assertEqual(converter.max_output_tokens, 8192)
@@ -149,6 +189,38 @@ class TestOcrFallbacks(unittest.TestCase):
         self.assertEqual(result["text"], "ocr text")
         self.assertEqual(converter.max_output_tokens, 3000)
         self.assertEqual(fake_client.models.generate_content_configs[-1].max_output_tokens, 3000)
+
+    @patch("polytext.converter.document_ocr_to_text.genai.Client")
+    def test_plain_text_document_ocr_uses_model_fallback_after_repetitive_tail(self, mock_client_cls):
+        repetitive_text = "\n".join(["Repeated OCR tail."] * 6)
+        fake_client = _FakeClient(
+            responses=[
+                _make_response(repetitive_text, finish_reason="STOP"),
+                _make_response(repetitive_text, finish_reason="STOP"),
+                _make_response("clean model fallback text", finish_reason="STOP"),
+            ]
+        )
+        mock_client_cls.return_value = fake_client
+
+        converter = DocumentOCRToTextConverter(
+            ocr_model="gemini-3.1-flash-lite-preview",
+            markdown_output=False,
+        )
+        with tempfile.NamedTemporaryFile(suffix=".png") as temp_image:
+            temp_image.write(b"fake-image")
+            temp_image.flush()
+            result = converter.get_ocr(temp_image.name)
+
+        self.assertEqual(result["text"], "clean model fallback text")
+        self.assertEqual(
+            fake_client.models.generate_content_models,
+            [
+                "gemini-3.1-flash-lite-preview",
+                "gemini-3.1-flash-lite-preview",
+                "gemini-3-flash-preview",
+            ],
+        )
+        self.assertEqual(fake_client.models.generate_content_temperatures, [0.0, 0.0, 1.0])
 
     @patch("polytext.converter.ocr_to_text.genai.Client")
     def test_ocr_recitation_retries_with_non_literal_prompt_before_fallback_model(self, mock_client_cls):
