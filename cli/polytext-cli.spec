@@ -16,9 +16,8 @@ a = Analysis(
     ],
     
     # File di dati da includere (equivalente a --add-data)
-    # Usiamo la funzione helper di PyInstaller per trovare automaticamente i dati di 'magika'.
-    # Questo è più robusto rispetto a un percorso hard-coded.
-    datas=collect_data_files('magika', include_py_files=True),
+    # Concateniamo i dati di magika e fast_langdetect
+    datas=collect_data_files('magika', include_py_files=True) + collect_data_files('fast_langdetect'),
     
     # Import nascosti che PyInstaller non rileva automaticamente (equivalente a --hidden-import)
     hiddenimports=['audioop', 'markdown_to_json'],
