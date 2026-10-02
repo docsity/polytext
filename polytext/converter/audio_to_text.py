@@ -63,6 +63,8 @@ AUDIO_DEFAULT_MAX_OUTPUT_TOKENS = 4096
 AUDIO_MAX_ADAPTIVE_SPLIT_DEPTH = 1
 AUDIO_ADAPTIVE_SPLIT_OVERLAP_MS = 2000
 AUDIO_LONG_DURATION_THRESHOLD_MS = 80 * 60 * 1000
+AUDIO_LOW_TEXT_THRESHOLD_WORDS_PER_MINUTE = 20
+AUDIO_LOW_TEXT_MIN_DURATION_MS = 60_000
 AUDIO_TAIL_REPETITION_LINES = int(os.getenv("AUDIO_TAIL_REPETITION_LINES", "200"))
 AUDIO_TAIL_REPETITION_THRESHOLD = float(os.getenv("AUDIO_TAIL_REPETITION_THRESHOLD", "0.35"))
 AUDIO_FALLBACK_SOURCE_PATTERN = os.getenv("AUDIO_FALLBACK_SOURCE_PATTERN", "flash-lite")
@@ -282,6 +284,37 @@ def normalize_no_human_speech_marker(text: str) -> tuple[str, bool]:
     cleaned_text = re.sub(r"(?i)\bno human speech detected\b", "", cleaned_text)
     cleaned_text = re.sub(r"\n{3,}", "\n\n", cleaned_text).strip()
     return cleaned_text, False
+
+
+def summarize_audio_chunk_quality(chunks: list[dict], transcripts: list[str]) -> dict:
+    """Report empty and unusually short transcripts without discarding any text.
+
+    Indices are one-based. Short audio chunks are excluded from the low-text
+    count because a brief spoken phrase can be a complete transcription.
+    """
+    empty_indices = []
+    low_text_indices = []
+    for index, (chunk, transcript) in enumerate(zip(chunks, transcripts), start=1):
+        word_count = len(transcript.split())
+        if word_count == 0:
+            empty_indices.append(index)
+        else:
+            duration_ms = chunk.get("duration_ms", 0)
+            if (
+                duration_ms >= AUDIO_LOW_TEXT_MIN_DURATION_MS
+                and word_count * 60_000 < AUDIO_LOW_TEXT_THRESHOLD_WORDS_PER_MINUTE * duration_ms
+            ):
+                low_text_indices.append(index)
+
+    return {
+        "total_chunks": len(chunks),
+        "empty_chunks": len(empty_indices),
+        "low_text_chunks": len(low_text_indices),
+        "empty_chunk_indices": empty_indices,
+        "low_text_chunk_indices": low_text_indices,
+        "low_text_threshold_words_per_minute": AUDIO_LOW_TEXT_THRESHOLD_WORDS_PER_MINUTE,
+        "low_text_min_duration_ms": AUDIO_LOW_TEXT_MIN_DURATION_MS,
+    }
 
 
 def add_line_break_after_each_sentence(text: str) -> str:
@@ -1030,6 +1063,8 @@ class AudioToTextConverter:
                 - prompt_tokens (int): Total number of prompt tokens used
                 - completion_model (str): Name of the transcription model used
                 - completion_model_provider (str): Provider of the transcription model
+                - audio_chunk_quality (dict): Counts of empty and low-text chunks,
+                  with one-based indices and the applied words-per-minute threshold
 
         Raises:
             ValueError: If the audio file format is not recognized
@@ -1121,7 +1156,8 @@ class AudioToTextConverter:
             "completion_tokens": completion_tokens + full_text_merged_dict["completion_tokens"],
             "prompt_tokens": prompt_tokens + full_text_merged_dict["prompt_tokens"],
             "completion_model": self.transcription_model,
-            "completion_model_provider": self.transcription_model_provider
+            "completion_model_provider": self.transcription_model_provider,
+            "audio_chunk_quality": summarize_audio_chunk_quality(chunks, transcript_chunks),
         }
         if len(chunk_results) == 1 and chunk_results[0]:
             for key in (

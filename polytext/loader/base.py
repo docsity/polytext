@@ -548,6 +548,7 @@ class BaseLoader:
                 - completion_model (str): Model name used, from the first processed source.
                 - completion_model_provider (str): Provider of the model, from the first processed source.
                 - text_chunks (list, optional): List of text chunks, if chunking was applied.
+                - audio_chunk_quality (dict, optional): Counts of empty and low-text audio chunks.
                 - type (str): Type of the processed source (e.g., ocr, video, audio, text).
                 - input (str): The input path or URL of the first processed source.
                 - output_list (list): List of individual extraction results (one per input).
@@ -608,7 +609,7 @@ class BaseLoader:
             "output_list": [result_dict],
         }
 
-        for metadata_key in ("ocr_failed_pages", "ocr_failed_pages_detail"):
+        for metadata_key in ("ocr_failed_pages", "ocr_failed_pages_detail", "audio_chunk_quality"):
             if metadata_key in result_dict:
                 final_result[metadata_key] = result_dict[metadata_key]
 
