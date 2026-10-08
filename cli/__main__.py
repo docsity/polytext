@@ -31,14 +31,15 @@ from polytext.exceptions import EmptyDocument, ConversionError
 # Create an instance of the Typer application
 app = typer.Typer()
 
-def get_loader(timeout: int, note_id: int, input_source_id: int) -> BaseLoader:
+def get_loader(timeout: int, note_id: int, input_source_id: int, fallback_ocr: bool) -> BaseLoader:
 	timeout_minutes = round(timeout / 60)
 	return BaseLoader(
 		markdown_output=True, 
 		source="local", 
 		timeout_minutes=timeout_minutes, 
 		note_id=note_id, 
-		input_source_id=input_source_id
+		input_source_id=input_source_id,
+		fallback_ocr=fallback_ocr
 	)
 
 
@@ -73,7 +74,13 @@ def transcript(
 		"--input_source_id",
 		"-i",
 		help="(Internal use) Input Source ID for tracking purposes."
-	)
+	),
+	fallback_ocr: bool = typer.Option(
+        False, 
+        "--fallback-ocr/--no-fallback-ocr", 
+        "-f", 
+        help="Optical Character Recognition (OCR) will be used as a fallback"
+    ),
 ):
 	"""
 	Transcript a local input file or a URL using BaseLoader
@@ -89,7 +96,14 @@ def transcript(
 		# Instantiate BaseLoader.
 		# BaseLoader will determine the source (local/cloud) from the input string.
 		# As requested, we explicitly set the source to "local" for the CLI.
-		loader = BaseLoader(markdown_output=True, source="local", timeout_minutes=timeout_minutes, note_id=note_id, input_source_id=input_source_id)
+		loader = BaseLoader(
+			markdown_output=True,
+			source="local",
+			timeout_minutes=timeout_minutes,
+			note_id=note_id,
+			input_source_id=input_source_id,
+			fallback_ocr=fallback_ocr
+		)
 
 		typer.echo(f"Using BaseLoader to process: {input_source}")
 
@@ -150,7 +164,13 @@ def faircopy(
 		"--input_source_id",
 		"-i",
 		help="(Internal use) Input Source ID for tracking purposes."
-	)
+	),
+	fallback_ocr: bool = typer.Option(
+        False, 
+        "--fallback-ocr/--no-fallback-ocr", 
+        "-f", 
+        help="Optical Character Recognition (OCR) will be used as a fallback"
+    ),
 ):
 
 	"""

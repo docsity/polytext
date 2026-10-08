@@ -1,4 +1,8 @@
 
+1.0.25 (08/10/2026 15:00)
+-------------------------
+- enable fallback ocr on transcript
+
 1.0.24 (24/09/2026 10:00)
 -------------------------
 - fix(audio-to-text): detect and recover anomalous fallback translations
