@@ -42,6 +42,7 @@ logger = logging.getLogger(__name__)
 
 MIN_DOC_TEXT_LENGTH_ACCEPTED = int(os.getenv("MIN_DOC_TEXT_LENGTH_ACCEPTED", "400"))
 OCR_INCLUDE_IMAGE_DESCRIPTIONS_ENV = "OCR_INCLUDE_IMAGE_DESCRIPTIONS"
+FALLBACK_OCR_ENV = "FALLBACK_OCR"
 LLM_OUTPUT_ERROR_CODES = {
     995: "INVALID_ARGUMENT",
     996: "RECITATION",
@@ -119,7 +120,7 @@ class BaseLoader:
                 - target_size (int, optional): Target file size in bytes. Defaults to 1MB
                 - source (str): Source of the document. Must be either "cloud" or "local"
                 - fallback_ocr (bool, optional): If True, Optical Character Recognition (OCR) will be used as a fallback
-                  if direct text extraction fails, particularly for image-based content. Defaults to True.
+                  if direct text extraction fails. When omitted, defaults from FALLBACK_OCR and otherwise to False.
                 - save_transcript_chunks (bool, optional): Whether to save chunk transcripts in final output. Defaults to False.
                 - bitrate_quality (int, optional): Variable bitrate quality from 0-9 (9 being lowest). Defaults to 9
 
@@ -143,7 +144,10 @@ class BaseLoader:
         self.kwargs = kwargs
         self.target_size = kwargs.get("target_size", 1)
         self.source = kwargs.get("source", "cloud")
-        self.fallback_ocr = kwargs.get("fallback_ocr", False)
+        self.fallback_ocr = kwargs.get(
+            "fallback_ocr",
+            _read_bool_env(FALLBACK_OCR_ENV),
+        )
         self.save_transcript_chunks = kwargs.get("save_transcript_chunks", False)
         self.bitrate_quality = kwargs.get("bitrate_quality", 9)
         self.aws_auth_mode = kwargs.get("aws_auth_mode")

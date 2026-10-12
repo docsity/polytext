@@ -1,3 +1,4 @@
+import os
 import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -60,6 +61,24 @@ class _BeautifulTextLoader(BaseLoader):
 
 
 class TestBaseLoaderErrorMapping(unittest.TestCase):
+    def test_document_ocr_fallback_is_enabled_by_environment(self):
+        with patch.dict(os.environ, {"FALLBACK_OCR": "true"}, clear=True):
+            loader = BaseLoader()
+
+        self.assertTrue(loader.fallback_ocr)
+
+    def test_explicit_document_ocr_fallback_setting_overrides_environment(self):
+        with patch.dict(os.environ, {"FALLBACK_OCR": "true"}, clear=True):
+            loader = BaseLoader(fallback_ocr=False)
+
+        self.assertFalse(loader.fallback_ocr)
+
+    def test_document_ocr_fallback_remains_disabled_without_configuration(self):
+        with patch.dict(os.environ, {}, clear=True):
+            loader = BaseLoader()
+
+        self.assertFalse(loader.fallback_ocr)
+
     def test_llm_output_empty_document_codes_are_raised_as_loader_errors(self):
         cases = [
             (995, "INVALID_ARGUMENT"),
