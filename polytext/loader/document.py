@@ -104,9 +104,9 @@ class DocumentLoader:
             try:
                 downloader = Downloader(s3_client=self.s3_client, document_aws_bucket=self.document_aws_bucket)
                 downloader.download_file_from_s3(file_path, temp_file_path)
-                logger.info(f'Downloaded {file_path} to {temp_file_path}')
+                logger.debug("Downloaded document to a temporary file")
             except ClientError as e:
-                logger.info(e)
+                logger.debug("Retrying document download with uppercase extension: %s", e)
                 self.s3_client.download_file(Bucket=self.document_aws_bucket,
                                              Key=file_path.replace(".pdf", ".PDF"),
                                              Filename=temp_file_path)
@@ -115,9 +115,9 @@ class DocumentLoader:
             try:
                 downloader = Downloader(gcs_client=self.gcs_client, document_gcs_bucket=self.document_gcs_bucket)
                 downloader.download_file_from_gcs(file_path, temp_file_path)
-                logger.info(f'Downloaded {file_path} to {temp_file_path}')
+                logger.debug("Downloaded document to a temporary file")
             except ClientError as e:
-                logger.info(e)
+                logger.debug("Retrying document download with uppercase extension: %s", e)
                 bucket = self.gcs_client.bucket(self.document_gcs_bucket)
                 blob = bucket.blob(file_path.replace(".pdf", ".PDF"))
                 # Download file
@@ -146,16 +146,15 @@ class DocumentLoader:
             AttributeError: If neither S3 nor GCS client is configured
             ClientError: If cloud storage operations fail
         """
-        logger.info(f"file_prefix: {file_prefix}")
-        logger.info(f"input_file: {input_file}")
+        logger.debug("Converting downloaded document to PDF")
 
         # Create a temporary file for output
         fd, output_file = tempfile.mkstemp(suffix=".pdf")
         os.close(fd)  # Close file descriptor explicitly
 
-        logger.info("Using LibreOffice")
+        logger.debug("Using LibreOffice")
         convert_to_pdf(input_file=input_file, output_file=output_file, original_file=file_prefix)
-        logger.info(f"Document converted to pdf and saved to {output_file}")
+        logger.debug("Document converted to PDF")
         os.remove(input_file)
         return output_file
 
@@ -194,12 +193,12 @@ class DocumentLoader:
             fd, temp_file_path = tempfile.mkstemp()
             try:
                 temp_file_path = self.download_document(file_path, temp_file_path)
-                logger.info(f"Successfully loaded document from {file_path}")
+                logger.debug("Document downloaded from cloud storage")
             finally:
                 os.close(fd)
         elif self.source == "local":
             temp_file_path = file_path
-            logger.info(f"Successfully loaded document from local path {file_path}")
+            logger.debug("Using local document")
         else:
             raise ValueError("Invalid OCR source. Choose 'cloud' or 'local'.")
 
@@ -212,7 +211,7 @@ class DocumentLoader:
         else:
             try:
                 pdf_document = fitz.open(temp_file_path)
-                logger.info(f"Successfully opened file with temp_file_path: {temp_file_path}")
+                logger.debug("Document opened successfully")
             except Exception as e:
                 logger.info("Converting file to PDF")
                 file_prefix = file_path
@@ -234,15 +233,15 @@ class DocumentLoader:
             future = executor.submit(to_markdown, pdf_document, pages=list(range(start_page, end_page)))
             try:
                 import time
-                logger.info(f"Timeout_minutes: {self.timeout_minutes}")
+                logger.debug("Markdown conversion timeout: %s minutes", self.timeout_minutes)
                 start = time.time()
                 text = future.result(timeout=self.timeout_minutes * 60 if self.timeout_minutes else None)
                 end = time.time()
-                logger.info(f"Time elapsed: {end - start}")
+                logger.debug("Markdown conversion elapsed time: %.2fs", end - start)
                 logger.info(f"Successfully converted {len(text)} pages to Markdown")
 
                 if len(text) >= MIN_DOC_TEXT_LENGHT_ACCEPTED:
-                    logger.info(f"Successfully converted {len(text)} text to Markdown")
+                    logger.debug("Markdown conversion produced %s characters", len(text))
                     try_not_markdown = False
 
             except concurrent.futures.TimeoutError:
@@ -260,7 +259,7 @@ class DocumentLoader:
 
         if try_not_markdown:
             # Original plain text extraction
-            logger.info("Not converting file to Markdown")
+            logger.debug("Markdown conversion disabled")
             text = ""
             last_pages_text = ""
             last_page_index_to_start = 10
@@ -319,7 +318,6 @@ class DocumentLoader:
             return self.get_document_text_pypdf(file_path=file_path)
 
         if len(text) < MIN_DOC_TEXT_LENGHT_ACCEPTED:
-            logger.info(f"TEXT: {text}")
             message = f"Document text with less than {MIN_DOC_TEXT_LENGHT_ACCEPTED} characters"
             raise EmptyDocument(message=message, code=998)
 
@@ -370,12 +368,12 @@ class DocumentLoader:
             fd, temp_file_path = tempfile.mkstemp()
             try:
                 temp_file_path = self.download_document(file_path, temp_file_path)
-                logger.info(f"Successfully loaded document from {file_path}")
+                logger.debug("Document downloaded from cloud storage")
             finally:
                 os.close(fd)
         elif self.source == "local":
             temp_file_path = file_path
-            logger.info(f"Successfully loaded document from local path {file_path}")
+            logger.debug("Using local document")
         else:
             raise ValueError("Invalid OCR source. Choose 'cloud' or 'local'.")
 
@@ -391,7 +389,7 @@ class DocumentLoader:
             try:
                 file = open(temp_file_path, "rb")
                 pdf_reader = PdfReader(file)
-                logger.info(f"Successfully opened file with temp_file_path: {temp_file_path}")
+                logger.debug("Document opened successfully")
             except Exception as e:
                 logger.info("Converting file to PDF")
                 file_prefix = file_path

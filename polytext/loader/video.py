@@ -86,12 +86,12 @@ class VideoLoader:
         if self.s3_client is not None:
             downloader = Downloader(s3_client=self.s3_client, document_aws_bucket=self.document_aws_bucket)
             downloader.download_file_from_s3(file_path, temp_file_path)
-            logger.info(f'Downloaded {file_path} to {temp_file_path}')
+            logger.debug("Downloaded video to a temporary file")
             return temp_file_path
         elif self.gcs_client is not None:
             downloader = Downloader(gcs_client=self.gcs_client, document_gcs_bucket=self.document_gcs_bucket)
             downloader.download_file_from_gcs(file_path, temp_file_path)
-            logger.info(f'Downloaded {file_path} to {temp_file_path}')
+            logger.debug("Downloaded video to a temporary file")
             return temp_file_path
         raise AttributeError('Storage client not provided')
 
@@ -147,20 +147,20 @@ class VideoLoader:
             dict: Extracted text and related metadata from the video.
         """
 
-        logger.info("Starting text extraction from video...")
+        logger.debug("Starting text extraction from video")
 
         # Load or download the video file
         if self.source == "cloud":
             fd, temp_file_path = tempfile.mkstemp()
             try:
                 temp_file_path = self.download_video(file_path, temp_file_path)
-                logger.info(f"Successfully loaded video file from {file_path}")
+                logger.debug("Successfully loaded cloud video")
                 # saved_video_path = self.save_file_locally(temp_file_path, os.getcwd(), 'video')
             finally:
                 os.close(fd)  # Close the file descriptor
         elif self.source == "local":
             temp_file_path = file_path
-            logger.info(f"Successfully loaded video file from local path {file_path}")
+            logger.debug("Successfully loaded local video")
         else:
             raise ValueError("Invalid video source. Choose 'cloud', or 'local'.")
 
@@ -182,13 +182,13 @@ class VideoLoader:
         result_dict["input"] = file_path
 
         # Clean up temporary files
-        logger.info(f"Removing temporary files: {temp_file_path} and {audio_path}")
+        logger.debug("Removing temporary video and audio files")
         if self.source == "cloud" and os.path.exists(temp_file_path):
             os.remove(temp_file_path)
-            logger.info(f"Removed temporary file {temp_file_path}")
+            logger.debug("Removed temporary video")
         if self.source == "cloud" and os.path.exists(audio_path):
             os.remove(audio_path)
-            logger.info(f"Removed temporary file {audio_path}")
+            logger.debug("Removed temporary audio")
 
         return result_dict
 

@@ -60,12 +60,12 @@ class NotebookLoader:
         if self.s3_client is not None:
             downloader = Downloader(s3_client=self.s3_client, document_aws_bucket=self.document_aws_bucket)
             downloader.download_file_from_s3(file_path, temp_file_path)
-            logger.info(f'Downloaded {file_path} to {temp_file_path}')
+            logger.debug("Downloaded notebook to a temporary file")
             return temp_file_path
         elif self.gcs_client is not None:
             downloader = Downloader(gcs_client=self.gcs_client, document_gcs_bucket=self.document_gcs_bucket)
             downloader.download_file_from_gcs(file_path, temp_file_path)
-            logger.info(f'Downloaded {file_path} to {temp_file_path}')
+            logger.debug("Downloaded notebook to a temporary file")
             return temp_file_path
         else:
             raise ValueError("No cloud storage client provided. Please provide either an S3 or GCS client.")
@@ -116,7 +116,7 @@ class NotebookLoader:
 
     def get_text_from_file(self, file_path: str) -> str:
         """Read and parse the .ipynb file."""
-        logger.info(f"Reading notebook from file: {file_path}")
+        logger.debug("Reading notebook from file")
 
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
@@ -138,22 +138,22 @@ class NotebookLoader:
 
     def get_text_from_notebook(self, file_path):
         """Extract text from a notebook file from either cloud storage or local path."""
-        logger.info("Starting text extraction from notebook...")
+        logger.debug("Starting text extraction from notebook")
 
         if self.source == "cloud":
             fd, temp_file_path = tempfile.mkstemp(suffix=".ipynb")
             try:
                 self.download_notebook(file_path, temp_file_path)
-                logger.info(f"Successfully loaded notebook from {file_path}")
+                logger.debug("Successfully loaded cloud notebook")
                 text_from_notebook = self.get_text_from_file(temp_file_path)
             finally:
                 os.close(fd)
                 if os.path.exists(temp_file_path):
                     os.remove(temp_file_path)
-                    logger.info(f"Removed temporary file {temp_file_path}")
+                    logger.debug("Removed temporary notebook")
         elif self.source == "local":
             text_from_notebook = self.get_text_from_file(file_path)
-            logger.info(f"Successfully loaded notebook from local path {file_path}")
+            logger.debug("Successfully loaded local notebook")
         else:
             raise ValueError("Invalid notebook source. Choose 'cloud' or 'local'.")
 

@@ -337,7 +337,7 @@ class BaseLoader:
         """
 
         if input.startswith("s3://"):
-            logger.info(f"Initiating S3 initialization for {input}")
+            logger.debug("Initializing S3 input")
             s3_client = create_s3_client(
                 auth_mode=self.aws_auth_mode,
                 role_arn=self.aws_role_arn,
@@ -358,7 +358,7 @@ class BaseLoader:
                 "file_path": file_path,
             }
         elif input.startswith("gcs://"):
-            logger.info(f"Initializing GCS client for input: {input}")
+            logger.debug("Initializing GCS input")
             # Initialize GCS client
             gcs_client = storage.Client()
             gcs_path = input.replace("gcs://", "")

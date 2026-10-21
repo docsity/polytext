@@ -38,7 +38,7 @@ class Downloader:
             ClientError: If S3 download operation fails
         """
         self.s3_client.download_file(Bucket=self.document_aws_bucket, Key=file_path, Filename=temp_file_path)
-        logger.info(f'Downloaded {file_path} to {temp_file_path}')
+        logger.debug("Downloaded S3 object to a temporary file")
 
         return temp_file_path
 
@@ -67,10 +67,10 @@ class Downloader:
 
             # Download file
             blob.download_to_filename(temp_file_path)
-            logger.info(f'Downloaded {file_path} to {temp_file_path}')
+            logger.debug("Downloaded GCS object to a temporary file")
 
             return temp_file_path
 
         except Exception as e:
-            logger.info(f"Failed to download file from GCS: {str(e)}")
+            logger.warning("Failed to download file from GCS: %s", e)
             raise

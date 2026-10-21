@@ -159,7 +159,7 @@ class DocumentOCRLoader:
                 document_aws_bucket=self.document_aws_bucket,
             )
             downloader.download_file_from_s3(file_path, temp_file_path)
-            logger.info(f'Downloaded {file_path} to {temp_file_path}')
+            logger.debug("Downloaded document to a temporary file")
             return temp_file_path
         elif self.gcs_client is not None:
             downloader = Downloader(
@@ -167,7 +167,7 @@ class DocumentOCRLoader:
                 document_gcs_bucket=self.document_gcs_bucket,
             )
             downloader.download_file_from_gcs(file_path, temp_file_path)
-            logger.info(f'Downloaded {file_path} to {temp_file_path}')
+            logger.debug("Downloaded document to a temporary file")
             return temp_file_path
 
     def convert_doc_to_pdf(self, file_prefix: str, input_file: str) -> str:
@@ -191,19 +191,18 @@ class DocumentOCRLoader:
             AttributeError: If neither S3 nor GCS client is configured.
             ClientError: If cloud storage operations fail.
         """
-        logger.info(f"file_prefix: {file_prefix}")
-        logger.info(f"input_file: {input_file}")
+        logger.debug("Converting downloaded document to PDF")
 
         fd, output_file = tempfile.mkstemp(suffix=".pdf")
         os.close(fd)
 
-        logger.info("Using LibreOffice")
+        logger.debug("Using LibreOffice")
         convert_to_pdf(
             input_file=input_file,
             output_file=output_file,
             original_file=file_prefix,
         )
-        logger.info("Document converted to pdf")
+        logger.debug("Document converted to PDF")
         os.remove(input_file)
         return output_file
 
@@ -225,19 +224,19 @@ class DocumentOCRLoader:
         Raises:
             ValueError: If the `source` is not "cloud" or "local".
         """
-        logger.info("Starting text extraction using OCR...")
+        logger.debug("Starting text extraction using OCR")
 
         # Load or download the document file
         if self.source == "cloud":
             fd, temp_file = tempfile.mkstemp()
             try:
                 temp_file_path = self.download_document(file_path, temp_file)
-                logger.info(f"Successfully loaded document from {file_path}")
+                logger.debug("Successfully loaded cloud document")
             finally:
                 os.close(fd)
         elif self.source == "local":
             temp_file_path = file_path
-            logger.info(f"Successfully loaded document from local path {file_path}")
+            logger.debug("Successfully loaded local document")
         else:
             raise ValueError("Invalid OCR source. Choose 'cloud' or 'local'.")
 
@@ -291,7 +290,7 @@ class DocumentOCRLoader:
         # Clean up temporary file if it was downloaded
         if self.source == "cloud" and os.path.exists(temp_file_path):
             os.remove(temp_file_path)
-            logger.info(f"Removed temporary file {temp_file_path}")
+            logger.debug("Removed temporary document")
 
         return result_dict
 
