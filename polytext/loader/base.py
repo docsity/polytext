@@ -42,6 +42,7 @@ logger = logging.getLogger(__name__)
 
 MIN_DOC_TEXT_LENGTH_ACCEPTED = int(os.getenv("MIN_DOC_TEXT_LENGTH_ACCEPTED", "400"))
 OCR_INCLUDE_IMAGE_DESCRIPTIONS_ENV = "OCR_INCLUDE_IMAGE_DESCRIPTIONS"
+FALLBACK_OCR_ENV = "FALLBACK_OCR"
 LLM_OUTPUT_ERROR_CODES = {
     995: "INVALID_ARGUMENT",
     996: "RECITATION",
@@ -93,6 +94,7 @@ class BaseLoader:
                  include_image_descriptions: bool | None = None,
                  force_ocr: bool = False,
                  ocr_render_dpi: int | None = None,
+                 ocr_cache_uri: str | None = None,
                  **kwargs):
         """
         Initialize the BaseLoader with cloud storage and LLM configurations.
@@ -115,11 +117,13 @@ class BaseLoader:
                 OCRLoader instead of the standard DocumentLoader. Defaults to False.
             ocr_render_dpi (int | None, optional): Render document pages at this DPI
                 before OCR. Defaults to the existing renderer behavior.
+            ocr_cache_uri (str | None, optional): Exact S3 URI used to read or write
+                the transcript only when document fallback OCR is entered.
              **kwargs: Additional keyword arguments to pass to the underlying loader or extraction logic.
                 - target_size (int, optional): Target file size in bytes. Defaults to 1MB
                 - source (str): Source of the document. Must be either "cloud" or "local"
                 - fallback_ocr (bool, optional): If True, Optical Character Recognition (OCR) will be used as a fallback
-                  if direct text extraction fails, particularly for image-based content. Defaults to True.
+                  if direct text extraction fails. When omitted, defaults from FALLBACK_OCR and otherwise to False.
                 - save_transcript_chunks (bool, optional): Whether to save chunk transcripts in final output. Defaults to False.
                 - bitrate_quality (int, optional): Variable bitrate quality from 0-9 (9 being lowest). Defaults to 9
 
@@ -140,10 +144,14 @@ class BaseLoader:
         )
         self.force_ocr = force_ocr
         self.ocr_render_dpi = ocr_render_dpi
+        self.ocr_cache_uri = ocr_cache_uri
         self.kwargs = kwargs
         self.target_size = kwargs.get("target_size", 1)
         self.source = kwargs.get("source", "cloud")
-        self.fallback_ocr = kwargs.get("fallback_ocr", False)
+        self.fallback_ocr = kwargs.get(
+            "fallback_ocr",
+            _read_bool_env(FALLBACK_OCR_ENV),
+        )
         self.save_transcript_chunks = kwargs.get("save_transcript_chunks", False)
         self.bitrate_quality = kwargs.get("bitrate_quality", 9)
         self.aws_auth_mode = kwargs.get("aws_auth_mode")
@@ -204,8 +212,14 @@ class BaseLoader:
             if e.code in LLM_OUTPUT_ERROR_CODES:
                 _raise_empty_document_loader_error(e)
             if self.fallback_ocr:
+                ocr_cache_s3_client = None
+                if self.ocr_cache_uri:
+                    ocr_cache_s3_client = self._resolve_ocr_cache_s3_client(
+                        storage_client
+                    )
                 loader_class = self.init_loader_class(input=first_file_url, storage_client=storage_client,
-                                                      llm_api_key=self.llm_api_key, is_document_fallback=True, **kwargs)
+                                                      llm_api_key=self.llm_api_key, is_document_fallback=True,
+                                                      ocr_cache_s3_client=ocr_cache_s3_client, **kwargs)
                 try:
                     response = self.run_loader_class(loader_class=loader_class, input_list=input_list)
                 except EmptyDocument as fallback_error:
@@ -252,6 +266,27 @@ class BaseLoader:
             raise
 
         return response
+
+    def _resolve_ocr_cache_s3_client(self, storage_client: dict):
+        input_s3_client = storage_client.get("s3_client")
+        if input_s3_client is not None:
+            return input_s3_client
+
+        try:
+            return create_s3_client(
+                auth_mode=self.aws_auth_mode,
+                role_arn=self.aws_role_arn,
+                region_name=self.aws_region,
+                role_session_name=self.aws_role_session_name,
+                web_identity_token_audience=self.gcp_id_token_audience,
+                duration_seconds=self.aws_sts_duration_seconds,
+            )
+        except Exception:
+            logger.warning(
+                "Unable to initialize S3 client for OCR transcript cache; continuing without cache",
+                exc_info=True,
+            )
+            return None
 
     def get_beautiful_text(self, input_list: list[str], **kwargs):
         if not isinstance(input_list, list) or not all(isinstance(item, str) for item in input_list):
@@ -333,7 +368,7 @@ class BaseLoader:
         """
 
         if input.startswith("s3://"):
-            logger.info(f"Initiating S3 initialization for {input}")
+            logger.debug("Initializing S3 input")
             s3_client = create_s3_client(
                 auth_mode=self.aws_auth_mode,
                 role_arn=self.aws_role_arn,
@@ -354,7 +389,7 @@ class BaseLoader:
                 "file_path": file_path,
             }
         elif input.startswith("gcs://"):
-            logger.info(f"Initializing GCS client for input: {input}")
+            logger.debug("Initializing GCS input")
             # Initialize GCS client
             gcs_client = storage.Client()
             gcs_path = input.replace("gcs://", "")
@@ -426,7 +461,21 @@ class BaseLoader:
             file_extension = file_extension.lower()
 
         if is_document_fallback:
-            return DocumentOCRLoader(llm_api_key=llm_api_key, markdown_output=self.markdown_output, temp_dir=self.temp_dir, timeout_minutes=self.timeout_minutes, ocr_provider=self.provider, ocr_model=self.ocr_model, include_image_descriptions=self.include_image_descriptions, ocr_render_dpi=self.ocr_render_dpi, **kwargs)
+            document_kwargs = {k: v for k, v in kwargs.items() if k != "source"}
+            return DocumentOCRLoader(
+                source=self.source,
+                llm_api_key=llm_api_key,
+                markdown_output=self.markdown_output,
+                temp_dir=self.temp_dir,
+                timeout_minutes=self.timeout_minutes,
+                ocr_provider=self.provider,
+                ocr_model=self.ocr_model,
+                include_image_descriptions=self.include_image_descriptions,
+                ocr_render_dpi=self.ocr_render_dpi,
+                is_fallback_ocr=True,
+                ocr_cache_uri=self.ocr_cache_uri,
+                **document_kwargs,
+            )
 
         if file_extension in [".xml", ".xbrl"]:
             return XmlXbrlLoader(temp_dir=self.temp_dir, markdown_output=self.markdown_output, **kwargs)
@@ -548,6 +597,7 @@ class BaseLoader:
                 - completion_model (str): Model name used, from the first processed source.
                 - completion_model_provider (str): Provider of the model, from the first processed source.
                 - text_chunks (list, optional): List of text chunks, if chunking was applied.
+                - audio_chunk_quality (dict, optional): Counts of empty and low-text audio chunks.
                 - type (str): Type of the processed source (e.g., ocr, video, audio, text).
                 - input (str): The input path or URL of the first processed source.
                 - output_list (list): List of individual extraction results (one per input).
@@ -608,7 +658,12 @@ class BaseLoader:
             "output_list": [result_dict],
         }
 
-        for metadata_key in ("ocr_failed_pages", "ocr_failed_pages_detail"):
+        for metadata_key in (
+            "ocr_failed_pages",
+            "ocr_failed_pages_detail",
+            "audio_chunk_quality",
+            "ocr_cache_hit",
+        ):
             if metadata_key in result_dict:
                 final_result[metadata_key] = result_dict[metadata_key]
 

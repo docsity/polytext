@@ -63,6 +63,8 @@ AUDIO_DEFAULT_MAX_OUTPUT_TOKENS = 4096
 AUDIO_MAX_ADAPTIVE_SPLIT_DEPTH = 1
 AUDIO_ADAPTIVE_SPLIT_OVERLAP_MS = 2000
 AUDIO_LONG_DURATION_THRESHOLD_MS = 80 * 60 * 1000
+AUDIO_LOW_TEXT_THRESHOLD_WORDS_PER_MINUTE = 20
+AUDIO_LOW_TEXT_MIN_DURATION_MS = 60_000
 AUDIO_TAIL_REPETITION_LINES = int(os.getenv("AUDIO_TAIL_REPETITION_LINES", "200"))
 AUDIO_TAIL_REPETITION_THRESHOLD = float(os.getenv("AUDIO_TAIL_REPETITION_THRESHOLD", "0.35"))
 AUDIO_FALLBACK_SOURCE_PATTERN = os.getenv("AUDIO_FALLBACK_SOURCE_PATTERN", "flash-lite")
@@ -174,7 +176,7 @@ def find_suspicious_fallback_language_indices(
 ) -> list[int]:
     """Find internal fallback chunks whose language conflicts with two agreeing neighbours."""
     suspicious_indices = []
-    logger.info("Starting fallback language validation for %s transcript chunks", len(transcripts))
+    logger.debug("Starting fallback language validation for %s transcript chunks", len(transcripts))
 
     def has_fallback(result: dict | None) -> bool:
         if not result:
@@ -284,6 +286,37 @@ def normalize_no_human_speech_marker(text: str) -> tuple[str, bool]:
     return cleaned_text, False
 
 
+def summarize_audio_chunk_quality(chunks: list[dict], transcripts: list[str]) -> dict:
+    """Report empty and unusually short transcripts without discarding any text.
+
+    Indices are one-based. Short audio chunks are excluded from the low-text
+    count because a brief spoken phrase can be a complete transcription.
+    """
+    empty_indices = []
+    low_text_indices = []
+    for index, (chunk, transcript) in enumerate(zip(chunks, transcripts), start=1):
+        word_count = len(transcript.split())
+        if word_count == 0:
+            empty_indices.append(index)
+        else:
+            duration_ms = chunk.get("duration_ms", 0)
+            if (
+                duration_ms >= AUDIO_LOW_TEXT_MIN_DURATION_MS
+                and word_count * 60_000 < AUDIO_LOW_TEXT_THRESHOLD_WORDS_PER_MINUTE * duration_ms
+            ):
+                low_text_indices.append(index)
+
+    return {
+        "total_chunks": len(chunks),
+        "empty_chunks": len(empty_indices),
+        "low_text_chunks": len(low_text_indices),
+        "empty_chunk_indices": empty_indices,
+        "low_text_chunk_indices": low_text_indices,
+        "low_text_threshold_words_per_minute": AUDIO_LOW_TEXT_THRESHOLD_WORDS_PER_MINUTE,
+        "low_text_min_duration_ms": AUDIO_LOW_TEXT_MIN_DURATION_MS,
+    }
+
+
 def add_line_break_after_each_sentence(text: str) -> str:
     if not text:
         return text
@@ -369,7 +402,7 @@ def compress_and_convert_audio(input_path: str, bitrate_quality: int = 9) -> str
             os.unlink(temp_audio_path)
         raise
 
-    logger.info(f"Successfully normalized audio: {temp_audio_path}")
+    logger.debug("Audio normalization completed")
     return temp_audio_path
 
 
@@ -688,7 +721,7 @@ class AudioToTextConverter:
             config: types.GenerateContentConfig,
     ):
         file_size = os.path.getsize(audio_file)
-        logger.info(f"Audio file size: {file_size / (1024 * 1024):.2f} MB")
+        logger.debug("Audio file size: %.2f MB", file_size / (1024 * 1024))
         marker_nonce = uuid.uuid4().hex[:12]
         marker_start = f"<<<UNTRUSTED_AUDIO_START_{marker_nonce}>>>"
         marker_end = f"<<<UNTRUSTED_AUDIO_END_{marker_nonce}>>>"
@@ -703,9 +736,9 @@ class AudioToTextConverter:
                     model=self.transcription_model,
                     contents=[my_file]
                 )
-                logger.info(f"File size in tokens: {response}")
+                logger.debug("Audio file token count response received")
 
-                logger.info(f"Uploaded file: {my_file.name} - Starting transcription...")
+                logger.debug("Audio upload completed; starting transcription")
 
                 return client.models.generate_content(
                     model=self.transcription_model,
@@ -717,7 +750,7 @@ class AudioToTextConverter:
                 if temp_upload_path and os.path.exists(temp_upload_path):
                     os.remove(temp_upload_path)
 
-        logger.info("Audio file size does not exceed 20MB")
+        logger.debug("Audio can be sent inline")
         with open(audio_file, "rb") as f:
             audio_data = f.read()
 
@@ -820,8 +853,8 @@ class AudioToTextConverter:
             completion_tokens = getattr(usage_metadata, "candidates_token_count", 0) or 0
             prompt_tokens = getattr(usage_metadata, "prompt_token_count", 0) or 0
 
-            logger.info(f"Completion tokens: {completion_tokens}")
-            logger.info(f"Prompt tokens: {prompt_tokens}")
+            logger.debug("Audio completion tokens: %s", completion_tokens)
+            logger.debug("Audio prompt tokens: %s", prompt_tokens)
 
             if finish_reason and "RECITATION" in finish_reason:
                 raise EmptyDocument(
@@ -972,7 +1005,7 @@ class AudioToTextConverter:
 
     def process_chunk(self, chunk: dict, index: int) -> tuple[int, dict]:
         """Process a single audio chunk and return its transcript"""
-        logger.info(f"Transcribing chunk {index + 1}...")
+        logger.debug("Transcribing audio chunk %s", index + 1)
         transcript_dict = self.transcribe_audio(chunk["file_path"])
         return index, transcript_dict
 
@@ -1030,18 +1063,20 @@ class AudioToTextConverter:
                 - prompt_tokens (int): Total number of prompt tokens used
                 - completion_model (str): Name of the transcription model used
                 - completion_model_provider (str): Provider of the transcription model
+                - audio_chunk_quality (dict): Counts of empty and low-text chunks,
+                  with one-based indices and the applied words-per-minute threshold
 
         Raises:
             ValueError: If the audio file format is not recognized
             RuntimeError: If there's an error during audio processing or transcription
         """
         processed_audio_path = None
-        logger.info(f"Processing audio file {audio_path}...")
+        logger.debug("Processing audio file")
         file_size = os.path.getsize(audio_path)
-        logger.info(f"Audio file size: {file_size / (1024 * 1024):.2f} MB")
+        logger.debug("Audio file size: %.2f MB", file_size / (1024 * 1024))
 
         mime_type, _ = mimetypes.guess_type(audio_path)
-        logger.info(f"Original MIME type: {mime_type}")
+        logger.debug("Original audio MIME type: %s", mime_type)
 
         # Check if conversion and/or compression is needed
         needs_conversion = mime_type not in SUPPORTED_MIME_TYPES
@@ -1049,37 +1084,35 @@ class AudioToTextConverter:
 
         # If you need at least one of the two, apply compress_and_convert_audio
         if needs_conversion:  # or needs_compression:
-            logger.info("Audio file needs conversion, processing file...")
+            logger.debug("Audio requires conversion")
             processed_audio_path = compress_and_convert_audio(audio_path)
             used_file = processed_audio_path
-            logger.info(f"Audio file processed (conversion): {used_file}")
+            logger.debug("Audio conversion completed")
         else:
             used_file = audio_path
-            logger.info("Audio file is already in supported format")
+            logger.debug("Audio is already in a supported format")
             # If you need at least one of the two, apply compress_and_convert_audio
             if needs_conversion:  # or needs_compression:
-                logger.info("Audio file needs conversion, processing file...")
+                logger.debug("Audio requires conversion")
                 processed_audio_path = compress_and_convert_audio(input_path=audio_path,
                                                                   bitrate_quality=self.bitrate_quality)
                 used_file = processed_audio_path
-                logger.info(f"Audio file processed (conversion): {used_file}")
+                logger.debug("Audio conversion completed")
             else:
                 used_file = audio_path
-                logger.info("Audio file is already in supported format")
+                logger.debug("Audio is already in a supported format")
 
         # Create chunker and extract chunks
-        logger.info("Creating AudioChunker instance...")
+        logger.debug("Creating audio chunker")
         chunker = AudioChunker(used_file, max_llm_tokens=self.max_llm_tokens)
         self.set_long_audio_protections(chunker.duration_ms)
-        logger.info(
+        logger.debug(
             "Long-audio transcription protections enabled: %s (duration: %sms, threshold: %sms)",
             self.long_audio_protections_enabled,
             chunker.duration_ms,
             AUDIO_LONG_DURATION_THRESHOLD_MS,
         )
         chunks = chunker.extract_chunks()
-
-        logger.info(f"chunks: {chunks}")
 
         logger.info(f"Split audio into {len(chunks)} chunks")
         if len(chunks) > 1 and self.markdown_output:
@@ -1121,7 +1154,8 @@ class AudioToTextConverter:
             "completion_tokens": completion_tokens + full_text_merged_dict["completion_tokens"],
             "prompt_tokens": prompt_tokens + full_text_merged_dict["prompt_tokens"],
             "completion_model": self.transcription_model,
-            "completion_model_provider": self.transcription_model_provider
+            "completion_model_provider": self.transcription_model_provider,
+            "audio_chunk_quality": summarize_audio_chunk_quality(chunks, transcript_chunks),
         }
         if len(chunk_results) == 1 and chunk_results[0]:
             for key in (

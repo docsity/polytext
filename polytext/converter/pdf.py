@@ -89,7 +89,7 @@ class DocumentConverter:
 
         # Check file extension
         _, ext = os.path.splitext(original_file)
-        logger.info(os.path.splitext(original_file))
+        logger.debug("Original file extension: %s", os.path.splitext(original_file)[1])
         if ext.lower() not in self.supported_extensions and ext.lower() != '.pdf':
             logger.warning(f"File extension '{ext}' may not be supported.")
 
@@ -105,7 +105,7 @@ class DocumentConverter:
         if ext.lower() == '.pdf':
             import shutil
             shutil.copy2(input_file, output_file)
-            logger.info(f"File is already a PDF. Copied to '{output_file}'")
+            logger.debug("Input is already a PDF; copied to output")
             return output_file
 
         # Check if LibreOffice is installed
@@ -134,7 +134,7 @@ class DocumentConverter:
                 text=True,
                 check=True,
             )
-            logger.info(f"Conversion successful: '{output_file}'")
+            logger.debug("Document conversion successful")
         except subprocess.CalledProcessError as e:
             output_parts = []
             if e.stdout:

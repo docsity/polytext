@@ -97,7 +97,7 @@ def compress_and_convert_image(input_path: str, target_size=1):
                 loglevel='error'
             ).run(quiet=True, overwrite_output=True)
 
-        logger.info(f"Successfully processed image: {temp_image_path}")
+        logger.debug("Successfully processed image")
         return temp_image_path
 
     except Exception as e:
@@ -335,18 +335,15 @@ class OCRToTextConverter:
         start_time = time.time()
 
         if self.markdown_output:
-            logger.info("Using prompt for markdown format")
+            logger.debug("Using prompt for markdown format")
         else:
-            logger.info("Using prompt for plain text format")
+            logger.debug("Using prompt for plain text format")
         prompt_template = self._build_prompt_template()
-        logger.info(prompt_template)
 
         try:
             if self.llm_api_key:
-                logger.info("Using provided Google API key")
                 client = genai.Client(api_key=self.llm_api_key)
             else:
-                logger.info("Using Google API key from ENV")
                 client = genai.Client()
 
             config = types.GenerateContentConfig(
@@ -380,26 +377,26 @@ class OCRToTextConverter:
             )
 
             mime_type, _ = mimetypes.guess_type(file_for_ocr)
-            logger.info(f"OCR mime type: {mime_type}")
+            logger.debug("OCR MIME type: %s", mime_type)
             file_size = os.path.getsize(file_for_ocr)
-            logger.info(f"Initial image file size: {file_size}")
+            logger.debug("Initial OCR image size: %s bytes", file_size)
             if file_size > self.target_size * 1024 * 1024 or mime_type not in SUPPORTED_MIME_TYPES:
-                logger.info(f"Image file size exceeds {self.target_size}MB or unsupported mime type, compressing and converting image")
+                logger.debug("OCR image requires compression or conversion")
                 temp_file_for_ocr = compress_and_convert_image(input_path=file_for_ocr, target_size=self.target_size)
                 should_delete_temp_file = True
                 file_size = os.path.getsize(temp_file_for_ocr)
             else:
-                logger.info(f"Image file size does not exceed {self.target_size}MB and mime type is supported, no compression or conversion needed")
+                logger.debug("OCR image requires no compression or conversion")
                 temp_file_for_ocr = file_for_ocr
 
-            logger.info(f"Final image file size: {file_size / (1024 * 1024):.2f} MB")
+            logger.debug("Final OCR image size: %.2f MB", file_size / (1024 * 1024))
 
             if file_size > 20 * 1024 * 1024:
-                logger.info("Total image file size exceeds 20MB, uploading file before transcription")
+                logger.debug("Uploading large OCR image")
 
                 myfile = client.files.upload(file=temp_file_for_ocr)
 
-                logger.info(f"Uploaded image file - Starting OCR...")
+                logger.debug("OCR image upload completed")
 
                 contents = [myfile]
                 response = client.models.generate_content(
@@ -411,7 +408,7 @@ class OCRToTextConverter:
                 client.files.delete(name=myfile.name)
 
             else:
-                logger.info("Image file size does not exceed 20MB")
+                logger.debug("OCR image can be sent inline")
                 with open(temp_file_for_ocr, "rb") as f:
                     image_data = f.read()
 
@@ -445,8 +442,8 @@ class OCRToTextConverter:
                 threshold=OCR_TAIL_REPETITION_THRESHOLD,
             )
 
-            logger.info(f"Completion tokens: {response.usage_metadata.candidates_token_count}")
-            logger.info(f"Prompt tokens: {response.usage_metadata.prompt_token_count}")
+            logger.debug("OCR completion tokens: %s", response.usage_metadata.candidates_token_count)
+            logger.debug("OCR prompt tokens: %s", response.usage_metadata.prompt_token_count)
 
             if finish_reason and "RECITATION" in finish_reason:
                 raise EmptyDocument(

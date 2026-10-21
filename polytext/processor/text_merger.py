@@ -283,8 +283,8 @@ class TextMerger:
                 config=config
             )
 
-            logger.info(f"Completion tokens: {response.usage_metadata.candidates_token_count}")
-            logger.info(f"Prompt tokens: {response.usage_metadata.prompt_token_count}")
+            logger.debug("Completion tokens: %s", response.usage_metadata.candidates_token_count)
+            logger.debug("Prompt tokens: %s", response.usage_metadata.prompt_token_count)
 
             response_dict = {"completion_tokens": response.usage_metadata.candidates_token_count,
                              "prompt_tokens": response.usage_metadata.prompt_token_count,
@@ -327,7 +327,7 @@ class TextMerger:
 
         merged_text = chunks[0]
         for i in range(len(chunks) - 1):
-            logger.info(f"Processing chunk pair {i + 1}...")
+            logger.debug("Processing chunk pair %s", i + 1)
             merged_text_dict = self.merge_texts_with_llm(merged_text, chunks[i + 1])
             merged_text = merged_text_dict["start_text_1"] + " " + merged_text_dict["central_text_1"] + " " + \
                           merged_text_dict["merged_text"] + " " + merged_text_dict["central_text_2"] + " " + \
@@ -344,7 +344,7 @@ class TextMerger:
 
     def process_chunk_pair(self, chunk_pair: Tuple[str, str], index: int) -> Tuple[int, Dict[str, Any]]:
         """Process a couple of chunks and return their merged text."""
-        logger.info(f"Processing chunk pair {index + 1}...")
+        logger.debug("Processing chunk pair %s", index + 1)
         merged_text_dict = self.merge_texts_with_llm(chunk_pair[0], chunk_pair[1])
 
         return index, merged_text_dict
@@ -382,7 +382,7 @@ class TextMerger:
                 merged_chunks[index] = merged_text_dict
                 completion_tokens += merged_text_dict["completion_tokens"]
                 prompt_tokens += merged_text_dict["prompt_tokens"]
-                logger.info(f"Chunk pair {index + 1} merged successfully.")
+                logger.debug("Chunk pair %s merged successfully", index + 1)
 
             full_text_merged = ""
             for i in range(len(merged_chunks)):

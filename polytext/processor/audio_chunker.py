@@ -41,29 +41,29 @@ class AudioChunker:
 
     def find_chunk_boundaries(self) -> List[Tuple[int, int]]:
         """Find optimal chunk boundaries at natural silence points"""
-        logger.info("Finding optimal chunk boundaries...")
+        logger.debug("Finding optimal chunk boundaries")
         optimal_chunk_ms = self.calculate_optimal_chunk_size()
-        logger.info(f"Optimal chunk size: {optimal_chunk_ms}")
+        logger.debug("Optimal chunk size: %sms", optimal_chunk_ms)
 
         chunks = []
         start = 0
 
         while start < self.duration_ms:
-            logger.info(f"\nProcessing chunk starting at {start}ms")
+            logger.debug("Processing chunk starting at %sms", start)
             # Calculate the ideal end point for this chunk
             ideal_end = start + optimal_chunk_ms
-            logger.info(f"Ideal end point: {ideal_end}ms")
+            logger.debug("Ideal chunk end: %sms", ideal_end)
 
             # If we're near the end, just include everything remaining
             if ideal_end + self.overlap_duration >= self.duration_ms:
-                logger.info(f"Near end of audio, including remaining duration: {self.duration_ms - start}ms")
+                logger.debug("Including remaining audio duration: %sms", self.duration_ms - start)
                 chunks.append((start, self.duration_ms))
                 break
 
             chunks.append((start, ideal_end))
             # Start the next chunk before this one ends to create overlap
             start = ideal_end - self.overlap_duration
-            logger.info(f"Next chunk will start at {start}ms (overlap: {self.overlap_duration}ms)")
+            logger.debug("Next chunk starts at %sms with %sms overlap", start, self.overlap_duration)
 
         return chunks
 
@@ -100,7 +100,7 @@ class AudioChunker:
 
         # Run ffmpeg command
         ffmpeg.run(stream, quiet=True)
-        logger.info(f"Exported chunk {i + 1} to {temp_filename}")
+        logger.debug("Exported audio chunk %s", i + 1)
 
         return {
             "index": i,
@@ -113,12 +113,12 @@ class AudioChunker:
 
     def extract_chunks(self) -> List[Dict[str, Any]]:
         """Extract audio chunks based on calculated boundaries"""
-        logger.info("Extracting chunks...")
+        logger.debug("Extracting audio chunks")
         boundaries = self.find_chunk_boundaries()
-        logger.info(f"Found {len(boundaries)} chunks")
+        logger.debug("Found %s audio chunks", len(boundaries))
 
         if len(boundaries) == 1:
-            logger.info("Only one chunk found, no need to split.")
+            logger.debug("Audio does not require splitting")
             start_ms, end_ms = boundaries[0]
             return [{
                 "index": 0,
@@ -143,7 +143,7 @@ class AudioChunker:
                 chunk_index = future_to_chunk[future]
                 chunks[chunk_index] = future.result()
 
-        logger.info(f"Processed {len(chunks)} chunks in parallel")
+        logger.debug("Processed %s audio chunks in parallel", len(chunks))
         return chunks
 
     @staticmethod

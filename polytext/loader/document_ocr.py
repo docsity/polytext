@@ -7,6 +7,7 @@ import logging
 # Local imports
 from ..loader.downloader.downloader import Downloader
 from ..converter.pdf import convert_to_pdf
+from .ocr_cache import S3OCRTranscriptCache
 
 # OCR converters
 from ..converter.document_ocr_to_text import (
@@ -48,6 +49,9 @@ class DocumentOCRLoader:
                  include_image_descriptions: bool = False,
                  allow_partial_ocr_failures: bool = False,
                  ocr_render_dpi: int | None = None,
+                 is_fallback_ocr: bool = False,
+                 ocr_cache_uri: str | None = None,
+                 ocr_cache_s3_client: object = None,
                  **kwargs
                  ):
         """
@@ -89,6 +93,9 @@ class DocumentOCRLoader:
                 the whole document extraction. Defaults to False.
             ocr_render_dpi (int | None, optional): Render PDF pages at this DPI
                 before OCR. Defaults to the existing PyMuPDF rendering behavior.
+            is_fallback_ocr (bool, optional): Enables fallback-only cache metadata.
+            ocr_cache_uri (str | None, optional): Exact S3 transcript URI.
+            ocr_cache_s3_client (object, optional): Client used for cache I/O.
             **kwargs:
                 max_output_tokens (int, optional): Maximum Gemini output tokens for
                     Google document OCR generation.
@@ -114,6 +121,9 @@ class DocumentOCRLoader:
         self.include_image_descriptions = include_image_descriptions
         self.allow_partial_ocr_failures = allow_partial_ocr_failures
         self.ocr_render_dpi = ocr_render_dpi
+        self.is_fallback_ocr = is_fallback_ocr
+        self.ocr_cache_uri = ocr_cache_uri
+        self.ocr_cache_s3_client = ocr_cache_s3_client
         self.max_output_tokens = kwargs.get("max_output_tokens")
 
         # Set up custom temp directory
@@ -159,7 +169,7 @@ class DocumentOCRLoader:
                 document_aws_bucket=self.document_aws_bucket,
             )
             downloader.download_file_from_s3(file_path, temp_file_path)
-            logger.info(f'Downloaded {file_path} to {temp_file_path}')
+            logger.debug("Downloaded document to a temporary file")
             return temp_file_path
         elif self.gcs_client is not None:
             downloader = Downloader(
@@ -167,7 +177,7 @@ class DocumentOCRLoader:
                 document_gcs_bucket=self.document_gcs_bucket,
             )
             downloader.download_file_from_gcs(file_path, temp_file_path)
-            logger.info(f'Downloaded {file_path} to {temp_file_path}')
+            logger.debug("Downloaded document to a temporary file")
             return temp_file_path
 
     def convert_doc_to_pdf(self, file_prefix: str, input_file: str) -> str:
@@ -191,19 +201,18 @@ class DocumentOCRLoader:
             AttributeError: If neither S3 nor GCS client is configured.
             ClientError: If cloud storage operations fail.
         """
-        logger.info(f"file_prefix: {file_prefix}")
-        logger.info(f"input_file: {input_file}")
+        logger.debug("Converting downloaded document to PDF")
 
         fd, output_file = tempfile.mkstemp(suffix=".pdf")
         os.close(fd)
 
-        logger.info("Using LibreOffice")
+        logger.debug("Using LibreOffice")
         convert_to_pdf(
             input_file=input_file,
             output_file=output_file,
             original_file=file_prefix,
         )
-        logger.info("Document converted to pdf")
+        logger.debug("Document converted to PDF")
         os.remove(input_file)
         return output_file
 
@@ -225,19 +234,45 @@ class DocumentOCRLoader:
         Raises:
             ValueError: If the `source` is not "cloud" or "local".
         """
-        logger.info("Starting text extraction using OCR...")
+        logger.debug("Starting text extraction using OCR")
+
+        ocr_cache = None
+        if (
+            self.is_fallback_ocr
+            and self.ocr_cache_uri
+            and self.ocr_cache_s3_client is not None
+        ):
+            ocr_cache = S3OCRTranscriptCache(
+                s3_client=self.ocr_cache_s3_client,
+                uri=self.ocr_cache_uri,
+                markdown_output=self.markdown_output,
+            )
+            cached_text = ocr_cache.read()
+            if cached_text is not None:
+                return {
+                    "text": cached_text,
+                    "completion_tokens": 0,
+                    "prompt_tokens": 0,
+                    "completion_model": "not provided",
+                    "completion_model_provider": "not provided",
+                    "text_chunks": "not provided",
+                    "type": self.type,
+                    "input": file_path,
+                    "ocr_provider": self.ocr_provider,
+                    "ocr_cache_hit": True,
+                }
 
         # Load or download the document file
         if self.source == "cloud":
             fd, temp_file = tempfile.mkstemp()
             try:
                 temp_file_path = self.download_document(file_path, temp_file)
-                logger.info(f"Successfully loaded document from {file_path}")
+                logger.debug("Successfully loaded cloud document")
             finally:
                 os.close(fd)
         elif self.source == "local":
             temp_file_path = file_path
-            logger.info(f"Successfully loaded document from local path {file_path}")
+            logger.debug("Successfully loaded local document")
         else:
             raise ValueError("Invalid OCR source. Choose 'cloud' or 'local'.")
 
@@ -287,11 +322,15 @@ class DocumentOCRLoader:
         result_dict["type"] = self.type
         result_dict["input"] = file_path
         result_dict["ocr_provider"] = self.ocr_provider
+        if self.is_fallback_ocr:
+            result_dict["ocr_cache_hit"] = False
+            if ocr_cache is not None:
+                ocr_cache.write(result_dict["text"])
 
         # Clean up temporary file if it was downloaded
         if self.source == "cloud" and os.path.exists(temp_file_path):
             os.remove(temp_file_path)
-            logger.info(f"Removed temporary file {temp_file_path}")
+            logger.debug("Removed temporary document")
 
         return result_dict
 

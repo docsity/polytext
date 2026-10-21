@@ -52,13 +52,13 @@ def compress_and_convert_image(input_path: str, target_size=1) -> str:
         os.close(fd)
 
         original_size = os.path.getsize(input_path)
-        logger.info(f"Original image size: {original_size / 1024 / 1024:.2f}MB")
+        logger.debug("Original image size: %.2fMB", original_size / 1024 / 1024)
 
         if original_size > target_size_bytes:
             compression_ratio = (target_size_bytes / original_size) ** 0.5
             compression_ratio = max(0.01, min(compression_ratio, 1.0))
 
-            logger.info(f"Compressing image with scale ratio ~{compression_ratio:.3f}")
+            logger.debug("Compressing image with scale ratio ~%.3f", compression_ratio)
             (
                 ffmpeg.input(input_path)
                 .output(
@@ -71,7 +71,7 @@ def compress_and_convert_image(input_path: str, target_size=1) -> str:
                 .run(quiet=True, overwrite_output=True)
             )
         else:
-            logger.info("Converting image to PNG without compression")
+            logger.debug("Converting image to PNG without compression")
             (
                 ffmpeg.input(input_path)
                 .output(
@@ -83,7 +83,7 @@ def compress_and_convert_image(input_path: str, target_size=1) -> str:
                 .run(quiet=True, overwrite_output=True)
             )
 
-        logger.info(f"Successfully processed image: {temp_image_path}")
+        logger.debug("Successfully processed image")
         return temp_image_path
 
     except Exception as e:
@@ -181,7 +181,7 @@ class OCRToTextConverter:
         start_time = time.time()
 
         prompt_template = self._build_prompt_template()
-        logger.info("Using prompt for %s format", "markdown" if self.markdown_output else "plain text")
+        logger.debug("Using prompt for %s format", "markdown" if self.markdown_output else "plain text")
 
         # Build Azure client
         azure_api_key = self.llm_api_key or os.getenv("AZURE_OPENAI_API_KEY")
@@ -200,14 +200,14 @@ class OCRToTextConverter:
 
         try:
             mime_type, _ = mimetypes.guess_type(file_for_ocr)
-            logger.info(f"OCR mime type: {mime_type}")
+            logger.debug("OCR mime type: %s", mime_type)
 
             file_size = os.path.getsize(file_for_ocr)
-            logger.info(f"Initial image file size: {file_size}")
+            logger.debug("Initial image file size: %s", file_size)
 
             # Compress/convert if too large or unsupported type
             if file_size > self.target_size * 1024 * 1024 or mime_type not in SUPPORTED_MIME_TYPES:
-                logger.info(
+                logger.debug(
                     f"Image exceeds {self.target_size}MB or unsupported mime type; compressing/converting"
                 )
                 temp_file_for_ocr = compress_and_convert_image(
@@ -215,11 +215,11 @@ class OCRToTextConverter:
                     target_size=self.target_size,
                 )
             else:
-                logger.info("No compression/conversion needed")
+                logger.debug("No compression/conversion needed")
                 temp_file_for_ocr = file_for_ocr
 
             file_size = os.path.getsize(temp_file_for_ocr)
-            logger.info(f"Final image file size: {file_size / (1024 * 1024):.2f} MB")
+            logger.debug("Final image file size: %.2f MB", file_size / (1024 * 1024))
 
             # Azure vision chat expects either a public URL or base64 image data.
             # We'll use base64 data-URL.
@@ -260,8 +260,8 @@ class OCRToTextConverter:
             prompt_tokens = getattr(response.usage, "prompt_tokens", 0) if response.usage else 0
             completion_tokens = getattr(response.usage, "completion_tokens", 0) if response.usage else 0
 
-            logger.info(f"Completion tokens: {completion_tokens}")
-            logger.info(f"Prompt tokens: {prompt_tokens}")
+            logger.debug("Completion tokens: %s", completion_tokens)
+            logger.debug("Prompt tokens: %s", prompt_tokens)
 
             final_ocr_dict = {
                 "text": "" if "no readable text present" in text_out.lower() else text_out,

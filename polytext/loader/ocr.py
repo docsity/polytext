@@ -99,12 +99,12 @@ class OCRLoader:
         if self.s3_client is not None:
             downloader = Downloader(s3_client=self.s3_client, document_aws_bucket=self.document_aws_bucket)
             downloader.download_file_from_s3(file_path, temp_file_path)
-            logger.info(f'Downloaded {file_path} to {temp_file_path}')
+            logger.debug("Downloaded image to a temporary file")
             return temp_file_path
         elif self.gcs_client is not None:
             downloader = Downloader(gcs_client=self.gcs_client, document_gcs_bucket=self.document_gcs_bucket)
             downloader.download_file_from_gcs(file_path, temp_file_path)
-            logger.info(f'Downloaded {file_path} to {temp_file_path}')
+            logger.debug("Downloaded image to a temporary file")
             return temp_file_path
 
     def get_text_from_ocr(self, file_path):
@@ -124,7 +124,7 @@ class OCRLoader:
         Raises:
             ValueError: If the `source` is not "cloud" or "local".
         """
-        logger.info("Starting text extraction using OCR...")
+        logger.debug("Starting text extraction using OCR")
 
         # Load or download the document file
         if self.source == "cloud":
@@ -132,12 +132,12 @@ class OCRLoader:
             try:
                 fd, temp_file = tempfile.mkstemp()
                 temp_file_path = self.download_document(file_path, temp_file)
-                logger.info(f"Successfully loaded document from {file_path}")
+                logger.debug("Successfully loaded cloud image")
             finally:
                 os.close(fd)  # Close the file descriptor
         elif self.source == "local":
             temp_file_path = file_path  # For local files, use the path directly
-            logger.info(f"Successfully loaded document from local path {file_path}")
+            logger.debug("Successfully loaded local image")
         else:
             raise ValueError("Invalid OCR source. Choose 'cloud' or 'local'.")
 
@@ -157,7 +157,7 @@ class OCRLoader:
         if self.source == "cloud":
             if os.path.exists(temp_file_path):
                 os.remove(temp_file_path)
-                logger.info(f"Removed temporary file {temp_file_path}")
+                logger.debug("Removed temporary image")
 
         if len(result_dict["text"].strip()) == 0:
             raise EmptyDocument(f"No text extracted from {file_path}. The file may be empty or not contain any transcribable content.")
