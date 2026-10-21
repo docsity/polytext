@@ -7,6 +7,7 @@ import logging
 # Local imports
 from ..loader.downloader.downloader import Downloader
 from ..converter.pdf import convert_to_pdf
+from .ocr_cache import S3OCRTranscriptCache
 
 # OCR converters
 from ..converter.document_ocr_to_text import (
@@ -48,6 +49,9 @@ class DocumentOCRLoader:
                  include_image_descriptions: bool = False,
                  allow_partial_ocr_failures: bool = False,
                  ocr_render_dpi: int | None = None,
+                 is_fallback_ocr: bool = False,
+                 ocr_cache_uri: str | None = None,
+                 ocr_cache_s3_client: object = None,
                  **kwargs
                  ):
         """
@@ -89,6 +93,9 @@ class DocumentOCRLoader:
                 the whole document extraction. Defaults to False.
             ocr_render_dpi (int | None, optional): Render PDF pages at this DPI
                 before OCR. Defaults to the existing PyMuPDF rendering behavior.
+            is_fallback_ocr (bool, optional): Enables fallback-only cache metadata.
+            ocr_cache_uri (str | None, optional): Exact S3 transcript URI.
+            ocr_cache_s3_client (object, optional): Client used for cache I/O.
             **kwargs:
                 max_output_tokens (int, optional): Maximum Gemini output tokens for
                     Google document OCR generation.
@@ -114,6 +121,9 @@ class DocumentOCRLoader:
         self.include_image_descriptions = include_image_descriptions
         self.allow_partial_ocr_failures = allow_partial_ocr_failures
         self.ocr_render_dpi = ocr_render_dpi
+        self.is_fallback_ocr = is_fallback_ocr
+        self.ocr_cache_uri = ocr_cache_uri
+        self.ocr_cache_s3_client = ocr_cache_s3_client
         self.max_output_tokens = kwargs.get("max_output_tokens")
 
         # Set up custom temp directory
@@ -227,6 +237,32 @@ class DocumentOCRLoader:
         """
         logger.info("Starting text extraction using OCR...")
 
+        ocr_cache = None
+        if (
+            self.is_fallback_ocr
+            and self.ocr_cache_uri
+            and self.ocr_cache_s3_client is not None
+        ):
+            ocr_cache = S3OCRTranscriptCache(
+                s3_client=self.ocr_cache_s3_client,
+                uri=self.ocr_cache_uri,
+                markdown_output=self.markdown_output,
+            )
+            cached_text = ocr_cache.read()
+            if cached_text is not None:
+                return {
+                    "text": cached_text,
+                    "completion_tokens": 0,
+                    "prompt_tokens": 0,
+                    "completion_model": "not provided",
+                    "completion_model_provider": "not provided",
+                    "text_chunks": "not provided",
+                    "type": self.type,
+                    "input": file_path,
+                    "ocr_provider": self.ocr_provider,
+                    "ocr_cache_hit": True,
+                }
+
         # Load or download the document file
         if self.source == "cloud":
             fd, temp_file = tempfile.mkstemp()
@@ -287,6 +323,10 @@ class DocumentOCRLoader:
         result_dict["type"] = self.type
         result_dict["input"] = file_path
         result_dict["ocr_provider"] = self.ocr_provider
+        if self.is_fallback_ocr:
+            result_dict["ocr_cache_hit"] = False
+            if ocr_cache is not None:
+                ocr_cache.write(result_dict["text"])
 
         # Clean up temporary file if it was downloaded
         if self.source == "cloud" and os.path.exists(temp_file_path):
