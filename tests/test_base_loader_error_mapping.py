@@ -79,6 +79,19 @@ class TestBaseLoaderErrorMapping(unittest.TestCase):
 
         self.assertFalse(loader.fallback_ocr)
 
+    def test_explicitly_disabled_fallback_does_not_resolve_cache_client(self):
+        loader = _FakeBaseLoader(
+            EmptyDocument(message="No text detected", code=998),
+            fallback_ocr=False,
+            ocr_cache_uri="s3://bucket/cache.txt",
+        )
+
+        with patch("polytext.loader.base.create_s3_client") as create_s3_client:
+            with self.assertRaises(LoaderError):
+                loader.get_text(["document.pdf"])
+
+        create_s3_client.assert_not_called()
+
     def test_llm_output_empty_document_codes_are_raised_as_loader_errors(self):
         cases = [
             (995, "INVALID_ARGUMENT"),
